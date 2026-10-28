@@ -39,7 +39,7 @@ import time
 from http.server import BaseHTTPRequestHandler, HTTPServer
 from socketserver import ThreadingMixIn
 
-VERSION = "2026.10.30-1"
+VERSION = "2026.10.30-2"
 
 HA_GROUPS_CFG = "/etc/pve/ha/groups.cfg"
 HA_RULES_CFG = "/etc/pve/ha/rules.cfg"  # PVE 9: HA group -> node-affinity rule
@@ -274,11 +274,38 @@ def pve_metrics(status, resources, ha_manager):
     return lines
 
 
+PVE_MEMBERS = "/etc/pve/.members"            # pmxcfs: ten cluster, node online (doc file, khong ton CPU)
+PVE_HA_MANAGER = "/etc/pve/ha/manager_status"  # pmxcfs: trang thai HA tung node
+
+
+def read_json(path):
+    with open(path, encoding="utf-8", errors="replace") as f:
+        return json.load(f)
+
+
+def members_to_status(m):
+    """/etc/pve/.members -> dang list giong `pvesh get /cluster/status`."""
+    out = []
+    c = m.get("cluster")
+    if c and c.get("name"):
+        out.append({"type": "cluster", "name": c.get("name"), "nodes": c.get("nodes", ""),
+                    "quorate": c.get("quorate", ""), "version": c.get("version", "")})
+    out.append({"type": "node", "name": m.get("nodename", "standalone")})
+    return out
+
+
 def collect_pve(pvesh_bin, timeout):
-    status = pvesh(pvesh_bin, "/cluster/status", timeout)
-    resources = pvesh(pvesh_bin, "/cluster/resources", timeout)
+    # Chi 1 lan goi pvesh (perl, ton CPU nhat); cluster + HA doc thang tu pmxcfs.
     try:
-        ha = pvesh(pvesh_bin, "/cluster/ha/status/manager_status", timeout)
+        status = members_to_status(read_json(PVE_MEMBERS))
+    except Exception:
+        status = pvesh(pvesh_bin, "/cluster/status", timeout)
+    out = subprocess.check_output([pvesh_bin, "get", "/cluster/resources", "--type", "node",
+                                   "--output-format", "json"],
+                                  stderr=subprocess.DEVNULL, timeout=timeout)
+    resources = json.loads(out.decode("utf-8", "replace"))
+    try:
+        ha = {"manager_status": read_json(PVE_HA_MANAGER)}
     except Exception:
         ha = {}
     return pve_metrics(status, resources, ha)
@@ -286,49 +313,73 @@ def collect_pve(pvesh_bin, timeout):
 
 # ---------------------------------------------------------------- server
 class Collector(object):
+    """Thu thap o luong nen moi --interval giay; HTTP chi tra ket qua san co.
+    -> tai len server co dinh, khong phu thuoc so lan / so Prometheus scrape."""
+
     def __init__(self, args):
         self.args = args
         self.lock = threading.Lock()
-        self.cache, self.cache_ts = "", 0.0
+        self.ready = threading.Event()
+        self.cache = ""
+        self.mgr_url, self.mgr_url_ts = "", 0.0
+
+    def _mgr_url(self):
+        a = self.args
+        if a.ceph_mgr_url:
+            return a.ceph_mgr_url
+        if not self.mgr_url or time.time() - self.mgr_url_ts > 300:  # hoi lai mgr active moi 5 phut
+            self.mgr_url = ceph_mgr_url(a.ceph_bin, a.timeout)
+            self.mgr_url_ts = time.time()
+        return self.mgr_url
 
     def collect(self):
-        up = {}
-        lines = []
         a = self.args
+        up, took, lines = {}, {}, []
+
+        def run(name, fn):
+            t0 = time.time()
+            try:
+                lines.extend(fn())
+                up[name] = 1
+            except Exception:
+                up[name] = 0
+                if name == "ceph_mgr":
+                    self.mgr_url = ""  # mgr co the da chuyen node
+            took[name] = time.time() - t0
+
         if not a.no_ceph_mgr:
-            try:
-                lines += ceph_mgr_metrics(a.ceph_mgr_url or ceph_mgr_url(a.ceph_bin, a.timeout), a.timeout)
-                up["ceph_mgr"] = 1
-            except Exception:
-                up["ceph_mgr"] = 0
+            run("ceph_mgr", lambda: ceph_mgr_metrics(self._mgr_url(), a.timeout))
         if not a.no_pve:
-            try:
-                lines += collect_pve(a.pvesh_bin, a.timeout)
-                up["pve"] = 1
-            except Exception:
-                up["pve"] = 0
-        try:
-            r = parse_ceph_status(run_ceph_status(a.ceph_bin, a.timeout))
-            lines += ceph_metrics(r)
-            up["ceph"] = 1
-        except Exception:
-            up["ceph"] = 0
-        try:
-            lines += ha_metrics(ha_groups_by_host())
-            up["ha"] = 1
-        except Exception:
-            up["ha"] = 0
+            run("pve", lambda: collect_pve(a.pvesh_bin, a.timeout))
+        run("ceph", lambda: ceph_metrics(parse_ceph_status(run_ceph_status(a.ceph_bin, a.timeout))))
+        run("ha", lambda: ha_metrics(ha_groups_by_host()))
+
         lines.append("# TYPE pve_ceph_extra_exporter_up gauge")
         for k, v in sorted(up.items()):
             lines.append('pve_ceph_extra_exporter_up{collector="%s"} %d' % (k, v))
+        lines.append("# TYPE pve_ceph_extra_exporter_collect_seconds gauge")
+        for k, v in sorted(took.items()):
+            lines.append('pve_ceph_extra_exporter_collect_seconds{collector="%s"} %.3f' % (k, v))
+        lines.append("# TYPE pve_ceph_extra_exporter_last_collect_timestamp gauge")
+        lines.append("pve_ceph_extra_exporter_last_collect_timestamp %d" % time.time())
         lines.append('pve_ceph_extra_exporter_build_info{version="%s"} 1' % VERSION)
         return "\n".join(lines) + "\n"
 
+    def loop(self):
+        while True:
+            t0 = time.time()
+            text = self.collect()
+            with self.lock:
+                self.cache = text
+            self.ready.set()
+            time.sleep(max(1.0, self.args.interval - (time.time() - t0)))
+
+    def start(self):
+        threading.Thread(target=self.loop, daemon=True).start()
+
     def get(self):
+        self.ready.wait(120)
         with self.lock:
-            if time.time() - self.cache_ts > self.args.cache:
-                self.cache = self.collect()
-                self.cache_ts = time.time()
             return self.cache
 
 
@@ -368,7 +419,8 @@ def main():
     ap.add_argument("--no-pve", action="store_true",
                     help="khong xuat metric Proxmox (da co prometheus-pve-exporter rieng)")
     ap.add_argument("--timeout", type=int, default=10, help="timeout lenh ceph (giay)")
-    ap.add_argument("--cache", type=int, default=10, help="cache ket qua (giay)")
+    ap.add_argument("--interval", type=int, default=30,
+                    help="chu ky thu thap nen (giay); scrape chi doc ket qua san co")
     ap.add_argument("--once", action="store_true", help="in metric ra stdout roi thoat")
     args = ap.parse_args()
 
@@ -376,6 +428,7 @@ def main():
     if args.once:
         print(collector.collect(), end="")
         return
+    collector.start()
     Server((args.listen, args.port), make_handler(collector)).serve_forever()
 
 

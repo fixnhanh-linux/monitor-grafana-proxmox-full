@@ -301,6 +301,13 @@ do_status() {
         [ -n "$line" ] && info "Ceph: ${W}$(echo "$line" | sed 's/.*content="\([^"]*\)".*/\1/')${N}"
         info "Total Health: ${W}$(echo "$m" | awk '/^ceph_custom_recovery_percent /{print $2}') %${N}"
         info "HA groups: $(echo "$m" | grep -c '^pve_ha_groups_custom_info') node"
+        info "Thoi gian thu thap moi chu ky (s):"
+        echo "$m" | sed -n 's/^pve_ceph_extra_exporter_collect_seconds{collector="\([^"]*\)"} \(.*\)/\1 \2/p' \
+            | awk '{printf "%-10s %6.2f s\n", $1, $2}' | sub
+        local pid; pid=$(systemctl show -p MainPID --value "$SERVICE" 2>/dev/null)
+        if [ -n "$pid" ] && [ "$pid" != 0 ]; then
+            info "Tai nguyen: $(ps -o %cpu=,rss= -p "$pid" | awk '{printf "CPU %s%%  RAM %.0f MB", $1, $2/1024}')  (gioi han CPU 25%, RAM 256M)"
+        fi
     fi
 }
 

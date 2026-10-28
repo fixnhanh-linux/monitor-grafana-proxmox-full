@@ -2,3 +2,4 @@
 .menu.conf.tmp
 __pycache__/
 prometheus-target-*.yml
+dashboard_*_auto.json

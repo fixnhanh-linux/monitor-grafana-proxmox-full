@@ -38,6 +38,12 @@ After=network-online.target ceph.target pve-cluster.service
 ExecStart=/usr/bin/python3 $BIN --port $PORT $ARGS
 Restart=always
 RestartSec=5
+# Gioi han tai nguyen: exporter khong bao gio gianh CPU / RAM / IO voi VM
+Nice=10
+CPUQuota=25%
+MemoryMax=256M
+IOSchedulingClass=idle
+TasksMax=64
 
 [Install]
 WantedBy=multi-user.target
@@ -51,7 +57,11 @@ sleep 2
 if curl -sf "http://127.0.0.1:$PORT/metrics" | grep -E '^(ceph_custom_recovery_info|pve_ceph_extra_exporter_up)'; then
     echo
     echo "OK - exporter chay tai http://$(hostname -I | awk '{print $1}'):$PORT/metrics"
-    echo "Them target nay vao CUNG job Prometheus voi ceph mgr / pve exporter cua cluster."
+    if [ -z "$ARGS" ]; then
+        echo "Che do gop: job Prometheus cua cluster CHI CAN 1 target nay (xoa target :9283 / :9221 cu)."
+    else
+        echo "Them target nay vao CUNG job Prometheus voi ceph mgr / pve exporter cua cluster."
+    fi
 else
     echo "Exporter chua tra metric, xem: journalctl -u pve-ceph-extra-exporter -n 50"
     exit 1
