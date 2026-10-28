@@ -2,6 +2,7 @@
 # -*- coding: utf-8 -*-
 """
 Sinh dashboard Grafana "Proxmox - Ceph" (Prometheus).
+Ban quyen (c) 2026 FIX NHANH. Bao luu moi quyen.
 
 Khac ban dashboard tay cu:
   - OSD Used Class / Top 5 Latency lap theo bien $class (lay tu ceph_osd_metadata)

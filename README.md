@@ -94,8 +94,11 @@ bash /root/monitor-grafana-proxmox-full/menu.sh
 | 11 | Import dashboard lên Grafana qua API (service account token, role Editor) |
 | 12 | Hỏi Prometheus: target exporter có `up`, job của exporter có khớp job ceph mgr, device class từng cluster |
 | 13 | Kiểm tra tổng thể (1 + 3 + 12) |
+| 14 | Cập nhật tool (`git pull`), tự hỏi cài lại exporter nếu exporter có thay đổi |
+| 15 | Xem / xoá cấu hình đã lưu (`.menu.conf`) |
+| 16 | Giới thiệu & bản quyền FIX NHANH |
 
-Chạy 1 lệnh không qua menu: `bash menu.sh setup | check | install [port] | status | metrics | logs | restart | port <số> | uninstall | dashboard | import | prom | prom-check | doctor`.
+Chạy 1 lệnh không qua menu: `bash menu.sh setup | check | install [port] | status | metrics | logs | restart | port <số> | uninstall | dashboard | import | prom | prom-check | doctor | update | about`.
 
 Menu nhớ Grafana URL, Prometheus URL, tiêu đề/UID dashboard trong `.menu.conf` (không lưu token).
 
@@ -165,3 +168,7 @@ Grafana → Dashboards → New → Import → chọn file JSON.
 | `ceph_custom_progress_percent{event}` | Tiến độ các sự kiện `ceph progress` |
 | `pve_ha_groups_custom_info{host,groups}` | HA group / node-affinity rule của node |
 | `pve_ceph_extra_exporter_up{collector}` | 1 = thu thập OK (`ceph`, `ha`) |
+
+---
+
+Bản quyền © 2026 **FIX NHANH**. Bảo lưu mọi quyền — xem [LICENSE](LICENSE).

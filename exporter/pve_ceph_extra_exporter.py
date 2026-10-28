@@ -2,6 +2,7 @@
 # -*- coding: utf-8 -*-
 """
 pve_ceph_extra_exporter - bo sung metric cho dashboard Proxmox + Ceph.
+Ban quyen (c) 2026 FIX NHANH. Bao luu moi quyen.
 
 Chay tren 1 node Proxmox co Ceph (can quyen doc `ceph status` va /etc/pve).
 Chi dung thu vien chuan Python 3 (co san tren Proxmox 7/8/9).
