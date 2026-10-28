@@ -42,7 +42,7 @@ bash /root/monitor-grafana-proxmox-full/menu.sh setup
 | # | Câu hỏi | Mặc định / tự dò | Dùng để |
 |---|---|---|---|
 | 1 | Máy này làm gì: `1` node Ceph đầy đủ · `2` chỉ exporter · `3` chỉ dashboard | `1` | Chọn các bước sẽ chạy |
-| 2 | Port exporter | `9284` | Cổng `/metrics` của service |
+| 2 | Port exporter | `9830` | Cổng `/metrics` của service |
 | 2 | Tên job Prometheus của cluster | `Proxmox-<cluster_name>` đọc từ `/etc/pve/corosync.conf` | File mẫu `prometheus-target-<job>.yml` |
 | 3 | Tiêu đề, UID dashboard | `Proxmox - Ceph Prometheus`, `pve-ceph-prom` | UID trùng sẽ ghi đè dashboard cũ |
 | 3 | Regex lọc datasource Site, regex lọc job | trống (tất cả), `/.*Proxmox-/` | Biến `$Site`, `$job` |
@@ -85,7 +85,7 @@ bash /root/monitor-grafana-proxmox-full/menu.sh
 |---|---|
 | S | Cài trọn gói (như trên) |
 | 1 | Kiểm tra python3, lệnh `ceph`, keyring, HA config, port trống, PVE firewall |
-| 2 | Cài / cập nhật exporter (hỏi port, mặc định 9284) |
+| 2 | Cài / cập nhật exporter (hỏi port, mặc định 9830) |
 | 3 | Trạng thái service, collector OK/lỗi, dòng Ceph Status, Total Health |
 | 4 | Xem metric (nếu chưa cài thì chạy thử 1 lần từ file nguồn) |
 | 5 / 6 / 7 / 8 | Log, restart, đổi port, gỡ cài |
@@ -123,7 +123,7 @@ Target phải nằm **cùng job** với ceph mgr / pve exporter của cluster đ
     static_configs:
       - targets:
           - 10.0.0.11:9283   # ceph mgr prometheus (đã có)
-          - 10.0.0.11:9284   # pve_ceph_extra_exporter (mới)
+          - 10.0.0.11:9830   # pve_ceph_extra_exporter (mới)
 ```
 
 ## 3. Sinh và import dashboard

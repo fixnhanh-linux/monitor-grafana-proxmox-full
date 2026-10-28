@@ -29,7 +29,7 @@ SERVICE=pve-ceph-extra-exporter
 BIN=/usr/local/bin/pve_ceph_extra_exporter.py
 UNIT=/etc/systemd/system/$SERVICE.service
 CONF="$DIR/.menu.conf"          # nho Grafana URL, Prometheus URL, ... giua cac lan chay
-DEFAULT_PORT=9284
+DEFAULT_PORT=9830
 
 # =============================================================================
 # Giao dien: mau, khung can giua

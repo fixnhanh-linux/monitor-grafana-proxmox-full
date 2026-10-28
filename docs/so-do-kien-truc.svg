@@ -78,7 +78,7 @@
   <text class="badgeT" x="412" y="311" text-anchor="middle">MỚI</text>
   <text class="t" x="262" y="316">pve_ceph_extra</text>
   <text class="t" x="262" y="333">_exporter</text>
-  <text class="m" x="262" y="352" fill="#c084fc">:9284/metrics</text>
+  <text class="m" x="262" y="352" fill="#c084fc">:9830/metrics</text>
   <text class="m" style="font-size:10.5px" x="262" y="372">ceph_custom_recovery_info</text>
   <text class="m" style="font-size:10.5px" x="262" y="388">ceph_custom_recovery_percent</text>
   <text class="m" style="font-size:10.5px" x="262" y="404">ceph_custom_recovery_speed_*</text>
@@ -119,7 +119,7 @@
   <rect class="card" x="565" y="306" width="230" height="40" rx="8" stroke="#22c55e"/>
   <text class="m" x="578" y="331">node:9283   ceph mgr</text>
   <rect class="card" x="565" y="356" width="230" height="40" rx="8" stroke="#a855f7"/>
-  <text class="m" x="578" y="381">node:9284   extra exporter</text>
+  <text class="m" x="578" y="381">node:9830   extra exporter</text>
   <rect class="card" x="565" y="406" width="230" height="40" rx="8" stroke="#3b82f6"/>
   <text class="m" x="578" y="431">host:9221   pve exporter</text>
   <text class="warn pulse" x="562" y="470">⚠ 3 target phải CÙNG 1 job</text>

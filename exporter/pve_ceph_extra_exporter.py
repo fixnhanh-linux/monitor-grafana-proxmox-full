@@ -260,7 +260,7 @@ class Server(ThreadingMixIn, HTTPServer):
 def main():
     ap = argparse.ArgumentParser(description="Exporter bo sung Ceph recovery + HA groups cho Proxmox")
     ap.add_argument("--listen", default="0.0.0.0")
-    ap.add_argument("--port", type=int, default=9284)
+    ap.add_argument("--port", type=int, default=9830)
     ap.add_argument("--ceph-bin", default="ceph")
     ap.add_argument("--timeout", type=int, default=10, help="timeout lenh ceph (giay)")
     ap.add_argument("--cache", type=int, default=10, help="cache ket qua (giay)")

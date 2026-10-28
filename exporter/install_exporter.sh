@@ -1,12 +1,12 @@
 #!/bin/bash
 # Cai pve_ceph_extra_exporter len 1 node Proxmox co Ceph.
 # Ban quyen (c) 2026 FIX NHANH. Bao luu moi quyen.
-#   bash install_exporter.sh            # cai / cap nhat, port 9284
+#   bash install_exporter.sh            # cai / cap nhat, port 9830
 #   PORT=9300 bash install_exporter.sh  # doi port
 #   bash install_exporter.sh uninstall
 set -euo pipefail
 
-PORT="${PORT:-9284}"
+PORT="${PORT:-9830}"
 DIR="$(cd "$(dirname "$0")" && pwd)"
 BIN=/usr/local/bin/pve_ceph_extra_exporter.py
 UNIT=/etc/systemd/system/pve-ceph-extra-exporter.service
