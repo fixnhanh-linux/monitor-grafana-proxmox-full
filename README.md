@@ -1,5 +1,7 @@
 # Monitor Proxmox + Ceph (Prometheus / Grafana)
 
+![Sơ đồ giám sát Proxmox + Ceph](docs/so-do-kien-truc.svg)
+
 Bộ tool dựng dashboard **Proxmox - Ceph Prometheus** và lấp các ô đang báo `No data`.
 
 | File | Việc |
