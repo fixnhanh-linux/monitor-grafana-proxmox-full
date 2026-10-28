@@ -91,6 +91,17 @@ python make_dashboard.py --title "Proxmox - Ceph DECO" --uid pve-ceph-deco --sit
 - `--site-regex`: lọc datasource Prometheus cho biến **Site**
 - `--job-regex`: lọc job của `pve_cluster_info` (mặc định `/.*Proxmox-/`)
 - `--nodes / --pools / --classes`: chỉnh chiều cao các bảng cho vừa số dòng
+- `--lat-th`: ngưỡng latency (ms) cảnh báo:nghiêm trọng theo class, mặc định `nvme=15:25,ssd=50:100,default=100:200`
+- `--ha-alias "GROUPS=TEXT[:màu]"` (lặp được): tên ngắn và màu cho chuỗi HA Groups, vd `--ha-alias "Gold-6146,HIGH-FREQUENCY,P1-XD=Gold+HIGH+P1-XD:orange"`
+- `--time-from`: khoảng thời gian mặc định, vd `now-5m`
+
+Ví dụ dựng lại dashboard CMC Q7 / FPT HCM / VIETTEL HCM / CMC HN:
+
+```bash
+python make_dashboard.py -o cmc.json --title "Proxmox - Ceph Prometheus CMC Q7 - FPT HCM - VIETTEL HCM - CMC HN" --uid fix --time-from now-5m --site-regex "/^(Prometheus FPT HCM|Prometheus FPT HN|Prometheus CMC-Q7|Prometheus VIETTEL HCM|Prometheus CMC HN)$/" --job-regex "/^(?!.*Proxmox-Cluster-DMS|.*Test|.*Deco).*Proxmox-/" --ha-alias "BASIC-COMPUTING,INTEL-HIGH-CPU,P1-XD=BASIC+INTEL+P1-XD:purple" --ha-alias "Gold-6146,HIGH-FREQUENCY,P1-XD=Gold+HIGH+P1-XD:orange" --ha-alias "Gold-8260,INTEL-HIGH-CPU,Platinum-8260=Gold+INTEL+Platinum:blue" --ha-alias "Gold-8260,INTEL-HIGH-CPU,P1-XD,Platinum-8260=Gold+INTEL+P1+Platinum:green"
+```
+
+Lưu ý: import với `--uid fix` sẽ ghi đè dashboard đang có uid `fix`.
 
 Grafana → Dashboards → New → Import → chọn file JSON.
 

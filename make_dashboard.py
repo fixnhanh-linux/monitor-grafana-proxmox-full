@@ -140,11 +140,32 @@ def osd_used_pct(fn):
             % (fn, J, J, J))
 
 
-def osd_latency_top5():
-    return ('topk(5,\n  max by (ceph_daemon) (ceph_osd_apply_latency_ms{%s})\n'
-            '  * on(ceph_daemon) group_left(hostname)\n'
-            '  max by (ceph_daemon, hostname) (ceph_osd_metadata{device_class=~"$class", %s})\n)'
+def osd_latency_all():
+    return ('sort_desc(\n  max by (ceph_daemon, hostname) (\n'
+            '    ceph_osd_apply_latency_ms{%s}\n'
+            '    * on(ceph_daemon) group_left(hostname)\n'
+            '    max by (ceph_daemon, hostname) (ceph_osd_metadata{device_class=~"$class", %s})\n  )\n)'
             % (J, J))
+
+
+def parse_lat_th(text):
+    """'nvme=15:25,ssd=50:100,default=100:200' -> {'nvme': (15, 25), ...}"""
+    out = {}
+    for item in filter(None, (x.strip() for x in text.split(","))):
+        cls, _, rng = item.partition("=")
+        warn, _, crit = rng.partition(":")
+        out[cls.strip()] = (float(warn), float(crit))
+    return out
+
+
+def parse_ha_alias(items):
+    """['A,B=Text:purple', ...] -> mapping options cho cot HA Groups."""
+    opts = {}
+    for i, item in enumerate(items or []):
+        raw, _, rest = item.rpartition("=")
+        text, _, color = rest.partition(":")
+        opts[raw] = {"text": text, "color": color or "blue", "index": i}
+    return opts
 
 
 def node_q(expr):
@@ -156,7 +177,7 @@ NO_ALARM = ('max by (severity, name, message) (ceph_health_detail{%s} > 0)\n'
             '  "severity", "OK", "", ""), "name", "HEALTH_OK", "", ""),\n'
             '  "message", "Không có cảnh báo", "", "")' % J)
 
-HIDE = "^(Time.*|__name__.*|instance.*|job.*|job_type.*|id|state|Value #Group)$"
+HIDE = "^(Time.*|__name__.*|instance.*|job.*|job_type.*|id|state|group|Value #Group)$"
 
 
 # --------------------------------------------------------------------------- dashboard
@@ -196,6 +217,7 @@ def build(args):
     # ---------------- OSD State
     b.row("OSD State")
     pct_th = steps("green", 75, "orange", 85, "red")
+    used_th = steps("green", 75, "#EAB839", 90, "red", 95, "dark-red")
 
     def osd_extreme(title, fn):
         p = stat(title, [tgt('%s(1, ceph_osd_stat_bytes_used{%s} / ceph_osd_stat_bytes{%s} * 100)'
@@ -223,7 +245,7 @@ def build(args):
                   drop_extra_fields("^(Time.*|job.*)$"),
                   organize(rename={"ceph_daemon": "OSD", "Value #High": "High", "Value #Low": "Low"},
                            order={"ceph_daemon": 0, "Value #High": 1, "Value #Low": 2})],
-                 unit="percent", decimals=2, th=steps("green", 70, "orange", 85, "red"),
+                 unit="percent", decimals=2, th=used_th,
                  desc="Lặp theo biến OSD Class: OSD dùng nhiều nhất / ít nhất của từng device class.")
     b.add(repeat(used), 0, 12, 5)
     b.y += 5
@@ -237,23 +259,33 @@ def build(args):
                     "RAM_Pct", fmt="table"),
                 tgt(node_q('pve_memory_size_bytes{%s}' % nj), "RAM_Total", fmt="table"),
                 tgt(node_q('pve_uptime_seconds{%s}' % nj), "Uptime", fmt="table"),
-                tgt(node_q('pve_up{%s}' % nj), "Up", fmt="table"),
+                tgt(node_q('pve_ha_state{state="online", %s}' % nj), "HA", fmt="table"),
                 tgt('pve_ha_groups_custom_info{%s}' % J, "Group", fmt="table")],
                [{"id": "joinByField", "options": {"byField": "host", "mode": "outer"}},
                 drop_extra_fields(HIDE),
-                organize(rename={"host": "Node Proxmox", "groups": "HA Groups", "Value #Up": "Trạng thái",
+                organize(rename={"host": "Node Proxmox", "groups": "HA Groups", "Value #HA": "HA",
                                  "Value #CPU": "CPU (%)", "Value #RAM_Pct": "RAM (%)",
                                  "Value #RAM_Total": "Tổng RAM", "Value #Uptime": "UPTIME"},
-                         order={"host": 0, "Value #Up": 1, "groups": 2, "Value #CPU": 3,
+                         order={"host": 0, "groups": 1, "Value #HA": 2, "Value #CPU": 3,
                                 "Value #RAM_Pct": 4, "Value #RAM_Total": 5, "Value #Uptime": 6}),
                 {"id": "sortBy", "options": {"sort": [{"field": "Node Proxmox"}]}}],
                cell="auto", filterable=True,
                desc="HA Groups lấy từ pve_ceph_extra_exporter (groups.cfg / rules.cfg node-affinity).",
                overrides=[
-                   override("Trạng thái", ("mappings", [{"type": "value", "options": {
-                       "1": {"text": "Online", "color": "green"},
-                       "0": {"text": "Offline", "color": "red"}}}]),
+                   override("HA", ("mappings", [
+                       {"type": "value", "options": {
+                           "1": {"text": "Online", "color": "green", "index": 0},
+                           "0": {"text": "-", "color": "red", "index": 1}}},
+                       {"type": "special", "options": {"match": "null",
+                                                       "result": {"text": "-", "color": "text"}}}]),
                        ("custom.cellOptions", {"type": "color-text"})),
+                   override("HA Groups", ("custom.width", 220),
+                            ("custom.cellOptions", {"type": "color-text"}),
+                            ("mappings", [
+                                {"type": "value", "options": parse_ha_alias(args.ha_alias)},
+                                {"type": "special", "options": {"match": "null",
+                                                                "result": {"text": "No Group",
+                                                                           "color": "gray"}}}])),
                    override("CPU (%)", ("unit", "percent"), ("decimals", 1),
                             ("thresholds", steps("green", 75, "orange", 90, "red")),
                             ("custom.cellOptions", {"type": "color-text"})),
@@ -280,9 +312,10 @@ def build(args):
                           order={"device_class": 0, "Value #S": 1, "Value #A": 2,
                                  "Value #R": 3, "Value #B": 4})],
                 unit="bytes", decimals=2, cell="auto", footer=["sum"],
-                overrides=[override("% RAW USED", ("unit", "percent"),
-                                    ("thresholds", steps("green", 70, "orange", 85, "red")),
-                                    ("custom.cellOptions", {"type": "color-text"}))])
+                overrides=[override("% RAW USED", ("unit", "percent"), ("min", 0), ("max", 100),
+                                    ("thresholds", used_th),
+                                    ("custom.cellOptions", {"type": "color-background",
+                                                            "mode": "basic"}))])
     b.line(4 + 2 * args.classes, (cls, 24))
 
     pool_q = [("A", "ceph_pool_metadata"), ("C", "ceph_pg_total"), ("D", "ceph_pool_stored"),
@@ -305,31 +338,43 @@ def build(args):
                  overrides=[override("ID", ("unit", "none")), override("PGS", ("unit", "none")),
                             override("OBJECTS", ("unit", "short")),
                             override("%USED", ("unit", "percentunit"),
-                                     ("thresholds", steps("green", 0.7, "orange", 0.85, "red")),
-                                     ("custom.cellOptions", {"type": "color-text"}))])
+                                     ("thresholds", steps("green", 0.75, "#EAB839", 0.9, "red",
+                                                          0.95, "dark-red")),
+                                     ("custom.cellOptions", {"type": "color-background",
+                                                             "mode": "basic"}))])
     b.line(4 + 2 * args.pools, (pool, 24))
 
     # ---------------- Latency
-    b.row("Latency Top 5 High")
+    b.row("Latency All OSD (High → Low)")
     ts = {"type": "timeseries", "title": "OSD Apply Latency", "datasource": DS,
           "targets": [tgt('ceph_osd_apply_latency_ms{%s}' % J, "A", legend="{{ceph_daemon}}",
                           instant=False)],
-          "fieldConfig": {"defaults": {"unit": "ms", "color": {"mode": "palette-classic"},
+          "fieldConfig": {"defaults": {"unit": "ms", "min": 0, "color": {"mode": "palette-classic"},
                                        "custom": {"drawStyle": "line", "lineWidth": 1, "fillOpacity": 10,
                                                   "showPoints": "never", "spanNulls": False}},
                           "overrides": []},
           "options": {"legend": {"displayMode": "table", "placement": "right", "showLegend": True,
-                                 "calcs": ["lastNotNull", "max"], "sortBy": "Max", "sortDesc": True},
+                                 "calcs": ["lastNotNull"], "sortBy": "Name", "sortDesc": False},
                       "tooltip": {"mode": "multi", "sort": "desc"}}}
     b.line(12, (ts, 24))
-    lat = table("Top 5 $class High Latency", [tgt(osd_latency_top5(), fmt="table")],
+
+    # Cot gia tri doi ten thanh "<class> (ms)" (Grafana noi suy $class trong transformation)
+    # de override nguong rieng tung class: nvme nhanh, hdd cham.
+    lat_th = parse_lat_th(args.lat_th)
+    dw, dc = lat_th.pop("default", (100, 200))
+    col = "${class} (ms)"
+    lat = table("All $class OSD Latency (High → Low)", [tgt(osd_latency_all(), fmt="table")],
                 [drop_extra_fields("^(Time.*|job.*|instance.*)$"),
-                 organize(rename={"hostname": "NODE", "ceph_daemon": "OSD ID", "Value": "Latency (ms)"},
+                 organize(rename={"hostname": "NODE", "ceph_daemon": "OSD ID", "Value": col},
                           order={"hostname": 0, "ceph_daemon": 1, "Value": 2}),
-                 {"id": "sortBy", "options": {"sort": [{"field": "Latency (ms)", "desc": True}]}}],
-                unit="ms", decimals=0, th=steps("green", 20, "orange", 50, "red"), filterable=True)
-    b.add(repeat(lat), 0, 12, 7)
-    b.y += 7
+                 {"id": "sortBy", "options": {"sort": [{"field": col, "desc": True}]}}],
+                unit="ms", decimals=0, th=steps("green", dw, "orange", dc, "red"), filterable=True,
+                desc="Tất cả OSD của class, sắp xếp latency cao → thấp. Ngưỡng theo class: %s; class khác %g/%g ms."
+                     % (", ".join("%s %g/%g" % (k, w, c) for k, (w, c) in sorted(lat_th.items())), dw, dc),
+                overrides=[override("%s (ms)" % k, ("thresholds", steps("green", w, "orange", c, "red")))
+                           for k, (w, c) in sorted(lat_th.items())])
+    b.add(repeat(lat), 0, 12, 12)
+    b.y += 12
 
     # ---------------- Recovery
     b.row("Ceph Recovery & Rebalance Operations")
@@ -391,7 +436,7 @@ def build(args):
     return {
         "title": args.title, "uid": args.uid, "editable": True, "graphTooltip": 0,
         "refresh": "30s", "schemaVersion": 41, "timezone": "Asia/Ho_Chi_Minh",
-        "time": {"from": "now-15m", "to": "now"}, "tags": ["proxmox", "ceph"],
+        "time": {"from": args.time_from, "to": "now"}, "tags": ["proxmox", "ceph"],
         "annotations": {"list": [{"builtIn": 1, "datasource": {"type": "grafana", "uid": "-- Grafana --"},
                                   "enable": True, "hide": True, "iconColor": "rgba(0, 211, 255, 1)",
                                   "name": "Annotations & Alerts", "type": "dashboard"}]},
@@ -409,6 +454,11 @@ def main():
     ap.add_argument("--nodes", type=int, default=8, help="so node du kien (chieu cao bang HA)")
     ap.add_argument("--pools", type=int, default=8, help="so pool du kien (chieu cao bang pool)")
     ap.add_argument("--classes", type=int, default=3, help="so device class du kien")
+    ap.add_argument("--lat-th", default="nvme=15:25,ssd=50:100,default=100:200",
+                    help="nguong latency (ms) canh bao:nghiem trong theo class")
+    ap.add_argument("--ha-alias", action="append", default=[], metavar="GROUPS=TEXT[:mau]",
+                    help='ten ngan cho chuoi HA Groups, vd "Gold-6146,HIGH-FREQUENCY,P1-XD=Gold+HIGH+P1-XD:orange"')
+    ap.add_argument("--time-from", default="now-15m", help="khoang thoi gian mac dinh")
     args = ap.parse_args()
 
     dash = build(args)

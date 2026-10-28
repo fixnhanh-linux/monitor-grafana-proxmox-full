@@ -1091,12 +1091,16 @@
                 "value": null
               },
               {
-                "color": "orange",
-                "value": 70
+                "color": "#EAB839",
+                "value": 75
               },
               {
                 "color": "red",
-                "value": 85
+                "value": 90
+              },
+              {
+                "color": "dark-red",
+                "value": 95
               }
             ]
           },
@@ -1210,8 +1214,8 @@
             "type": "prometheus",
             "uid": "${Site}"
           },
-          "expr": "label_replace(pve_up{id=~\"node/.*\", job=~\"$job\"}, \"host\", \"$1\", \"id\", \"node/(.*)\")",
-          "refId": "Up",
+          "expr": "label_replace(pve_ha_state{state=\"online\", id=~\"node/.*\", job=~\"$job\"}, \"host\", \"$1\", \"id\", \"node/(.*)\")",
+          "refId": "HA",
           "range": false,
           "instant": true,
           "format": "table"
@@ -1240,7 +1244,7 @@
           "id": "filterFieldsByName",
           "options": {
             "exclude": {
-              "pattern": "^(Time.*|__name__.*|instance.*|job.*|job_type.*|id|state|Value #Group)$"
+              "pattern": "^(Time.*|__name__.*|instance.*|job.*|job_type.*|id|state|group|Value #Group)$"
             }
           }
         },
@@ -1251,7 +1255,7 @@
             "renameByName": {
               "host": "Node Proxmox",
               "groups": "HA Groups",
-              "Value #Up": "Trạng thái",
+              "Value #HA": "HA",
               "Value #CPU": "CPU (%)",
               "Value #RAM_Pct": "RAM (%)",
               "Value #RAM_Total": "Tổng RAM",
@@ -1259,8 +1263,8 @@
             },
             "indexByName": {
               "host": 0,
-              "Value #Up": 1,
-              "groups": 2,
+              "groups": 1,
+              "Value #HA": 2,
               "Value #CPU": 3,
               "Value #RAM_Pct": 4,
               "Value #RAM_Total": 5,
@@ -1308,7 +1312,7 @@
           {
             "matcher": {
               "id": "byName",
-              "options": "Trạng thái"
+              "options": "HA"
             },
             "properties": [
               {
@@ -1319,11 +1323,23 @@
                     "options": {
                       "1": {
                         "text": "Online",
-                        "color": "green"
+                        "color": "green",
+                        "index": 0
                       },
                       "0": {
-                        "text": "Offline",
-                        "color": "red"
+                        "text": "-",
+                        "color": "red",
+                        "index": 1
+                      }
+                    }
+                  },
+                  {
+                    "type": "special",
+                    "options": {
+                      "match": "null",
+                      "result": {
+                        "text": "-",
+                        "color": "text"
                       }
                     }
                   }
@@ -1334,6 +1350,43 @@
                 "value": {
                   "type": "color-text"
                 }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "HA Groups"
+            },
+            "properties": [
+              {
+                "id": "custom.width",
+                "value": 220
+              },
+              {
+                "id": "custom.cellOptions",
+                "value": {
+                  "type": "color-text"
+                }
+              },
+              {
+                "id": "mappings",
+                "value": [
+                  {
+                    "type": "value",
+                    "options": {}
+                  },
+                  {
+                    "type": "special",
+                    "options": {
+                      "match": "null",
+                      "result": {
+                        "text": "No Group",
+                        "color": "gray"
+                      }
+                    }
+                  }
+                ]
               }
             ]
           },
@@ -1597,6 +1650,14 @@
                 "value": "percent"
               },
               {
+                "id": "min",
+                "value": 0
+              },
+              {
+                "id": "max",
+                "value": 100
+              },
+              {
                 "id": "thresholds",
                 "value": {
                   "mode": "absolute",
@@ -1606,12 +1667,16 @@
                       "value": null
                     },
                     {
-                      "color": "orange",
-                      "value": 70
+                      "color": "#EAB839",
+                      "value": 75
                     },
                     {
                       "color": "red",
-                      "value": 85
+                      "value": 90
+                    },
+                    {
+                      "color": "dark-red",
+                      "value": 95
                     }
                   ]
                 }
@@ -1619,7 +1684,8 @@
               {
                 "id": "custom.cellOptions",
                 "value": {
-                  "type": "color-text"
+                  "type": "color-background",
+                  "mode": "basic"
                 }
               }
             ]
@@ -1879,12 +1945,16 @@
                       "value": null
                     },
                     {
-                      "color": "orange",
-                      "value": 0.7
+                      "color": "#EAB839",
+                      "value": 0.75
                     },
                     {
                       "color": "red",
-                      "value": 0.85
+                      "value": 0.9
+                    },
+                    {
+                      "color": "dark-red",
+                      "value": 0.95
                     }
                   ]
                 }
@@ -1892,7 +1962,8 @@
               {
                 "id": "custom.cellOptions",
                 "value": {
-                  "type": "color-text"
+                  "type": "color-background",
+                  "mode": "basic"
                 }
               }
             ]
@@ -1921,7 +1992,7 @@
     },
     {
       "type": "row",
-      "title": "Latency Top 5 High",
+      "title": "Latency All OSD (High → Low)",
       "collapsed": false,
       "panels": [],
       "id": 20,
@@ -1955,6 +2026,7 @@
       "fieldConfig": {
         "defaults": {
           "unit": "ms",
+          "min": 0,
           "color": {
             "mode": "palette-classic"
           },
@@ -1974,11 +2046,10 @@
           "placement": "right",
           "showLegend": true,
           "calcs": [
-            "lastNotNull",
-            "max"
+            "lastNotNull"
           ],
-          "sortBy": "Max",
-          "sortDesc": true
+          "sortBy": "Name",
+          "sortDesc": false
         },
         "tooltip": {
           "mode": "multi",
@@ -1995,7 +2066,7 @@
     },
     {
       "type": "table",
-      "title": "Top 5 $class High Latency",
+      "title": "All $class OSD Latency (High → Low)",
       "datasource": {
         "type": "prometheus",
         "uid": "${Site}"
@@ -2006,7 +2077,7 @@
             "type": "prometheus",
             "uid": "${Site}"
           },
-          "expr": "topk(5,\n  max by (ceph_daemon) (ceph_osd_apply_latency_ms{job=~\"$job\"})\n  * on(ceph_daemon) group_left(hostname)\n  max by (ceph_daemon, hostname) (ceph_osd_metadata{device_class=~\"$class\", job=~\"$job\"})\n)",
+          "expr": "sort_desc(\n  max by (ceph_daemon, hostname) (\n    ceph_osd_apply_latency_ms{job=~\"$job\"}\n    * on(ceph_daemon) group_left(hostname)\n    max by (ceph_daemon, hostname) (ceph_osd_metadata{device_class=~\"$class\", job=~\"$job\"})\n  )\n)",
           "refId": "A",
           "range": false,
           "instant": true,
@@ -2029,7 +2100,7 @@
             "renameByName": {
               "hostname": "NODE",
               "ceph_daemon": "OSD ID",
-              "Value": "Latency (ms)"
+              "Value": "${class} (ms)"
             },
             "indexByName": {
               "hostname": 0,
@@ -2043,7 +2114,7 @@
           "options": {
             "sort": [
               {
-                "field": "Latency (ms)",
+                "field": "${class} (ms)",
                 "desc": true
               }
             ]
@@ -2062,11 +2133,11 @@
               },
               {
                 "color": "orange",
-                "value": 20
+                "value": 100.0
               },
               {
                 "color": "red",
-                "value": 50
+                "value": 200.0
               }
             ]
           },
@@ -2084,7 +2155,64 @@
           },
           "decimals": 0
         },
-        "overrides": []
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "nvme (ms)"
+            },
+            "properties": [
+              {
+                "id": "thresholds",
+                "value": {
+                  "mode": "absolute",
+                  "steps": [
+                    {
+                      "color": "green",
+                      "value": null
+                    },
+                    {
+                      "color": "orange",
+                      "value": 15.0
+                    },
+                    {
+                      "color": "red",
+                      "value": 25.0
+                    }
+                  ]
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "ssd (ms)"
+            },
+            "properties": [
+              {
+                "id": "thresholds",
+                "value": {
+                  "mode": "absolute",
+                  "steps": [
+                    {
+                      "color": "green",
+                      "value": null
+                    },
+                    {
+                      "color": "orange",
+                      "value": 50.0
+                    },
+                    {
+                      "color": "red",
+                      "value": 100.0
+                    }
+                  ]
+                }
+              }
+            ]
+          }
+        ]
       },
       "options": {
         "cellHeight": "sm",
@@ -2098,12 +2226,13 @@
           "countRows": false
         }
       },
+      "description": "Tất cả OSD của class, sắp xếp latency cao → thấp. Ngưỡng theo class: nvme 15/25, ssd 50/100; class khác 100/200 ms.",
       "repeat": "class",
       "repeatDirection": "h",
       "maxPerRow": 2,
       "id": 22,
       "gridPos": {
-        "h": 7,
+        "h": 12,
         "w": 12,
         "x": 0,
         "y": 81
@@ -2119,7 +2248,7 @@
         "h": 1,
         "w": 24,
         "x": 0,
-        "y": 88
+        "y": 93
       }
     },
     {
@@ -2194,7 +2323,7 @@
         "h": 3,
         "w": 24,
         "x": 0,
-        "y": 89
+        "y": 94
       }
     },
     {
@@ -2262,7 +2391,7 @@
         "h": 8,
         "w": 5,
         "x": 0,
-        "y": 92
+        "y": 97
       }
     },
     {
@@ -2361,7 +2490,7 @@
         "h": 8,
         "w": 19,
         "x": 5,
-        "y": 92
+        "y": 97
       }
     }
   ],

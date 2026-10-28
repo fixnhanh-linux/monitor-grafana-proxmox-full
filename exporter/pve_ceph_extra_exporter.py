@@ -186,7 +186,7 @@ def ha_groups_by_host():
                 for name, nodes in parse_ha_cfg(f.read(), types).items():
                     for n in nodes:
                         groups.setdefault(n, set()).add(name)
-    return {h: ", ".join(sorted(g)) for h, g in groups.items()}
+    return {h: ",".join(sorted(g)) for h, g in groups.items()}
 
 
 def ha_metrics(by_host):
