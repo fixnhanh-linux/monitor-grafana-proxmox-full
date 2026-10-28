@@ -7,7 +7,14 @@ Ban quyen (c) 2026 FIX NHANH. Bao luu moi quyen.
 Chay tren 1 node Proxmox co Ceph (can quyen doc `ceph status` va /etc/pve).
 Chi dung thu vien chuan Python 3 (co san tren Proxmox 7/8/9).
 
-Metric xuat ra:
+Mac dinh GOP TAT CA metric ra 1 port (Prometheus chi can 1 target):
+  - phat lai /metrics cua ceph mgr dang active (tat bang --no-ceph-mgr)
+  - metric Proxmox lay tu pvesh, ten giong prometheus-pve-exporter (tat bang --no-pve):
+      pve_cluster_info, pve_up, pve_cpu_usage_ratio, pve_memory_*, pve_disk_*,
+      pve_uptime_seconds, pve_ha_state{state}
+  - cac metric bo sung ben duoi
+
+Metric bo sung:
   ceph_custom_recovery_info{content,state}   trang thai 1 dong giong GUI Proxmox
                                              value: 0=OK, 1=recovery/rebalance, 2=loi
   ceph_custom_recovery_percent               % du lieu da on dinh (100 = khong co recovery)
@@ -32,7 +39,7 @@ import time
 from http.server import BaseHTTPRequestHandler, HTTPServer
 from socketserver import ThreadingMixIn
 
-VERSION = "2026.10.29-1"
+VERSION = "2026.10.30-1"
 
 HA_GROUPS_CFG = "/etc/pve/ha/groups.cfg"
 HA_RULES_CFG = "/etc/pve/ha/rules.cfg"  # PVE 9: HA group -> node-affinity rule
@@ -198,6 +205,85 @@ def ha_metrics(by_host):
     return lines
 
 
+# ---------------------------------------------------------------- ceph mgr (gop 1 port)
+def ceph_mgr_url(ceph_bin, timeout):
+    """URL module prometheus cua mgr dang active (`ceph mgr services`)."""
+    out = subprocess.check_output([ceph_bin, "mgr", "services", "--format", "json"],
+                                  stderr=subprocess.DEVNULL, timeout=timeout)
+    url = json.loads(out.decode("utf-8", "replace")).get("prometheus")
+    if not url:
+        raise RuntimeError("chua bat module prometheus: ceph mgr module enable prometheus")
+    return url
+
+
+def ceph_mgr_metrics(url, timeout):
+    """Lay nguyen van /metrics cua ceph mgr de phat lai tren cung port."""
+    from urllib.request import urlopen
+    with urlopen(url.rstrip("/") + "/metrics", timeout=timeout) as resp:
+        text = resp.read().decode("utf-8", "replace")
+    if "ceph_health_status" not in text:
+        raise RuntimeError("mgr tra ve rong (standby?)")
+    return text.rstrip("\n").splitlines()
+
+
+# ---------------------------------------------------------------- Proxmox (gop 1 port)
+# Ten metric giong prometheus-pve-exporter de dashboard dung chung query.
+PVE_HA_STATES = ("online", "maintenance", "unknown", "fence", "gone", "lost")
+
+
+def pvesh(pvesh_bin, path, timeout):
+    out = subprocess.check_output([pvesh_bin, "get", path, "--output-format", "json"],
+                                  stderr=subprocess.DEVNULL, timeout=timeout)
+    return json.loads(out.decode("utf-8", "replace"))
+
+
+def pve_metrics(status, resources, ha_manager):
+    """status=/cluster/status, resources=/cluster/resources?type=node,
+    ha_manager=/cluster/ha/status/manager_status."""
+    lines = ["# TYPE pve_cluster_info gauge"]
+    cluster = [x for x in status if x.get("type") == "cluster"]
+    if cluster:
+        c = cluster[0]
+        lines.append('pve_cluster_info{id="cluster/%s",nodes="%s",quorate="%s",version="%s"} 1'
+                     % (esc(c.get("name", "")), c.get("nodes", ""), c.get("quorate", ""),
+                        c.get("version", "")))
+    else:  # node le, khong join cluster
+        n = [x for x in status if x.get("type") == "node"]
+        name = n[0].get("name", "standalone") if n else "standalone"
+        lines.append('pve_cluster_info{id="cluster/%s",nodes="1",quorate="1",version=""} 1' % esc(name))
+
+    gauges = (("pve_up", None), ("pve_cpu_usage_ratio", "cpu"), ("pve_cpu_usage_limit", "maxcpu"),
+              ("pve_memory_usage_bytes", "mem"), ("pve_memory_size_bytes", "maxmem"),
+              ("pve_disk_usage_bytes", "disk"), ("pve_disk_size_bytes", "maxdisk"),
+              ("pve_uptime_seconds", "uptime"))
+    nodes = sorted((x for x in resources if x.get("type") == "node"), key=lambda x: x.get("id", ""))
+    for metric, key in gauges:
+        lines.append("# TYPE %s gauge" % metric)
+        for n in nodes:
+            if key is None:
+                val = 1 if n.get("status") == "online" else 0
+            else:
+                val = n.get(key) or 0
+            lines.append('%s{id="%s"} %s' % (metric, esc(n.get("id", "")), val))
+
+    node_status = ((ha_manager or {}).get("manager_status") or {}).get("node_status") or {}
+    lines.append("# TYPE pve_ha_state gauge")
+    for node, st in sorted(node_status.items()):
+        for s in PVE_HA_STATES:
+            lines.append('pve_ha_state{id="node/%s",state="%s"} %d' % (esc(node), s, 1 if st == s else 0))
+    return lines
+
+
+def collect_pve(pvesh_bin, timeout):
+    status = pvesh(pvesh_bin, "/cluster/status", timeout)
+    resources = pvesh(pvesh_bin, "/cluster/resources", timeout)
+    try:
+        ha = pvesh(pvesh_bin, "/cluster/ha/status/manager_status", timeout)
+    except Exception:
+        ha = {}
+    return pve_metrics(status, resources, ha)
+
+
 # ---------------------------------------------------------------- server
 class Collector(object):
     def __init__(self, args):
@@ -208,8 +294,21 @@ class Collector(object):
     def collect(self):
         up = {}
         lines = []
+        a = self.args
+        if not a.no_ceph_mgr:
+            try:
+                lines += ceph_mgr_metrics(a.ceph_mgr_url or ceph_mgr_url(a.ceph_bin, a.timeout), a.timeout)
+                up["ceph_mgr"] = 1
+            except Exception:
+                up["ceph_mgr"] = 0
+        if not a.no_pve:
+            try:
+                lines += collect_pve(a.pvesh_bin, a.timeout)
+                up["pve"] = 1
+            except Exception:
+                up["pve"] = 0
         try:
-            r = parse_ceph_status(run_ceph_status(self.args.ceph_bin, self.args.timeout))
+            r = parse_ceph_status(run_ceph_status(a.ceph_bin, a.timeout))
             lines += ceph_metrics(r)
             up["ceph"] = 1
         except Exception:
@@ -262,6 +361,12 @@ def main():
     ap.add_argument("--listen", default="0.0.0.0")
     ap.add_argument("--port", type=int, default=9830)
     ap.add_argument("--ceph-bin", default="ceph")
+    ap.add_argument("--pvesh-bin", default="pvesh")
+    ap.add_argument("--ceph-mgr-url", default="", help="mac dinh lay tu `ceph mgr services`")
+    ap.add_argument("--no-ceph-mgr", action="store_true",
+                    help="khong phat lai metric ceph mgr (Prometheus scrape :9283 rieng)")
+    ap.add_argument("--no-pve", action="store_true",
+                    help="khong xuat metric Proxmox (da co prometheus-pve-exporter rieng)")
     ap.add_argument("--timeout", type=int, default=10, help="timeout lenh ceph (giay)")
     ap.add_argument("--cache", type=int, default=10, help="cache ket qua (giay)")
     ap.add_argument("--once", action="store_true", help="in metric ra stdout roi thoat")

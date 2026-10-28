@@ -260,7 +260,9 @@ def build(args):
                     "RAM_Pct", fmt="table"),
                 tgt(node_q('pve_memory_size_bytes{%s}' % nj), "RAM_Total", fmt="table"),
                 tgt(node_q('pve_uptime_seconds{%s}' % nj), "Uptime", fmt="table"),
-                tgt(node_q('pve_ha_state{state="online", %s}' % nj), "HA", fmt="table"),
+                # Cot HA / HA Groups chi co khi cluster co HA group: query rong -> cot tu an
+                tgt('%s\nand on(job) count by (job) (pve_ha_groups_custom_info{%s})'
+                    % (node_q('pve_ha_state{state="online", %s}' % nj), J), "HA", fmt="table"),
                 tgt('pve_ha_groups_custom_info{%s}' % J, "Group", fmt="table")],
                [{"id": "joinByField", "options": {"byField": "host", "mode": "outer"}},
                 drop_extra_fields(HIDE),
@@ -271,7 +273,7 @@ def build(args):
                                 "Value #RAM_Pct": 4, "Value #RAM_Total": 5, "Value #Uptime": 6}),
                 {"id": "sortBy", "options": {"sort": [{"field": "Node Proxmox"}]}}],
                cell="auto", filterable=True,
-               desc="HA Groups lấy từ pve_ceph_extra_exporter (groups.cfg / rules.cfg node-affinity).",
+               desc="Cột HA và HA Groups chỉ hiện khi cluster đang chọn có HA group / node-affinity rule (pve_ceph_extra_exporter đọc groups.cfg / rules.cfg).",
                overrides=[
                    override("HA", ("mappings", [
                        {"type": "value", "options": {

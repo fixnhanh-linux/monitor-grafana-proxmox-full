@@ -43,6 +43,7 @@ bash /root/monitor-grafana-proxmox-full/menu.sh setup
 |---|---|---|---|
 | 1 | Máy này làm gì: `1` node Ceph đầy đủ · `2` chỉ exporter · `3` chỉ dashboard | `1` | Chọn các bước sẽ chạy |
 | 2 | Port exporter | `9830` | Cổng `/metrics` của service |
+| 2 | Gộp tất cả metric ra 1 port? | `Y` | `Y`: Prometheus chỉ cần 1 target; `n`: giữ target ceph mgr / pve exporter riêng |
 | 2 | Tên job Prometheus của cluster | `Proxmox-<cluster_name>` đọc từ `/etc/pve/corosync.conf` | File mẫu `prometheus-target-<job>.yml` |
 | 3 | Tiêu đề, UID dashboard | `Proxmox - Ceph Prometheus`, `pve-ceph-prom` | UID trùng sẽ ghi đè dashboard cũ |
 | 3 | Regex lọc datasource Site, regex lọc job | trống (tất cả), `/.*Proxmox-/` | Biến `$Site`, `$job` |
@@ -116,7 +117,26 @@ Kiểm tra nhanh không cần cài: `python3 pve_ceph_extra_exporter.py --once`
 
 ## 2. Thêm vào Prometheus
 
-Target phải nằm **cùng job** với ceph mgr / pve exporter của cluster đó (dashboard lọc theo `job=~"$job"`):
+### Mặc định: gộp tất cả metric ra 1 port
+
+Exporter phát lại `/metrics` của ceph mgr đang active (lấy địa chỉ qua `ceph mgr services`) và tự xuất metric Proxmox từ `pvesh` (tên giống `prometheus-pve-exporter`: `pve_cluster_info`, `pve_up`, `pve_cpu_usage_ratio`, `pve_memory_*`, `pve_disk_*`, `pve_uptime_seconds`, `pve_ha_state`). Mỗi cluster chỉ cần **1 target**:
+
+```yaml
+  - job_name: Proxmox-DECO
+    scrape_interval: 30s
+    scrape_timeout: 25s
+    static_configs:
+      - targets:
+          - 10.0.0.11:9830   # pve_ceph_extra_exporter (tất cả metric)
+```
+
+Điều kiện: đã bật module prometheus của ceph mgr (`ceph mgr module enable prometheus`), menu **1** sẽ kiểm tra.
+
+**Phải xoá** target `:9283` (ceph mgr) và `:9221` (pve exporter) cũ của cluster đó khỏi job, nếu không mọi số liệu bị nhân đôi. Menu **12** báo `Trùng` khi một job có 2 target cùng xuất metric ceph hoặc Proxmox.
+
+### Không gộp (giữ target cũ)
+
+Chọn `n` ở câu gộp (service chạy với `--no-ceph-mgr --no-pve`). Target exporter phải nằm **cùng job** với ceph mgr / pve exporter của cluster đó (dashboard lọc theo `job=~"$job"`):
 
 ```yaml
   - job_name: Proxmox-DECO
@@ -167,6 +187,8 @@ Grafana → Dashboards → New → Import → chọn file JSON.
 | `ceph_custom_pgs_not_clean` | Số PG không active+clean |
 | `ceph_custom_progress_percent{event}` | Tiến độ các sự kiện `ceph progress` |
 | `pve_ha_groups_custom_info{host,groups}` | HA group / node-affinity rule của node |
+
+Cột **HA** và **HA Groups** trong bảng *Resource Cluster* chỉ hiện khi cluster đang chọn ở biến `$job` có HA group / node-affinity rule; cluster không có HA thì hai cột này tự ẩn.
 | `pve_ceph_extra_exporter_up{collector}` | 1 = thu thập OK (`ceph`, `ha`) |
 
 ---

@@ -3,10 +3,12 @@
 # Ban quyen (c) 2026 FIX NHANH. Bao luu moi quyen.
 #   bash install_exporter.sh            # cai / cap nhat, port 9830
 #   PORT=9300 bash install_exporter.sh  # doi port
+#   ARGS="--no-ceph-mgr --no-pve" bash install_exporter.sh  # chi xuat metric bo sung
 #   bash install_exporter.sh uninstall
 set -euo pipefail
 
 PORT="${PORT:-9830}"
+ARGS="${ARGS:-}"
 DIR="$(cd "$(dirname "$0")" && pwd)"
 BIN=/usr/local/bin/pve_ceph_extra_exporter.py
 UNIT=/etc/systemd/system/pve-ceph-extra-exporter.service
@@ -33,7 +35,7 @@ Description=Proxmox Ceph extra exporter (recovery + HA groups)
 After=network-online.target ceph.target pve-cluster.service
 
 [Service]
-ExecStart=/usr/bin/python3 $BIN --port $PORT
+ExecStart=/usr/bin/python3 $BIN --port $PORT $ARGS
 Restart=always
 RestartSec=5
 

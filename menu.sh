@@ -130,6 +130,13 @@ save_conf() {  # save_conf KEY VALUE
 }
 load_conf
 
+current_flags() {  # co --no-* cua service dang cai (rong = gop tat ca metric 1 port)
+    if [ -f "$UNIT" ]; then grep -o -- '--no-[a-z-]*' "$UNIT" | xargs; else echo "${EXPORTER_ARGS:-}"; fi
+}
+mode_text() {  # mode_text FLAGS
+    if [ -z "$1" ]; then echo "gop 1 port (ceph mgr + Proxmox + bo sung)"; else echo "chi metric bo sung ($1)"; fi
+}
+
 current_port() {
     if [ -f "$UNIT" ]; then
         sed -n 's/.*--port \([0-9]\+\).*/\1/p' "$UNIT" | head -1
@@ -224,6 +231,16 @@ do_check() {
         echo "Datacenter/Node → Firewall → Add: IN ACCEPT tcp dport $port source <IP Prometheus>" | sub
     fi
 
+    if [ -z "$(current_flags)" ]; then
+        if has ceph && timeout 10 ceph mgr services -f json 2>/dev/null | grep -q '"prometheus"'; then
+            ok "ceph mgr module prometheus dang bat"
+        elif has ceph; then
+            err "Chua bat module prometheus cua ceph mgr (can cho che do gop 1 port):"
+            echo "ceph mgr module enable prometheus" | sub; bad=1
+        fi
+        if has pvesh; then ok "pvesh co san (metric Proxmox)"; else err "Thieu pvesh - may nay khong phai node Proxmox"; bad=1; fi
+    fi
+
     has curl || warn "Thieu curl (apt install curl) - can cho xem metric / import Grafana"
 
     if [ "$bad" = 0 ]; then ok "${G}${W}Moi truong san sang${N}"; else err "${R}${W}Can xu ly cac loi tren truoc khi cai${N}"; fi
@@ -249,7 +266,9 @@ do_install() {
         info "Ban dang cai: ${old:-?}  →  ban moi: ${new:-?}"
     fi
 
-    if PORT="$port" bash "$INSTALLER" 2>&1 | sub; then
+    local flags="${2-$(current_flags)}"
+    info "Che do: ${W}$(mode_text "$flags")${N}"
+    if PORT="$port" ARGS="$flags" bash "$INSTALLER" 2>&1 | sub; then
         ok "Da cai service ${W}$SERVICE${N} port ${W}$port${N}"
         info "Buoc tiep theo: them target $(local_ip):$port vao Prometheus (menu 10)"
     else
@@ -439,9 +458,29 @@ PY
     fi
 }
 
-prom_snippet() {  # prom_snippet JOB PORT -> in + luu file mau prometheus.yml
-    local job="$1" port="$2" ip f
+prom_snippet() {  # prom_snippet JOB PORT [FLAGS] -> in + luu file mau prometheus.yml
+    local job="$1" port="$2" flags="${3-$(current_flags)}" ip f
     ip=$(local_ip); f="$DIR/prometheus-target-$job.yml"
+    if [ -z "$flags" ]; then
+        cat > "$f" <<EOF
+# Gop 1 port: job nay CHI CON 1 target (ceph mgr + Proxmox + bo sung deu o :$port)
+  - job_name: $job
+    scrape_interval: 30s
+    scrape_timeout: 25s
+    static_configs:
+      - targets:
+          - $ip:$port   # pve_ceph_extra_exporter (tat ca metric)
+EOF
+        info "Job ${W}'$job'${N} chi can ${W}1 target $ip:$port${N}:"
+        echo; sed -n '2,$p' "$f" | sed "s/^/${IND}    ${O}/; s/$/${N}/"; echo
+        warn "XOA target ceph mgr (:9283) va pve exporter (:9221) cu cua cluster nay khoi job,"
+        echo "neu khong moi so lieu se bi nhan doi (menu 12 se bao trung)." | sub
+        info "Da luu mau: $f"
+        info "Tren may Prometheus:"
+        printf '%s\n' "promtool check config /etc/prometheus/prometheus.yml" \
+            "systemctl reload prometheus      # hoac: curl -X POST http://<prom>:9090/-/reload" | sub
+        return 0
+    fi
     cat > "$f" <<EOF
 # Them vao scrape_configs cua prometheus.yml (CUNG job voi ceph mgr / pve exporter)
   - job_name: $job
@@ -489,6 +528,16 @@ prom_check() {  # prom_check URL -> 0 neu exporter duoc scrape va job khop
 
     echo; info "Cac job cluster (pve_cluster_info):"
     prom_q "$url" 'count by (job) (pve_cluster_info)' | sub
+
+    echo; info "Kiem tra trung target (1 cluster bi scrape 2 lan -> so lieu nhan doi):"
+    out=$(prom_q "$url" 'count by (job) (count by (job, instance) (ceph_health_status)) > 1')
+    if [ -n "$out" ]; then
+        while read -r l; do err "Trung ceph: $l target → xoa target ceph mgr cu (:9283)"; done <<< "$out"; rc=1
+    else ok "Khong co job nao bi trung metric ceph"; fi
+    out=$(prom_q "$url" 'count by (job) (count by (job, instance) (pve_cluster_info)) > 1')
+    if [ -n "$out" ]; then
+        while read -r l; do err "Trung Proxmox: $l target → xoa target pve exporter cu (:9221)"; done <<< "$out"; rc=1
+    else ok "Khong co job nao bi trung metric Proxmox"; fi
 
     echo; info "So sanh job: ceph mgr ↔ exporter:"
     cj=$(prom_q "$url" 'count by (job) (ceph_health_status)' | sed 's/{job=\(.*\)} .*/\1/')
@@ -662,7 +711,7 @@ do_setup() {
     info "Cau tra loi duoc nho trong .menu.conf cho lan chay sau (khong luu token)."
     dash_defaults
     [ -n "${ENV_ROLE:-}" ] || detect_env
-    local role port="" job="" cn gurl="" gfolder="" prom="" TOKEN=""
+    local role port="" job="" cn gurl="" gfolder="" prom="" TOKEN="" flags=""
     local do_ex=0 do_dash=0 do_imp=0 do_chk=0
 
     echo; echo "${IND}  ${W}${M}[1/5] May nay lam gi?${N}"
@@ -689,6 +738,9 @@ do_setup() {
         port=$(ask "Port exporter" "$(current_port)")
         [[ "$port" =~ ^[0-9]+$ ]] && [ "$port" -ge 1024 ] && [ "$port" -le 65535 ] \
             || { err "Port khong hop le: $port"; return 1; }
+        info "Gop: exporter phat lai metric ceph mgr + Proxmox (pvesh) → Prometheus chi can 1 target"
+        local allin; allin=$(ask "Gop tat ca metric ra 1 port? (Y/n)" "$([ -z "$(current_flags)" ] && echo Y || echo n)")
+        if [[ "$allin" =~ ^[Nn] ]]; then flags="--no-ceph-mgr --no-pve"; else flags=""; fi
         cn=$(detect_cluster_name)
         [ -n "$cn" ] && info "Ten cluster Proxmox (corosync): ${W}$cn${N}"
         job=$(ask "Ten job Prometheus cua cluster (phai trung job cua ceph mgr)" "${PROM_JOB:-Proxmox-${cn:-CLUSTER}}")
@@ -717,6 +769,7 @@ do_setup() {
     box_sep
     if [ $do_ex = 1 ]; then
         box_row "$(kv "Exporter" "service $SERVICE · $(hostname) · port ${W}$port${N}")"
+        box_row "$(kv "Che do" "$(mode_text "$flags")")"
         box_row "$(kv "Job Prom" "${W}$job${N} (target $(local_ip):$port)")"
     fi
     if [ $do_dash = 1 ]; then
@@ -734,6 +787,7 @@ do_setup() {
 
     save_conf SETUP_ROLE "$role"
     [ -n "$job" ] && save_conf PROM_JOB "$job"
+    [ $do_ex = 1 ] && save_conf EXPORTER_ARGS "$flags"
     [ $do_dash = 1 ] && save_dash_conf
     [ -n "$prom" ] && save_conf PROM_URL "${prom%/}"
 
@@ -747,9 +801,9 @@ do_setup() {
         next "Kiem tra moi truong"
         do_check || { err "Dung lai: sua cac loi tren roi chay lai (menu S)"; return 1; }
         next "Cai exporter (port $port)"
-        do_install "$port" || return 1
+        do_install "$port" "$flags" || return 1
         next "Cau hinh Prometheus"
-        prom_snippet "$job" "$port"
+        prom_snippet "$job" "$port" "$flags"
     fi
     if [ $do_dash = 1 ]; then
         next "Sinh dashboard"

@@ -1214,7 +1214,7 @@
             "type": "prometheus",
             "uid": "${Site}"
           },
-          "expr": "label_replace(pve_ha_state{state=\"online\", id=~\"node/.*\", job=~\"$job\"}, \"host\", \"$1\", \"id\", \"node/(.*)\")",
+          "expr": "label_replace(pve_ha_state{state=\"online\", id=~\"node/.*\", job=~\"$job\"}, \"host\", \"$1\", \"id\", \"node/(.*)\")\nand on(job) count by (job) (pve_ha_groups_custom_info{job=~\"$job\"})",
           "refId": "HA",
           "range": false,
           "instant": true,
@@ -1516,7 +1516,7 @@
           "countRows": false
         }
       },
-      "description": "HA Groups lấy từ pve_ceph_extra_exporter (groups.cfg / rules.cfg node-affinity).",
+      "description": "Cột HA và HA Groups chỉ hiện khi cluster đang chọn có HA group / node-affinity rule (pve_ceph_extra_exporter đọc groups.cfg / rules.cfg).",
       "id": 17,
       "gridPos": {
         "h": 20,
