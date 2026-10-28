@@ -1,3 +1,4 @@
 .menu.conf
 .menu.conf.tmp
 __pycache__/
+prometheus-target-*.yml

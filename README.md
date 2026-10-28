@@ -25,20 +25,65 @@ Sửa thêm các lỗi query của bản cũ:
 - **OSDs OUT** tính `count(up) - count(in)` luôn ra 0; nay đếm `ceph_osd_in == 0`.
 - **OSD Used Class HDD12T** cột Low lấy nhầm class `hdd`.
 
-## Cách nhanh: dùng menu
+## Cài trọn gói: một lệnh, hỏi một lần
 
-Copy cả thư mục lên 1 node Ceph của mỗi cluster rồi chạy menu:
+Clone repo lên 1 node Ceph của mỗi cluster rồi chạy:
 
 ```bash
-scp -r Monitor-Proxmox-Total root@<node-proxmox>:/root/
+git clone https://github.com/fixnhanh-linux/monitor-grafana-proxmox-full.git /root/monitor-grafana-proxmox-full
 ```
 
 ```bash
-bash /root/Monitor-Proxmox-Total/menu.sh
+bash /root/monitor-grafana-proxmox-full/menu.sh setup
+```
+
+(hoặc mở `menu.sh` rồi chọn **S**). Tool hỏi hết các câu dưới đây, in **TÓM TẮT**, hỏi `Bắt đầu thực hiện? (y/N)`, rồi tự chạy từng bước `>>> [1/6] ...` và báo **KẾT QUẢ**.
+
+| # | Câu hỏi | Mặc định / tự dò | Dùng để |
+|---|---|---|---|
+| 1 | Máy này làm gì: `1` node Ceph đầy đủ · `2` chỉ exporter · `3` chỉ dashboard | `1` | Chọn các bước sẽ chạy |
+| 2 | Port exporter | `9284` | Cổng `/metrics` của service |
+| 2 | Tên job Prometheus của cluster | `Proxmox-<cluster_name>` đọc từ `/etc/pve/corosync.conf` | File mẫu `prometheus-target-<job>.yml` |
+| 3 | Tiêu đề, UID dashboard | `Proxmox - Ceph Prometheus`, `pve-ceph-prom` | UID trùng sẽ ghi đè dashboard cũ |
+| 3 | Regex lọc datasource Site, regex lọc job | trống (tất cả), `/.*Proxmox-/` | Biến `$Site`, `$job` |
+| 3 | Số node / pool / device class | đọc từ `ceph osd tree`, `ceph osd pool ls`, `ceph osd crush class ls` | Chiều cao các bảng |
+| 3 | Ngưỡng latency theo class | `nvme=15:25,ssd=50:100,default=100:200` | Màu bảng Latency All OSD |
+| 3 | Khoảng thời gian mặc định | `now-15m` | Time picker |
+| 3 | Đặt tên ngắn + màu cho HA Groups? | đọc các chuỗi group đang có trong `/etc/pve/ha/` | Cột HA Groups, vd `Gold+HIGH:orange` |
+| 4 | Grafana URL, token, folder UID | URL trống = chỉ xuất file JSON | Import qua API |
+| 5 | Prometheus URL | trống = bỏ qua | Kiểm tra target `up` và job khớp ceph mgr |
+
+Các bước tool tự làm (tuỳ lựa chọn ở câu 1):
+
+1. Kiểm tra môi trường — có lỗi thì dừng, chưa cài gì
+2. Cài / cập nhật service `pve-ceph-extra-exporter`
+3. In và lưu đoạn `prometheus.yml` mẫu (`prometheus-target-<job>.yml`)
+4. Sinh `proxmox_ceph_dashboard.json`
+5. Import lên Grafana
+6. Kiểm tra Prometheus
+
+### Điều chỉnh sau khi cài
+
+| Muốn đổi | Cách |
+|---|---|
+| Bất kỳ câu trả lời nào | Chạy lại `menu.sh setup` — giá trị cũ hiện sẵn trong `[ ]`, chỉ sửa câu cần đổi, Enter các câu khác |
+| Sửa nhanh không qua câu hỏi | Sửa `.menu.conf` (dòng `DASH_TITLE=`, `DASH_LAT=`, `DASH_ALIASES=` ...) rồi chạy `menu.sh setup` và Enter liên tục |
+| Chỉ port exporter | `bash menu.sh port 9300`, rồi sửa target trong `prometheus.yml` |
+| Chỉ dashboard | Menu **9** (sinh lại) rồi **11** (import, UID giống nhau sẽ ghi đè) |
+| Tên ngắn HA Groups | Menu **9** → trả lời `y` ở câu HA Groups; `DASH_ALIASES` lưu dạng `chuoi=Ten:mau;;chuoi2=Ten2` |
+| Gỡ exporter | Menu **8** hoặc `bash menu.sh uninstall` |
+
+Token Grafana không bao giờ được lưu, mỗi lần import phải nhập lại.
+
+## Menu từng mục
+
+```bash
+bash /root/monitor-grafana-proxmox-full/menu.sh
 ```
 
 | Mục | Việc |
 |---|---|
+| S | Cài trọn gói (như trên) |
 | 1 | Kiểm tra python3, lệnh `ceph`, keyring, HA config, port trống, PVE firewall |
 | 2 | Cài / cập nhật exporter (hỏi port, mặc định 9284) |
 | 3 | Trạng thái service, collector OK/lỗi, dòng Ceph Status, Total Health |
@@ -50,7 +95,7 @@ bash /root/Monitor-Proxmox-Total/menu.sh
 | 12 | Hỏi Prometheus: target exporter có `up`, job của exporter có khớp job ceph mgr, device class từng cluster |
 | 13 | Kiểm tra tổng thể (1 + 3 + 12) |
 
-Chạy 1 lệnh không qua menu: `bash menu.sh check | install [port] | status | metrics | logs | restart | port <số> | uninstall | dashboard | import | prom | prom-check | doctor`.
+Chạy 1 lệnh không qua menu: `bash menu.sh setup | check | install [port] | status | metrics | logs | restart | port <số> | uninstall | dashboard | import | prom | prom-check | doctor`.
 
 Menu nhớ Grafana URL, Prometheus URL, tiêu đề/UID dashboard trong `.menu.conf` (không lưu token).
 

@@ -5,8 +5,9 @@
 #    - Dashboard Grafana (make_dashboard.py)
 #
 #  Chay menu:        bash menu.sh
+#  Cai tron goi:     bash menu.sh setup   (hoi 1 lan, tu lam het)
 #  Chay 1 lenh:      bash menu.sh <lenh>
-#      check | install | status | metrics | logs | restart | port <so> |
+#      setup | check | install | status | metrics | logs | restart | port <so> |
 #      uninstall | dashboard | import | prom | prom-check | doctor | help
 # =============================================================================
 set -uo pipefail
@@ -238,57 +239,89 @@ do_uninstall() {
 }
 
 # =============================================================================
-# 9. Sinh dashboard
+# Ham dung chung (menu le + cai dat tron goi)
 # =============================================================================
-do_dashboard() {
-    title "Sinh dashboard Grafana"
-    has python3 || { err "Thieu python3"; return 1; }
-    local t u s j n p c o
-    t=$(ask "Tieu de dashboard" "${DASH_TITLE:-Proxmox - Ceph Prometheus}")
-    u=$(ask "UID (khong dau, khong cach)" "${DASH_UID:-pve-ceph-prom}")
-    s=$(ask "Regex loc datasource Site (bo trong = tat ca Prometheus)" "${DASH_SITE:-}")
-    j=$(ask "Regex loc job cluster" "${DASH_JOB:-/.*Proxmox-/}")
-
-    # goi y so node/pool/class tu ceph neu chay tren node Ceph
-    local dn=8 dp=8 dc=3
-    if has ceph && timeout 10 ceph status >/dev/null 2>&1; then
-        dn=$(timeout 10 ceph osd tree -f json 2>/dev/null | python3 -c \
-            'import json,sys;print(sum(1 for x in json.load(sys.stdin)["nodes"] if x["type"]=="host"))' 2>/dev/null || echo 8)
-        dp=$(timeout 10 ceph osd pool ls 2>/dev/null | wc -l)
-        dc=$(timeout 10 ceph osd crush class ls -f json 2>/dev/null | python3 -c \
-            'import json,sys;print(len(json.load(sys.stdin)))' 2>/dev/null || echo 3)
-        info "Doc tu Ceph: $dn node, $dp pool, $dc device class"
-    fi
-    n=$(ask "So node" "$dn"); p=$(ask "So pool" "$dp"); c=$(ask "So device class" "$dc")
-    o=$(ask "File xuat" "$DASH_JSON")
-
-    python3 "$MAKE_DASH" -o "$o" --title "$t" --uid "$u" --site-regex "$s" --job-regex "$j" \
-        --nodes "$n" --pools "$p" --classes "$c" || { err "Sinh dashboard loi"; return 1; }
-    save_conf DASH_TITLE "$t"; save_conf DASH_UID "$u"; save_conf DASH_SITE "$s"; save_conf DASH_JOB "$j"
-    DASH_JSON="$o"
-    ok "Da tao $o"
-    info "Import: Grafana -> Dashboards -> New -> Import -> Upload JSON, hoac dung menu 11"
+detect_cluster_name() {
+    sed -n 's/^[[:space:]]*cluster_name:[[:space:]]*\([^[:space:]]*\).*/\1/p' /etc/pve/corosync.conf 2>/dev/null | head -1
 }
 
-# =============================================================================
-# 11. Import dashboard qua Grafana API
-# =============================================================================
-do_import() {
-    title "Import dashboard len Grafana"
+detect_sizes() {  # dat DN DP DC (so node / pool / device class) tu Ceph
+    DN=8; DP=8; DC=3
+    has ceph && has python3 && timeout 10 ceph status >/dev/null 2>&1 || return 1
+    DN=$(timeout 10 ceph osd tree -f json 2>/dev/null | python3 -c \
+        'import json,sys;print(sum(1 for x in json.load(sys.stdin)["nodes"] if x["type"]=="host"))' 2>/dev/null || echo 8)
+    DP=$(timeout 10 ceph osd pool ls 2>/dev/null | wc -l)
+    DC=$(timeout 10 ceph osd crush class ls -f json 2>/dev/null | python3 -c \
+        'import json,sys;print(len(json.load(sys.stdin)))' 2>/dev/null || echo 3)
+}
+
+detect_ha_groups() {  # moi chuoi HA Groups khac nhau 1 dong (dung dung code cua exporter)
+    has python3 || return 0
+    python3 - "$DIR/exporter" <<'PY' 2>/dev/null
+import sys
+sys.path.insert(0, sys.argv[1])
+import pve_ceph_extra_exporter as e
+for g in sorted(set(e.ha_groups_by_host().values())):
+    print(g)
+PY
+}
+
+dash_defaults() {
+    : "${DASH_TITLE:=Proxmox - Ceph Prometheus}" "${DASH_UID:=pve-ceph-prom}" "${DASH_SITE:=}"
+    : "${DASH_JOB:=/.*Proxmox-/}" "${DASH_NODES:=8}" "${DASH_POOLS:=8}" "${DASH_CLASSES:=3}"
+    : "${DASH_LAT:=nvme=15:25,ssd=50:100,default=100:200}" "${DASH_TIME:=now-15m}" "${DASH_ALIASES:=}"
+}
+
+save_dash_conf() {
+    local k
+    for k in DASH_TITLE DASH_UID DASH_SITE DASH_JOB DASH_NODES DASH_POOLS DASH_CLASSES \
+             DASH_LAT DASH_TIME DASH_ALIASES; do
+        save_conf "$k" "${!k}"
+    done
+}
+
+alias_of() {  # ten ngan da luu cho 1 chuoi HA Groups
+    local x
+    while IFS= read -r x; do
+        [ "${x%=*}" = "$1" ] && { echo "${x##*=}"; return; }
+    done <<< "${DASH_ALIASES//;;/$'\n'}"
+}
+
+ask_aliases() {  # hoi ten ngan cho tung chuoi HA Groups dang co -> DASH_ALIASES
+    local groups g t out=""
+    groups=$(detect_ha_groups)
+    if [ -z "$groups" ]; then
+        info "Khong doc duoc HA groups tren may nay -> giu ten ngan da luu (neu co)"
+        return 0
+    fi
+    info "Nhap ten ngan, them :mau neu muon (vd Gold+HIGH:orange). Enter trong = giu ten goc."
+    while IFS= read -r g <&3; do
+        t=$(ask "$g" "$(alias_of "$g")")
+        [ -n "$t" ] && out+="${out:+;;}$g=$t"
+    done 3<<< "$groups"
+    DASH_ALIASES="$out"
+}
+
+gen_dashboard() {  # sinh $DASH_JSON tu cac bien DASH_*
+    has python3 || { err "Thieu python3"; return 1; }
+    dash_defaults
+    local a args=(-o "$DASH_JSON" --title "$DASH_TITLE" --uid "$DASH_UID" --site-regex "$DASH_SITE"
+                  --job-regex "$DASH_JOB" --nodes "$DASH_NODES" --pools "$DASH_POOLS"
+                  --classes "$DASH_CLASSES" --lat-th "$DASH_LAT" --time-from "$DASH_TIME")
+    while IFS= read -r a; do
+        [ -n "$a" ] && args+=(--ha-alias "$a")
+    done <<< "${DASH_ALIASES//;;/$'\n'}"
+    python3 "$MAKE_DASH" "${args[@]}" >/dev/null || { err "Sinh dashboard loi"; return 1; }
+    ok "Da tao $DASH_JSON"
+}
+
+import_dashboard() {  # import_dashboard URL TOKEN FOLDER
+    local url="${1%/}" token="$2" folder="$3" payload resp
     has curl && has python3 || { err "Can curl va python3"; return 1; }
-    [ -f "$DASH_JSON" ] || { warn "Chua co $DASH_JSON -> sinh truoc"; do_dashboard || return 1; }
-
-    local url token folder payload resp
-    url=$(ask "Grafana URL" "${GRAFANA_URL:-http://127.0.0.1:3000}"); url="${url%/}"
-    info "Tao token: Grafana -> Administration -> Service accounts -> Add token (role Editor)"
-    read -rsp "  Service account token (khong hien khi go): " token; echo
-    [ -n "$token" ] || { err "Chua nhap token"; return 1; }
-    folder=$(ask "Folder UID (bo trong = General)" "${GRAFANA_FOLDER:-}")
-
+    [ -f "$DASH_JSON" ] || { err "Chua co $DASH_JSON"; return 1; }
     if ! curl -sf --max-time 10 -H "Authorization: Bearer $token" "$url/api/health" >/dev/null; then
         err "Khong ket noi duoc $url"; return 1
     fi
-
     payload=$(mktemp)
     python3 - "$DASH_JSON" "$folder" > "$payload" <<'PY'
 import json, sys
@@ -306,43 +339,36 @@ PY
         ok "Import thanh cong: $url$(echo "$resp" | sed -n 's/.*"url":"\([^"]*\)".*/\1/p')"
         save_conf GRAFANA_URL "$url"; save_conf GRAFANA_FOLDER "$folder"
     else
-        err "Import loi: $resp"
+        err "Import loi: $resp"; return 1
     fi
 }
 
-# =============================================================================
-# 10. Cau hinh Prometheus
-# =============================================================================
-do_prom() {
-    title "Cau hinh Prometheus"
-    local port job ip
-    port=$(current_port); ip=$(local_ip)
-    job=$(ask "Ten job cua cluster nay trong Prometheus (giong job cua ceph mgr)" "${PROM_JOB:-Proxmox-CLUSTER}")
-    save_conf PROM_JOB "$job"
+prom_snippet() {  # prom_snippet JOB PORT -> in + luu file mau prometheus.yml
+    local job="$1" port="$2" ip f
+    ip=$(local_ip); f="$DIR/prometheus-target-$job.yml"
+    cat > "$f" <<EOF
+# Them vao scrape_configs cua prometheus.yml (CUNG job voi ceph mgr / pve exporter)
+  - job_name: $job
+    static_configs:
+      - targets:
+          - $ip:9283   # ceph mgr prometheus (da co)
+          - $ip:$port   # pve_ceph_extra_exporter (moi)
+EOF
     cat <<EOF
 
-  Them target ${W}$ip:$port${N} vao ${W}CUNG job${N} voi ceph mgr / pve exporter, vi du:
+  Them target ${W}$ip:$port${N} vao ${W}CUNG job '$job'${N} voi ceph mgr / pve exporter:
 
-  ${C}  - job_name: $job
-      static_configs:
-        - targets:
-            - $ip:9283   # ceph mgr prometheus (da co)
-            - $ip:$port   # pve_ceph_extra_exporter (moi)${N}
+${C}$(sed -n '2,$p' "$f")${N}
 
-  Neu job dang dung relabel / labels rieng thi chi them dong '$ip:$port' vao danh sach targets.
-  Sau do tren may Prometheus:
+  Da luu mau: $f
+  Neu job da ton tai thi chi them dong '$ip:$port' vao danh sach targets.
+  Tren may Prometheus:
       promtool check config /etc/prometheus/prometheus.yml
       systemctl reload prometheus      # hoac: curl -X POST http://<prom>:9090/-/reload
-
-  Neu cac ceph metric tren dashboard dung job khac voi job cua pve_cluster_info,
-  dashboard se khong khop -> kiem tra bang menu 12.
 EOF
 }
 
-# =============================================================================
-# 12. Kiem tra phia Prometheus
-# =============================================================================
-prom_q() {  # prom_q URL QUERY -> in ket qua dang "labels value"
+prom_q() {  # prom_q URL QUERY -> in ket qua dang "{labels} value"
     curl -sfG --max-time 15 "$1/api/v1/query" --data-urlencode "query=$2" | python3 -c '
 import json, sys
 r = json.load(sys.stdin)["data"]["result"]
@@ -353,38 +379,111 @@ for s in r:
 '
 }
 
-do_prom_check() {
-    title "Kiem tra du lieu tren Prometheus"
+prom_check() {  # prom_check URL -> 0 neu exporter duoc scrape va job khop
+    local url="${1%/}" port out cj ej j rc=0
     has curl && has python3 || { err "Can curl va python3"; return 1; }
-    local url port out
-    url=$(ask "Prometheus URL" "${PROM_URL:-http://127.0.0.1:9090}"); url="${url%/}"
     curl -sf --max-time 10 "$url/-/ready" >/dev/null || { err "Khong ket noi duoc $url"; return 1; }
     save_conf PROM_URL "$url"
     port=$(current_port)
 
     echo; info "Target exporter (up{instance=~\".*:$port\"}):"
     out=$(prom_q "$url" "up{instance=~\".*:$port\"}")
-    if [ -z "$out" ]; then err "Prometheus chua scrape exporter -> xem menu 10"
-    else echo "$out" | while read -r l; do [[ "$l" == *" 1" ]] && ok "$l" || err "$l (target down)"; done; fi
+    if [ -z "$out" ]; then
+        err "Prometheus chua scrape exporter -> them target (menu 10) roi reload Prometheus"; rc=1
+    else
+        while read -r l; do
+            if [[ "$l" == *" 1" ]]; then ok "$l"; else err "$l (target down)"; rc=1; fi
+        done <<< "$out"
+    fi
 
     echo; info "Cac job cluster (pve_cluster_info):"
     prom_q "$url" 'count by (job) (pve_cluster_info)' | sed 's/^/         /'
 
     echo; info "So sanh job: ceph mgr vs exporter:"
-    local cj ej
     cj=$(prom_q "$url" 'count by (job) (ceph_health_status)' | sed 's/{job=\(.*\)} .*/\1/')
     ej=$(prom_q "$url" 'count by (job) (ceph_custom_recovery_info)' | sed 's/{job=\(.*\)} .*/\1/')
     echo "         ceph mgr : $(echo ${cj:-'<khong co>'})"
     echo "         exporter : $(echo ${ej:-'<khong co>'})"
     for j in $ej; do
-        echo "$cj" | grep -qx "$j" && ok "job '$j' khop" \
-            || err "job '$j' cua exporter khong co ceph mgr -> dashboard se khong hien Recovery"
+        if echo "$cj" | grep -qx "$j"; then ok "job '$j' khop"
+        else err "job '$j' cua exporter khong co ceph mgr -> dashboard se khong hien Recovery"; rc=1; fi
     done
 
     echo; info "Trang thai recovery tung cluster:"
     prom_q "$url" 'ceph_custom_recovery_info' | sed 's/^/         /'
     echo; info "OSD device class:"
     prom_q "$url" 'count by (job, device_class) (ceph_osd_metadata)' | sed 's/^/         /'
+    return $rc
+}
+
+# =============================================================================
+# 9. Sinh dashboard
+# =============================================================================
+ask_dashboard() {  # hoi cac tuy chon dashboard -> bien DASH_*
+    dash_defaults
+    DASH_TITLE=$(ask "Tieu de dashboard" "$DASH_TITLE")
+    DASH_UID=$(ask "UID (khong dau, khong cach; trung UID se ghi de)" "$DASH_UID")
+    DASH_SITE=$(ask "Regex loc datasource Site (bo trong = tat ca Prometheus)" "$DASH_SITE")
+    DASH_JOB=$(ask "Regex loc job cluster" "$DASH_JOB")
+    if detect_sizes; then
+        info "Doc tu Ceph: $DN node, $DP pool, $DC device class"
+    else
+        DN=$DASH_NODES; DP=$DASH_POOLS; DC=$DASH_CLASSES
+    fi
+    DASH_NODES=$(ask "So node (chieu cao bang HA)" "$DN")
+    DASH_POOLS=$(ask "So pool (chieu cao bang pool)" "$DP")
+    DASH_CLASSES=$(ask "So device class" "$DC")
+    DASH_LAT=$(ask "Nguong latency ms theo class (canh bao:nghiem trong)" "$DASH_LAT")
+    DASH_TIME=$(ask "Khoang thoi gian mac dinh" "$DASH_TIME")
+    if confirm "Dat ten ngan + mau cho HA Groups?"; then ask_aliases; fi
+}
+
+do_dashboard() {
+    title "Sinh dashboard Grafana"
+    ask_dashboard
+    DASH_JSON=$(ask "File xuat" "$DASH_JSON")
+    gen_dashboard || return 1
+    save_dash_conf
+    info "Import: Grafana -> Dashboards -> New -> Import -> Upload JSON, hoac dung menu 11"
+}
+
+# =============================================================================
+# 11. Import dashboard qua Grafana API
+# =============================================================================
+ask_token() {
+    info "Tao token: Grafana -> Administration -> Service accounts -> Add token (role Editor)"
+    read -rsp "  Service account token (khong hien khi go): " TOKEN; echo
+}
+
+do_import() {
+    title "Import dashboard len Grafana"
+    [ -f "$DASH_JSON" ] || { warn "Chua co $DASH_JSON -> sinh truoc"; do_dashboard || return 1; }
+    local url folder
+    url=$(ask "Grafana URL" "${GRAFANA_URL:-http://127.0.0.1:3000}")
+    ask_token
+    [ -n "$TOKEN" ] || { err "Chua nhap token"; return 1; }
+    folder=$(ask "Folder UID (bo trong = General)" "${GRAFANA_FOLDER:-}")
+    import_dashboard "$url" "$TOKEN" "$folder"
+}
+
+# =============================================================================
+# 10. Cau hinh Prometheus
+# =============================================================================
+do_prom() {
+    title "Cau hinh Prometheus"
+    local job cn
+    cn=$(detect_cluster_name)
+    job=$(ask "Ten job cua cluster nay trong Prometheus (giong job cua ceph mgr)" "${PROM_JOB:-Proxmox-${cn:-CLUSTER}}")
+    save_conf PROM_JOB "$job"
+    prom_snippet "$job" "$(current_port)"
+}
+
+# =============================================================================
+# 12. Kiem tra phia Prometheus
+# =============================================================================
+do_prom_check() {
+    title "Kiem tra du lieu tren Prometheus"
+    prom_check "$(ask "Prometheus URL" "${PROM_URL:-http://127.0.0.1:9090}")"
 }
 
 # =============================================================================
@@ -394,8 +493,119 @@ do_doctor() {
     do_check
     if [ -f "$UNIT" ]; then do_status; else warn "Exporter chua cai"; fi
     if [ -n "${PROM_URL:-}" ] && [ "${NONINTERACTIVE:-0}" = 0 ]; then
-        confirm "Kiem tra them Prometheus $PROM_URL?" && do_prom_check
+        confirm "Kiem tra them Prometheus $PROM_URL?" && prom_check "$PROM_URL"
     fi
+}
+
+# =============================================================================
+# S. Cai dat tron goi: hoi het 1 lan, xac nhan, roi tu lam tung buoc
+# =============================================================================
+do_setup() {
+    title "CAI DAT TRON GOI"
+    echo "  Tra loi cac cau hoi ben duoi (Enter = dung gia tri trong [ ])."
+    echo "  Cau tra loi duoc nho trong .menu.conf cho lan chay sau (khong luu token)."
+    dash_defaults
+    local role port="" job="" cn gurl="" gfolder="" prom="" TOKEN=""
+    local do_ex=0 do_dash=0 do_imp=0 do_chk=0
+
+    echo; echo "  ${W}[1/5] May nay lam gi?${N}"
+    echo "     1) Node Ceph: cai exporter + sinh/import dashboard (day du)"
+    echo "     2) Chi cai exporter (node Ceph)"
+    echo "     3) Chi sinh / import dashboard (may Grafana / may quan tri)"
+    role=$(ask "Chon" "${SETUP_ROLE:-1}")
+    case "$role" in
+        1) do_ex=1; do_dash=1 ;;
+        2) do_ex=1 ;;
+        3) do_dash=1 ;;
+        *) err "Lua chon khong hop le: $role"; return 1 ;;
+    esac
+
+    if [ $do_ex = 1 ]; then
+        need_root || return 1
+        echo; echo "  ${W}[2/5] Exporter${N}"
+        port=$(ask "Port exporter" "$(current_port)")
+        [[ "$port" =~ ^[0-9]+$ ]] && [ "$port" -ge 1024 ] && [ "$port" -le 65535 ] \
+            || { err "Port khong hop le: $port"; return 1; }
+        cn=$(detect_cluster_name)
+        [ -n "$cn" ] && info "Ten cluster Proxmox (corosync): $cn"
+        job=$(ask "Ten job Prometheus cua cluster (phai trung job cua ceph mgr)" "${PROM_JOB:-Proxmox-${cn:-CLUSTER}}")
+    fi
+
+    if [ $do_dash = 1 ]; then
+        echo; echo "  ${W}[3/5] Dashboard${N}"
+        ask_dashboard
+        echo; echo "  ${W}[4/5] Grafana${N}"
+        gurl=$(ask "Grafana URL (bo trong = khong import, chi xuat file JSON)" "${GRAFANA_URL:-}")
+        if [ -n "$gurl" ]; then
+            ask_token
+            gfolder=$(ask "Folder UID (bo trong = General)" "${GRAFANA_FOLDER:-}")
+            if [ -n "$TOKEN" ]; then do_imp=1; else warn "Khong co token -> chi xuat file JSON"; fi
+        fi
+    fi
+
+    echo; echo "  ${W}[5/5] Prometheus${N}"
+    prom=$(ask "Prometheus URL de kiem tra sau khi cai (bo trong = bo qua)" "${PROM_URL:-}")
+    [ -n "$prom" ] && do_chk=1
+
+    title "TOM TAT"
+    if [ $do_ex = 1 ]; then
+        echo "  Exporter       : cai service $SERVICE tren $(hostname), port $port"
+        echo "  Prometheus job : $job  (target $(local_ip):$port)"
+    fi
+    if [ $do_dash = 1 ]; then
+        echo "  Dashboard      : \"$DASH_TITLE\"  uid=$DASH_UID  -> $DASH_JSON"
+        echo "  Loc Site / job : ${DASH_SITE:-<tat ca>}  /  $DASH_JOB"
+        echo "  Kich thuoc     : $DASH_NODES node, $DASH_POOLS pool, $DASH_CLASSES class   time=$DASH_TIME"
+        echo "  Latency (ms)   : $DASH_LAT"
+        echo "  HA alias       : ${DASH_ALIASES:-<khong>}" | sed 's/;;/  |  /g'
+        if [ $do_imp = 1 ]; then echo "  Import Grafana : $gurl  folder=${gfolder:-General}"
+        else echo "  Import Grafana : khong (import tay file JSON)"; fi
+    fi
+    if [ $do_chk = 1 ]; then echo "  Kiem tra       : $prom"; else echo "  Kiem tra       : bo qua"; fi
+    echo
+    confirm "Bat dau thuc hien?" || { info "Huy - chua thay doi gi"; return 1; }
+
+    save_conf SETUP_ROLE "$role"
+    [ -n "$job" ] && save_conf PROM_JOB "$job"
+    [ $do_dash = 1 ] && save_dash_conf
+    [ -n "$prom" ] && save_conf PROM_URL "${prom%/}"
+
+    local step=0 total=$((do_ex * 3 + do_dash + do_imp + do_chk)) failed=()
+    next() { step=$((step + 1)); echo; echo "${W}${B}>>> [$step/$total] $1${N}"; }
+
+    if [ $do_ex = 1 ]; then
+        next "Kiem tra moi truong"
+        do_check || { err "Dung lai: sua cac loi tren roi chay lai (menu S)"; return 1; }
+        next "Cai exporter (port $port)"
+        PORT="$port" bash "$INSTALLER" || { err "Cai exporter loi"; return 1; }
+        next "Cau hinh Prometheus"
+        prom_snippet "$job" "$port"
+    fi
+    if [ $do_dash = 1 ]; then
+        next "Sinh dashboard"
+        gen_dashboard || failed+=("sinh dashboard")
+    fi
+    if [ $do_imp = 1 ]; then
+        next "Import dashboard len Grafana"
+        import_dashboard "$gurl" "$TOKEN" "$gfolder" || failed+=("import Grafana")
+    fi
+    if [ $do_chk = 1 ]; then
+        next "Kiem tra Prometheus"
+        prom_check "$prom" || failed+=("kiem tra Prometheus")
+    fi
+
+    title "KET QUA"
+    if [ ${#failed[@]} = 0 ]; then
+        ok "Hoan tat $total buoc"
+    else
+        err "Loi o: ${failed[*]}"
+    fi
+    [ $do_ex = 1 ] && [ $do_chk = 0 ] && \
+        info "Nho them target vao Prometheus roi chay: bash menu.sh prom-check"
+    [ $do_dash = 1 ] && [ $do_imp = 0 ] && \
+        info "Import tay: Grafana -> Dashboards -> New -> Import -> $DASH_JSON"
+    info "Muon doi cau tra loi: chay lai menu S (gia tri cu hien san), hoac sua $CONF"
+    [ ${#failed[@]} = 0 ]
 }
 
 # =============================================================================
@@ -422,6 +632,8 @@ menu() {
     while true; do
         header
         cat <<EOF
+   ${W}${G}S) CAI DAT TRON GOI${N} - hoi 1 lan, tu lam het cac buoc ben duoi
+
    ${W}EXPORTER (chay tren node Ceph)${N}
      1) Kiem tra moi truong node
      2) Cai dat / cap nhat exporter
@@ -448,6 +660,7 @@ EOF
             7) do_port ;;       8) do_uninstall ;; 9) do_dashboard ;;
             10) do_prom ;;      11) do_import ;;   12) do_prom_check ;;
             13) do_doctor ;;
+            s|S) do_setup ;;
             0|q|Q) echo; exit 0 ;;
             *) warn "Lua chon khong hop le" ;;
         esac
@@ -460,6 +673,7 @@ if [ $# -gt 0 ]; then
     NONINTERACTIVE=1
     cmd="$1"; shift
     case "$cmd" in
+        setup) NONINTERACTIVE=0; do_setup ;;
         check) do_check ;;           install) do_install "${1:-$(current_port)}" ;;
         status) do_status ;;         metrics) do_metrics ;;
         logs) do_logs ;;             restart) do_restart ;;
