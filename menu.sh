@@ -444,6 +444,48 @@ gen_dashboard() {  # sinh $DASH_JSON tu cac bien DASH_*
     ok "Da tao ${W}$DASH_JSON${N}"
 }
 
+# Grafana cert tu ky: GHIM dung cert do (curl --cacert), KHONG tat kiem tra TLS.
+# Cert ghi ten khac IP trong URL -> goi bang ten trong cert, --connect-to tro ve IP that.
+GRAFANA_CERT_FILE="$DIR/.grafana-cert.pem"
+gurl() {  # URL -> URL dung ten trong cert (neu da ghim va cert khong ghi IP)
+    if [ -n "${GRAFANA_TLSNAME:-}" ] && [ -n "${GRAFANA_TLSIP:-}" ]; then
+        echo "$1" | sed "s|://$GRAFANA_TLSIP\([:/]\)|://$GRAFANA_TLSNAME\1|; s|://$GRAFANA_TLSIP\$|://$GRAFANA_TLSNAME|"
+    else echo "$1"; fi
+}
+gcurl() {
+    local a=()
+    [ -n "${GRAFANA_CACERT:-}" ] && [ -f "$GRAFANA_CACERT" ] && a+=(--cacert "$GRAFANA_CACERT")
+    [ -n "${GRAFANA_TLSNAME:-}" ] && [ -n "${GRAFANA_TLSIP:-}" ] && a+=(--connect-to "$GRAFANA_TLSNAME::$GRAFANA_TLSIP:")
+    curl "${a[@]}" "$@"
+}
+
+grafana_pin_cert() {  # grafana_pin_cert https://HOST:PORT -> 0 neu da ghim
+    local url="$1" hp host port tmp fp subj san name=""
+    has openssl || { err "Can openssl de lay cert (apt install openssl)"; return 1; }
+    hp=$(echo "$url" | sed -E 's|^https://||; s|/.*||'); host=${hp%:*}; port=${hp##*:}
+    [ "$port" = "$hp" ] && port=443
+    tmp=$(mktemp)
+    openssl s_client -connect "$host:$port" -servername "$host" </dev/null 2>/dev/null | openssl x509 > "$tmp" 2>/dev/null
+    [ -s "$tmp" ] || { rm -f "$tmp"; err "Khong lay duoc cert tu $host:$port"; return 1; }
+    fp=$(openssl x509 -in "$tmp" -noout -fingerprint -sha256 | cut -d= -f2)
+    subj=$(openssl x509 -in "$tmp" -noout -subject | sed 's/^subject= *//')
+    san=$(openssl x509 -in "$tmp" -noout -ext subjectAltName 2>/dev/null | tail -n +2 | xargs)
+    info "Cert cua ${W}$host:$port${N}:"
+    printf '%s\n' "Subject : $subj" "Ten/IP  : ${san:-<khong co SAN>}" "SHA-256 : $fp" | sub
+    info "So voi trinh duyet: bam 'Not secure' → Certificate → SHA-256 fingerprint phai GIONG HET"
+    # Cert khong ghi IP dang dung -> goi bang ten trong cert
+    if [[ "$san" != *"IP Address:$host"* ]] && [[ "$san" != *"DNS:$host"* ]]; then
+        name=$(echo "$san" | tr ',' '\n' | sed -n 's/^ *DNS://p' | head -1)
+        [ -n "$name" ] || name=$(echo "$subj" | sed -n 's/.*CN *= *\([^,/]*\).*/\1/p')
+        [ -n "$name" ] && info "Cert khong ghi $host → tool goi bang ten ${W}$name${N} va tro ve $host"
+    fi
+    if ! confirm "Van tay khop, tin cert nay (chi dung cho tool goi Grafana)?"; then rm -f "$tmp"; info "Huy"; return 1; fi
+    install -m 600 "$tmp" "$GRAFANA_CERT_FILE"; rm -f "$tmp"
+    GRAFANA_CACERT=$GRAFANA_CERT_FILE; GRAFANA_TLSNAME=$name; GRAFANA_TLSIP=${name:+$host}
+    save_conf GRAFANA_CACERT "$GRAFANA_CACERT"; save_conf GRAFANA_TLSNAME "$GRAFANA_TLSNAME"; save_conf GRAFANA_TLSIP "$GRAFANA_TLSIP"
+    ok "Da ghim cert → $GRAFANA_CERT_FILE (cert Grafana doi thi chay lai menu 11, tool hoi lai)"
+}
+
 # Noi ro vi sao khong goi duoc URL (cert, sai http/https, firewall, port dong) va cach sua.
 explain_curl_fail() {  # explain_curl_fail URL PATH GREP
     local url="$1" rc w host
@@ -469,7 +511,7 @@ explain_curl_fail() {  # explain_curl_fail URL PATH GREP
 # Prometheus nao khop thi moi o deu "No data" -> bao truoc khi import.
 grafana_ds_check() {  # grafana_ds_check URL TOKEN -> 1 neu nguoi dung huy
     local url="$1" token="$2" ds code out
-    ds=$(curl -s --max-time 10 -w '\n%{http_code}' -H "Authorization: Bearer $token" "$url/api/datasources")
+    ds=$(gcurl -s --max-time 10 -w '\n%{http_code}' -H "Authorization: Bearer $token" "$(gurl "$url")/api/datasources")
     code=${ds##*$'\n'}; ds=${ds%$'\n'*}
     if [ "$code" != 200 ]; then
         [ "$code" = 401 ] && { err "Token sai / het han (401)"; return 1; }
@@ -512,8 +554,16 @@ import_dashboard() {  # import_dashboard URL TOKEN FOLDER
     local url="${1%/}" token="$2" folder="$3" payload resp
     has curl && has python3 || { err "Can curl va python3"; return 1; }
     [ -f "$DASH_JSON" ] || { err "Chua co $DASH_JSON"; return 1; }
-    if ! curl -sf --max-time 10 -H "Authorization: Bearer $token" "$url/api/health" >/dev/null; then
-        explain_curl_fail "$url" "/api/health" '"database"'; return 1
+    if ! gcurl -sf --max-time 10 -H "Authorization: Bearer $token" "$(gurl "$url")/api/health" >/dev/null; then
+        gcurl -s --max-time 8 -o /dev/null "$(gurl "$url")/api/health" 2>/dev/null
+        case "$?:$url" in
+            60:https://*|51:https://*)  # cert tu ky -> de nghi ghim cert (van kiem tra TLS)
+                warn "Grafana dung cert tu ky / CA noi bo → may nay khong tin"
+                grafana_pin_cert "$url" || return 1
+                gcurl -sf --max-time 10 "$(gurl "$url")/api/health" >/dev/null \
+                    || { explain_curl_fail "$url" "/api/health" '"database"'; return 1; } ;;
+            *) explain_curl_fail "$url" "/api/health" '"database"'; return 1 ;;
+        esac
     fi
     grafana_ds_check "$url" "$token" || return 1
     payload=$(mktemp)
@@ -526,11 +576,15 @@ if sys.argv[2]:
     body["folderUid"] = sys.argv[2]
 print(json.dumps(body, ensure_ascii=False))
 PY
-    resp=$(curl -s --max-time 30 -X POST -H "Authorization: Bearer $token" \
-        -H "Content-Type: application/json" --data-binary "@$payload" "$url/api/dashboards/db")
+    resp=$(gcurl -s --max-time 30 -X POST -H "Authorization: Bearer $token" \
+        -H "Content-Type: application/json" --data-binary "@$payload" "$(gurl "$url")/api/dashboards/db")
+    case "$resp" in
+        *'"message"'*[Pp]ermission*|*'Access denied'*|*'"status":403'*)
+            warn "Token thieu quyen → service account can role Editor (Viewer chi xem duoc)" ;;
+    esac
     rm -f "$payload"
-    if echo "$resp" | grep -q '"status":"success"'; then
-        ok "Import thanh cong: ${W}$url$(echo "$resp" | sed -n 's/.*"url":"\([^"]*\)".*/\1/p')${N}"
+    if echo "$resp" | grep -Eq '"status": *"success"'; then
+        ok "Import thanh cong: ${W}$url$(echo "$resp" | sed -En 's/.*"url": *"([^"]*)".*/\1/p')${N}"
         save_conf GRAFANA_URL "$url"; save_conf GRAFANA_FOLDER "$folder"
     else
         err "Import loi: $resp"; return 1

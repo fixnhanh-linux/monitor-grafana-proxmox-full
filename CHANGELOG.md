@@ -4,6 +4,7 @@ Mới nhất ở trên. Mã commit đang chạy hiện ở đầu menu (`phien b
 
 ## Chưa phát hành
 
+- **Menu 11 với Grafana cert tự ký**: tool lấy cert, in SHA-256 để so với trình duyệt, bạn đồng ý thì **ghim** cert đó (`.grafana-cert.pem`, chỉ dùng khi gọi Grafana) — vẫn kiểm tra TLS, không tắt. Cert ghi tên khác IP trong URL thì tool gọi bằng tên trong cert và trỏ về IP thật. Token thiếu quyền (Viewer) thì báo cần role Editor.
 - **Menu 11**: không gọi được Grafana thì nói rõ lý do (cert tự ký, nhầm http/https, bị từ chối, hết giờ chờ, DNS) kèm cách sửa, và tự thử dạng URL còn lại.
 - **Menu 9** ghi dashboard ra `dashboard-local.json` (không nằm trong git) thay vì ghi đè `proxmox_ceph_dashboard.json` — trước đây làm `git pull` ở menu 14 bị chặn.
 - **Menu 14**: tự giữ dashboard đã sinh bằng bản cũ sang `dashboard-local.json` rồi mới pull; pull lỗi thì báo lỗi và file bị sửa, không còn báo nhầm "Đang là bản mới nhất".

@@ -95,7 +95,7 @@ bash /root/monitor-grafana-proxmox-full/menu.sh
 | 5 / 6 / 7 / 8 | Log, restart, đổi port, gỡ cài |
 | 9 | Sinh dashboard JSON — tự đọc số node / pool / device class từ Ceph |
 | 10 | In đoạn `prometheus.yml` mẫu cho node này; máy có cluster từ xa thì gộp **tất cả cluster** vào `prometheus-scrape-all.yml` (kiểm tra từng exporter, bỏ job trùng, báo 2 cấu hình cùng 1 cluster), rồi tuỳ chọn đẩy qua SSH lên máy Prometheus, kèm alert rules (xem dưới) |
-| 11 | Import dashboard lên Grafana qua API (service account token, role Editor); kiểm tra trước Grafana có datasource Prometheus khớp biến Site |
+| 11 | Import dashboard lên Grafana qua API (service account token, role **Editor**); kiểm tra trước Grafana có datasource Prometheus khớp biến Site; Grafana dùng cert tự ký thì đề nghị **ghim cert** (so SHA-256 với trình duyệt), không tắt kiểm tra TLS |
 | 12 | Hỏi Prometheus: target exporter có `up`, job của exporter có khớp job ceph mgr, device class từng cluster |
 | 13 | Kiểm tra tổng thể (1 + 3 + 12) |
 | 14 | Cập nhật tool (`git pull`), tự hỏi cài lại exporter nếu exporter có thay đổi |
