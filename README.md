@@ -110,8 +110,9 @@ bash /root/monitor-grafana-proxmox-full/menu.sh
 | 23 | Chạy cluster (đã thêm ở 17) bằng Docker: build image, chuyển từ systemd sang container cùng port |
 | 24 | Quản lý container: xem trạng thái, log, khởi động lại, xoá (quay về systemd) |
 | 25 | Đổi dải IP Docker (`docker0` + dải cho mạng mới): kiểm tra dải nội bộ / trùng route, sao lưu `daemon.json`, restart Docker, kiểm tra container chạy lại; Docker không lên thì trả file cũ |
+| 26 | **Dịch vụ & sức khoẻ**: bảng mọi exporter (local, `@cluster`, container) + Docker + watchdog với trạng thái, `/health`, port, chạy khi khởi động máy; `r`/`s`/`t` khởi động lại / dừng / chạy (1 cái hoặc `a` = tất cả) rồi **tự kiểm tra** active + `/health` trong 40 s, lỗi thì in log; `l` log; `b`/`B` bật / tắt chạy khi khởi động máy; `w` watchdog |
 
-Chạy 1 lệnh không qua menu: `bash menu.sh setup | check | install [port] | status | metrics | logs | restart | port <số> | uninstall | dashboard | import | prom | prom-check | doctor | update | about | remote-add [tên] | remote-list | prom-all | prom-push | prom-rules | urls | remote-test | remote-remove | deps | firewall | docker-run | docker-manage | docker-net`.
+Chạy 1 lệnh không qua menu: `bash menu.sh setup | check | install [port] | status | metrics | logs | restart | port <số> | uninstall | dashboard | import | prom | prom-check | doctor | update | about | remote-add [tên] | remote-list | prom-all | prom-push | prom-rules | urls | remote-test | remote-remove | deps | firewall | docker-run | docker-manage | docker-net | services | watchdog`.
 
 Menu nhớ Grafana URL, Prometheus URL, tiêu đề/UID dashboard trong `.menu.conf`; token Grafana (nếu chọn lưu) nằm riêng ở `.grafana-token`.
 
@@ -323,6 +324,10 @@ python make_dashboard.py -o cmc.json --title "Proxmox - Ceph Prometheus CMC Q7 -
 Lưu ý: import với `--uid fix` sẽ ghi đè dashboard đang có uid `fix`.
 
 Grafana → Dashboards → New → Import → chọn file JSON.
+
+## Watchdog: tự khởi động lại exporter bị treo
+
+Menu **26** → `w` (hoặc `bash menu.sh watchdog`) cài systemd timer `pve-ceph-exporter-watchdog` chạy **2 phút / lần**: gọi `/health` của từng exporter **đang chạy** (local, `@cluster`, container `fixnhanh-pve-*`); treo (`503`) hoặc không trả lời **2 lần liên tiếp** thì khởi động lại đúng cái đó. Dịch vụ bạn chủ động dừng không bị bật lại. Xem lịch sử: `journalctl -t pve-ceph-watchdog`. Chạy lại `w` để tắt và gỡ.
 
 ## Dashboard khách hàng
 

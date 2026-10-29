@@ -1494,6 +1494,183 @@ do_docker_run() {
 }
 
 # =============================================================================
+# 26. Dich vu & suc khoe: moi exporter (local, @cluster, container) + Docker + watchdog
+# =============================================================================
+WD_BIN=/usr/local/bin/pve-ceph-exporter-watchdog
+WD_UNIT=pve-ceph-exporter-watchdog
+
+svc_list() {  # in "kind|ten|unit/container|port" cho moi dich vu tren may nay
+    [ -f "$UNIT" ] && echo "systemd|exporter (local)|$SERVICE|$(current_port)"
+    local n p
+    for n in $(remote_names); do
+        p=$(env_get "$REMOTE_DIR/$n.env" PORT)
+        if has docker && [ -n "$(container_state "$n")" ]; then echo "docker|$n|$(container_of "$n")|$p"
+        else echo "systemd|$n|$SERVICE@$n|$p"; fi
+    done
+    has docker && echo "daemon|Docker|docker|"
+    systemctl cat "$WD_UNIT.timer" >/dev/null 2>&1 && echo "timer|watchdog|$WD_UNIT.timer|"
+    return 0
+}
+
+svc_state_of() {  # svc_state_of KIND UNIT -> active / inactive / failed / exited ...
+    case "$1" in
+        docker) docker inspect -f '{{.State.Status}}' "$2" 2>/dev/null | sed 's/^running$/active/' ;;
+        *) systemctl is-active "$2" 2>/dev/null ;;
+    esac
+}
+svc_boot_of() {  # tu chay khi khoi dong may?
+    case "$1" in
+        docker) docker inspect -f '{{.HostConfig.RestartPolicy.Name}}' "$2" 2>/dev/null ;;
+        *) systemctl is-enabled "$2" 2>/dev/null ;;
+    esac
+}
+svc_health_of() {  # svc_health_of PORT -> ok / treo / - ; exporter cu khong co /health tra trang chu 200 = ok
+    [ -n "$1" ] || { echo "-"; return; }
+    case "$(curl -s -o /dev/null -w '%{http_code}' --max-time 5 "http://127.0.0.1:$1/health" 2>/dev/null)" in
+        200) echo "ok" ;; 503) echo "treo" ;; *) echo "khong tra loi" ;;
+    esac
+}
+
+svc_verify() {  # svc_verify KIND UNIT PORT -> doi toi 40s cho active + /health ok
+    local i st h="-"
+    for i in $(seq 1 20); do
+        st=$(svc_state_of "$1" "$2"); [ -n "$3" ] && h=$(svc_health_of "$3")
+        [ "$st" = active ] && { [ -z "$3" ] || [ "$h" = ok ]; } && { ok "$2: active${3:+, /health ok}"; return 0; }
+        sleep 2
+    done
+    err "$2: $st${3:+, /health $h} sau 40s"
+    case "$1" in docker) docker logs --tail 15 "$2" 2>&1 | sub ;; *) journalctl -u "$2" -n 15 --no-pager 2>/dev/null | sub ;; esac
+    return 1
+}
+
+svc_do() {  # svc_do ACTION KIND UNIT PORT ; ACTION = restart / stop / start / boot-on / boot-off
+    local a="$1" k="$2" u="$3" p="$4" before
+    case "$k:$a" in
+        daemon:restart|daemon:stop)
+            before=$(docker ps --format '{{.Names}}' 2>/dev/null)
+            [ -n "$before" ] && warn "Restart Docker → tat ca container tat vai giay: $(echo $before)" ;;
+    esac
+    case "$k:$a" in
+        docker:boot-on)  docker update --restart unless-stopped "$u" >/dev/null && ok "$u: tu chay khi khoi dong may" ;;
+        docker:boot-off) docker update --restart no "$u" >/dev/null && ok "$u: khong tu chay khi khoi dong may" ;;
+        docker:*)        docker "$a" "$u" >/dev/null 2>&1 || { err "docker $a $u loi"; return 1; } ;;
+        *:boot-on)       systemctl enable "$u" >/dev/null 2>&1 && ok "$u: enabled" ;;
+        *:boot-off)      systemctl disable "$u" >/dev/null 2>&1 && ok "$u: disabled" ;;
+        *)               systemctl "$a" "$u" || { err "systemctl $a $u loi"; return 1; } ;;
+    esac
+    case "$a" in
+        restart|start) svc_verify "$k" "$u" "$p" || return 1 ;;
+        stop) sleep 1; ok "$u: $(svc_state_of "$k" "$u")"
+              [ "$k" != daemon ] && systemctl is-active -q "$WD_UNIT.timer" 2>/dev/null \
+                  && info "Watchdog chi kiem tra dich vu dang chay → khong tu bat lai cai vua dung" ;;
+    esac
+    if [ "$k" = daemon ] && [ "$a" = restart ] && [ -n "$before" ]; then
+        sleep 3; local c miss=""
+        for c in $before; do docker ps --format '{{.Names}}' | grep -qx "$c" || miss+=" $c"; done
+        if [ -n "$miss" ]; then warn "Container chua chay lai:$miss"; confirm "Khoi dong lai?" && docker start $miss | sub
+        else ok "Tat ca container da chay lai"; fi
+    fi
+}
+
+svc_table() {  # in bang, luu danh sach vao SVC_ROWS
+    mapfile -t SVC_ROWS < <(svc_list)
+    if [ "${#SVC_ROWS[@]}" = 0 ]; then warn "May nay chua co dich vu nao (menu 2 / 17)"; return 1; fi
+    printf '%s  %s%-3s %-18s %-8s %-10s %-16s %-6s %s%s\n' "$IND" "$W" "#" "TEN" "LOAI" "TRANG THAI" "/HEALTH" "PORT" "KHOI DONG CUNG MAY" "$N"
+    local i=1 r k nm u p st h bt c
+    for r in "${SVC_ROWS[@]}"; do
+        IFS='|' read -r k nm u p <<< "$r"
+        st=$(svc_state_of "$k" "$u"); bt=$(svc_boot_of "$k" "$u")
+        h="-"; [ "$st" = active ] && h=$(svc_health_of "$p")
+        case "$st" in active) c=$G ;; inactive|exited) c=$D ;; *) c=$R ;; esac
+        printf '%s  %-3s %-18s %-8s %s%-10s%s %s%-16s%s %-6s %s\n' "$IND" "$i" "$nm" "$k" "$c" "${st:-?}" "$N" \
+            "$([ "$h" = ok ] && echo "$G" || { [ "$h" = - ] && echo "$D" || echo "$R"; })" "$h" "$N" "${p:--}" "${bt:--}"
+        i=$((i + 1))
+    done
+}
+
+do_services() {
+    title "DICH VU & SUC KHOE"
+    need_root || return 1
+    local cmd a sel idx r k nm u p targets
+    while :; do
+        svc_table || return 1
+        echo
+        info "${W}r${N} khoi dong lai  ${W}s${N} dung  ${W}t${N} chay  ${W}l${N} log  ${W}b${N}/${W}B${N} bat/tat chay khi khoi dong may  ${W}w${N} watchdog"
+        info "Vd: ${W}r 2${N} · ${W}r a${N} (tat ca exporter) · ${W}l 1${N} · Enter = quay lai"
+        cmd=$(ask "Lenh" ""); [ -n "$cmd" ] || return 0
+        a=${cmd%% *}; sel=${cmd#* }; [ "$sel" = "$cmd" ] && sel=""
+        if [ "$a" = w ]; then do_watchdog; echo; continue; fi
+        targets=()
+        if [ "$sel" = a ]; then
+            for r in "${SVC_ROWS[@]}"; do case "$r" in systemd\|*|docker\|*) targets+=("$r") ;; esac; done
+        elif [[ "$sel" =~ ^[0-9]+$ ]] && [ "$sel" -ge 1 ] && [ "$sel" -le "${#SVC_ROWS[@]}" ]; then
+            targets=("${SVC_ROWS[$((sel - 1))]}")
+        else err "Chon so trong bang hoac 'a'"; continue; fi
+        for r in "${targets[@]}"; do
+            IFS='|' read -r k nm u p <<< "$r"
+            case "$a" in
+                r) svc_do restart "$k" "$u" "$p" ;;
+                s) confirm "Dung $u?" && svc_do stop "$k" "$u" "$p" ;;
+                t) svc_do start "$k" "$u" "$p" ;;
+                l) case "$k" in docker) docker logs --tail 40 "$u" 2>&1 | sub ;;
+                                *) journalctl -u "$u" -n 40 --no-pager 2>/dev/null | sub ;; esac ;;
+                b) svc_do boot-on "$k" "$u" "$p" ;;
+                B) svc_do boot-off "$k" "$u" "$p" ;;
+                *) err "Lenh '$a' khong co"; break ;;
+            esac
+        done
+        echo
+    done
+}
+
+# Watchdog: 2 phut / lan goi /health cua moi exporter DANG CHAY; loi 2 lan lien tiep thi
+# khoi dong lai dung cai do (systemd restart / docker restart), ghi log vao journal.
+do_watchdog() {
+    if systemctl is-active -q "$WD_UNIT.timer" 2>/dev/null; then
+        ok "Watchdog dang bat (2 phut / lan). Lan restart gan nhat:"
+        journalctl -t pve-ceph-watchdog -n 10 --no-pager 2>/dev/null | sub
+        confirm "Tat watchdog?" || return 0
+        systemctl disable --now "$WD_UNIT.timer" >/dev/null 2>&1
+        rm -f "${SYSTEMD_DIR:-/etc/systemd/system}/$WD_UNIT.timer" "${SYSTEMD_DIR:-/etc/systemd/system}/$WD_UNIT.service" "$WD_BIN"
+        systemctl daemon-reload; ok "Da tat va go watchdog"; return 0
+    fi
+    info "Watchdog: moi 2 phut kiem tra /health cua exporter dang chay; treo / khong tra loi 2 lan lien tiep → tu khoi dong lai"
+    confirm "Bat watchdog?" || return 0
+    cat > "$WD_BIN" <<EOF
+#!/bin/bash
+# FIX NHANH - watchdog exporter (sinh boi menu.sh). /health loi 2 lan lien tiep -> restart.
+S=/run/pve-ceph-watchdog; mkdir -p "\$S"
+chk() {  # chk TEN PORT LENH_RESTART...
+    local name=\$1 port=\$2 code n; shift 2
+    code=\$(curl -s -o /dev/null -w '%{http_code}' --max-time 15 "http://127.0.0.1:\$port/health")
+    if [ "\$code" = 200 ]; then rm -f "\$S/\$name"; return; fi
+    n=\$(( \$(cat "\$S/\$name" 2>/dev/null || echo 0) + 1 )); echo "\$n" > "\$S/\$name"
+    logger -t pve-ceph-watchdog "\$name :\$port /health=\$code (lan \$n)"
+    if [ "\$n" -ge 2 ]; then logger -t pve-ceph-watchdog "khoi dong lai \$name"; "\$@"; rm -f "\$S/\$name"; fi
+}
+if systemctl is-active -q $SERVICE; then
+    chk local "\$(sed -n 's/.*--port \([0-9]\+\).*/\1/p' $UNIT | head -1)" systemctl restart $SERVICE
+fi
+for f in $REMOTE_DIR/*.env; do
+    [ -f "\$f" ] || continue
+    n=\$(basename "\$f" .env); p=\$(sed -n 's/^PORT=//p' "\$f" | tail -1)
+    if command -v docker >/dev/null && [ "\$(docker inspect -f '{{.State.Status}}' fixnhanh-pve-\$n 2>/dev/null)" = running ]; then
+        chk "\$n" "\$p" docker restart "fixnhanh-pve-\$n"
+    elif systemctl is-active -q "$SERVICE@\$n"; then
+        chk "\$n" "\$p" systemctl restart "$SERVICE@\$n"
+    fi
+done
+EOF
+    chmod 755 "$WD_BIN"
+    printf '[Unit]\nDescription=FIX NHANH watchdog exporter Proxmox Ceph\n\n[Service]\nType=oneshot\nExecStart=%s\n' "$WD_BIN" \
+        > "${SYSTEMD_DIR:-/etc/systemd/system}/$WD_UNIT.service"
+    printf '[Unit]\nDescription=FIX NHANH watchdog exporter (2 phut / lan)\n\n[Timer]\nOnBootSec=3min\nOnUnitActiveSec=2min\n\n[Install]\nWantedBy=timers.target\n' \
+        > "${SYSTEMD_DIR:-/etc/systemd/system}/$WD_UNIT.timer"
+    systemctl daemon-reload && systemctl enable --now "$WD_UNIT.timer" >/dev/null 2>&1 \
+        && ok "Da bat watchdog. Xem: journalctl -t pve-ceph-watchdog" || err "Bat timer loi"
+}
+
+# =============================================================================
 # 25. Doi dai IP Docker (docker0 + mang moi): tranh trung dai IP noi bo / VPN
 # =============================================================================
 do_docker_net() {
@@ -1984,7 +2161,7 @@ menu_body() {
     box_title "HE THONG & DOCKER" "$Y"
     box_row2 "$(mi 21 "Cai goi can thiet" "$Y")"     "$(mi 23 "Chay cluster bang Docker" "$Y")"
     box_row2 "$(mi 22 "Mo firewall cho Prometheus" "$Y")" "$(mi 24 "Quan ly container" "$Y")"
-    box_row "$(mi 25 "Doi dai IP Docker (docker0, mang moi)" "$Y")"
+    box_row2 "$(mi 25 "Doi dai IP Docker" "$Y")"        "$(mi 26 "Dich vu & suc khoe, watchdog" "$Y")"
     box_title "TIEN ICH" "$B"
     box_row2 "$(mi 14 "Cap nhat tool (git pull)" "$B")" "$(mi 16 "Gioi thieu & ban quyen" "$B")"
     box_row2 "$(mi 15 "Cau hinh da luu" "$B")"         "$(mi 0 "Thoat" "$R")"
@@ -2007,7 +2184,7 @@ menu() {
             13) do_doctor ;;    14) do_update ;;   15) do_config ;;
             16) do_about ;;
             17) do_remote_add ;; 18) do_remote_list ;; 19) do_remote_test ;; 20) do_remote_remove ;;
-            21) do_deps ;; 22) do_firewall ;; 23) do_docker_run ;; 24) do_docker_manage ;; 25) do_docker_net ;;
+            21) do_deps ;; 22) do_firewall ;; 23) do_docker_run ;; 24) do_docker_manage ;; 25) do_docker_net ;; 26) do_services ;;
             s|S) do_setup ;;
             0|q|Q) echo; echo "${IND}  ${D}Tam biet! $COPYRIGHT${N}"; echo; exit 0 ;;
             "") continue ;;
@@ -2046,6 +2223,8 @@ if [ $# -gt 0 ]; then
         docker-run) NONINTERACTIVE=0; do_docker_run ;;
         docker-manage) NONINTERACTIVE=0; do_docker_manage ;;
         docker-net) NONINTERACTIVE=0; do_docker_net ;;
+        services) NONINTERACTIVE=0; do_services ;;
+        watchdog) NONINTERACTIVE=0; title "WATCHDOG EXPORTER"; need_root && do_watchdog ;;
         help|-h|--help) show_help ;;
         *) err "Lenh khong ro: $cmd"; show_help; exit 1 ;;
     esac
