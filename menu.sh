@@ -25,7 +25,8 @@ DIR="$(cd "$(dirname "$0")" && pwd)"
 EXPORTER_SRC="$DIR/exporter/pve_ceph_extra_exporter.py"
 INSTALLER="$DIR/exporter/install_exporter.sh"
 MAKE_DASH="$DIR/make_dashboard.py"
-DASH_JSON="$DIR/proxmox_ceph_dashboard.json"
+DASH_JSON="$DIR/dashboard-local.json"   # file menu 9 sinh ra, KHONG nam trong git (git pull khong bi chan)
+DASH_REPO_JSON="$DIR/proxmox_ceph_dashboard.json"   # ban mau trong repo (cau hinh mac dinh)
 
 SERVICE=pve-ceph-extra-exporter
 BIN=/usr/local/bin/pve_ceph_extra_exporter.py
@@ -646,6 +647,10 @@ do_dashboard() {
     title "SINH DASHBOARD GRAFANA"
     ask_dashboard
     DASH_JSON=$(ask "File xuat" "$DASH_JSON")
+    if [ "$(cd "$(dirname "$DASH_JSON")" 2>/dev/null && pwd)/$(basename "$DASH_JSON")" = "$DASH_REPO_JSON" ]; then
+        warn "$DASH_REPO_JSON nam trong git → ghi de se chan cap nhat (menu 14); dung $DIR/dashboard-local.json"
+        DASH_JSON="$DIR/dashboard-local.json"
+    fi
     gen_dashboard || return 1
     save_dash_conf
     info "Import: Grafana → Dashboards → New → Import → Upload JSON, hoac dung menu 11"
@@ -1396,9 +1401,26 @@ do_update() {
         [ "${NONINTERACTIVE:-0}" = 0 ] && { info "Mo lai menu voi ban moi..."; sleep 1; exec bash "$DIR/menu.sh"; }
         return 0
     fi
-    local before after
+    local before after out
     before=$(git -C "$DIR" rev-parse --short HEAD)
-    git -C "$DIR" pull --ff-only 2>&1 | sub
+    # Ban cu cua menu 9 ghi de file dashboard trong repo -> git pull bi chan. Giu ban do
+    # thanh dashboard-local.json (file menu 9 / 11 dung tu gio) roi tra file repo ve goc.
+    if ! git -C "$DIR" diff --quiet -- "$DASH_REPO_JSON" 2>/dev/null; then
+        if [ ! -f "$DASH_JSON" ]; then
+            cp -p "$DASH_REPO_JSON" "$DASH_JSON" && info "Giu dashboard da sinh → ${W}$DASH_JSON${N}"
+        else
+            cp -p "$DASH_REPO_JSON" "$DASH_JSON.bak" && info "Ban sao dashboard cu → $DASH_JSON.bak"
+        fi
+        git -C "$DIR" checkout -- "$DASH_REPO_JSON"
+    fi
+    if ! out=$(git -C "$DIR" pull --ff-only 2>&1); then
+        echo "$out" | sub
+        err "Cap nhat loi (van o ban ${W}$before${N})"
+        git -C "$DIR" status --short | grep -v '^??' | sub
+        info "File tren bi sua tay → luu ra ngoai roi: git -C $DIR checkout -- <file> ; chay lai menu 14"
+        return 1
+    fi
+    echo "$out" | sub
     after=$(git -C "$DIR" rev-parse --short HEAD)
     if [ "$before" = "$after" ]; then
         ok "Dang la ban moi nhat (${W}$after${N})"; return 0

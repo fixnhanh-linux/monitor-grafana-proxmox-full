@@ -62,7 +62,7 @@ Các bước tool tự làm (tuỳ lựa chọn ở câu 1):
 1. Kiểm tra môi trường — có lỗi thì dừng, chưa cài gì
 2. Cài / cập nhật service `pve-ceph-extra-exporter`
 3. In và lưu đoạn `prometheus.yml` mẫu (`prometheus-target-<job>.yml`)
-4. Sinh `proxmox_ceph_dashboard.json`
+4. Sinh `dashboard-local.json` (file riêng, không nằm trong git nên menu 14 cập nhật không bị chặn)
 5. Import lên Grafana
 6. Kiểm tra Prometheus
 

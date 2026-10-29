@@ -4,3 +4,4 @@ __pycache__/
 prometheus-target-*.yml
 prometheus-scrape-all.yml
 dashboard_*_auto.json
+dashboard-local.json
