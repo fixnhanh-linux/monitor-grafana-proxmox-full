@@ -97,7 +97,7 @@ bash /root/monitor-grafana-proxmox-full/menu.sh
 | 12 | Hỏi Prometheus: target exporter có `up`, job của exporter có khớp job ceph mgr, device class từng cluster |
 | 13 | Kiểm tra tổng thể (1 + 3 + 12) |
 | 14 | Cập nhật tool (`git pull`), tự hỏi cài lại exporter nếu exporter có thay đổi |
-| 15 | Xem / xoá cấu hình đã lưu (`.menu.conf`) |
+| 15 | Xem / xoá cấu hình đã lưu (`.menu.conf`), **đặt Prometheus / Grafana URL** (kiểm tra kết nối) |
 | 16 | Giới thiệu & bản quyền FIX NHANH |
 | 17 | Thêm / sửa cluster theo dõi từ xa (API token) |
 | 18 | Danh sách cluster từ xa: port, service, trạng thái từng phần |
@@ -108,7 +108,7 @@ bash /root/monitor-grafana-proxmox-full/menu.sh
 | 23 | Chạy cluster (đã thêm ở 17) bằng Docker: build image, chuyển từ systemd sang container cùng port |
 | 24 | Quản lý container: xem trạng thái, log, khởi động lại, xoá (quay về systemd) |
 
-Chạy 1 lệnh không qua menu: `bash menu.sh setup | check | install [port] | status | metrics | logs | restart | port <số> | uninstall | dashboard | import | prom | prom-check | doctor | update | about | remote-add [tên] | remote-list | prom-all | prom-push | remote-test | remote-remove | deps | firewall | docker-run | docker-manage`.
+Chạy 1 lệnh không qua menu: `bash menu.sh setup | check | install [port] | status | metrics | logs | restart | port <số> | uninstall | dashboard | import | prom | prom-check | doctor | update | about | remote-add [tên] | remote-list | prom-all | prom-push | urls | remote-test | remote-remove | deps | firewall | docker-run | docker-manage`.
 
 Menu nhớ Grafana URL, Prometheus URL, tiêu đề/UID dashboard trong `.menu.conf` (không lưu token).
 

@@ -1240,10 +1240,30 @@ do_update() {
     fi
 }
 
+# Dat dia chi Prometheus / Grafana ma khong can import hay kiem tra target truoc.
+set_urls() {
+    local u
+    u=$(ask "Prometheus URL (vd http://10.16.16.x:9090; Enter = giu)" "${PROM_URL:-}"); u=${u%/}
+    if [ -n "$u" ]; then
+        if curl -sf --max-time 10 "$u/-/ready" >/dev/null; then ok "Prometheus tra loi: $u"
+        else warn "Khong ket noi duoc $u/-/ready (sai URL / firewall?)"; fi
+        save_conf PROM_URL "$u"; PROM_URL=$u
+    fi
+    u=$(ask "Grafana URL (vd http://10.16.16.x:3000; Enter = giu)" "${GRAFANA_URL:-}"); u=${u%/}
+    if [ -n "$u" ]; then
+        if curl -sf --max-time 10 "$u/api/health" | grep -q '"database"'; then ok "Grafana tra loi: $u"
+        else warn "Khong ket noi duoc $u/api/health (sai URL / firewall?)"; fi
+        save_conf GRAFANA_URL "$u"; GRAFANA_URL=$u
+    fi
+    info "Token Grafana khong luu: nhap khi import (menu 11)"
+}
+
 do_config() {
     title "CAU HINH DA LUU"
     if [ ! -s "$CONF" ]; then
-        info "Chua co cau hinh da luu ($CONF)"; return 0
+        info "Chua co cau hinh da luu ($CONF)"
+        confirm "Dat Prometheus / Grafana URL ngay?" && set_urls
+        return 0
     fi
     info "File: $CONF"; echo
     local k v
@@ -1253,6 +1273,7 @@ do_config() {
     done < "$CONF"
     echo
     info "Sua: chay lai ${W}S${N} (gia tri cu hien san) hoac sua truc tiep file tren"
+    if confirm "Dat / doi Prometheus, Grafana URL?"; then set_urls; return 0; fi
     if confirm "Xoa toan bo cau hinh da luu?"; then
         rm -f "$CONF"; ok "Da xoa - lan chay sau se hoi lai tu dau"
         unset "${!DASH_@}" GRAFANA_URL GRAFANA_FOLDER PROM_URL PROM_JOB SETUP_ROLE 2>/dev/null || true
@@ -1450,8 +1471,8 @@ header() {
     if [ -f "$UNIT" ]; then st=$(svc_state); else st="chua cai"; fi
     case "$st" in active) ex="${G}${W}● dang chay${N} :$port" ;; "chua cai") ex="${D}○ chua cai${N}" ;; *) ex="${R}● $st${N}" ;; esac
     pve="${ENV_PVE:+${G}PVE $ENV_PVE${N}}"; pve="${pve:-${D}khong phai node PVE${N}}"
-    grafana="${GRAFANA_URL:-${ENV_GRAFANA:-}}"; grafana="${grafana:-${D}chua cau hinh${N}}"
-    prom="${PROM_URL:-${ENV_PROM:-}}"; prom="${prom:-${D}chua cau hinh${N}}"
+    grafana="${GRAFANA_URL:-${ENV_GRAFANA:-}}"; grafana="${grafana:-${D}chua cau hinh (menu 15)${N}}"
+    prom="${PROM_URL:-${ENV_PROM:-}}"; prom="${prom:-${D}chua cau hinh (menu 15)${N}}"
 
     echo
     box_top
@@ -1537,6 +1558,7 @@ if [ $# -gt 0 ]; then
         remote-add) NONINTERACTIVE=0; do_remote_add "${1:-}" ;;
         remote-list) do_remote_list ;;
         prom-all) NONINTERACTIVE=0; title "PROMETHEUS: GOP MOI CLUSTER"; prom_all ;;
+        urls) NONINTERACTIVE=0; title "PROMETHEUS / GRAFANA URL"; set_urls ;;
         prom-push) NONINTERACTIVE=0; title "DAY FILE SCRAPE LEN PROMETHEUS"; prom_push ;;
         remote-test) NONINTERACTIVE=0; do_remote_test ;;
         remote-remove) NONINTERACTIVE=0; do_remote_remove ;;
