@@ -418,6 +418,50 @@ def build(args):
                          "tooltip": {"mode": "multi", "sort": "none"}}}
     b.line(8, (gauge, 5), (speed, 19))
 
+    # ---------------- Exporter: collector nao loi, du lieu cu bao lau -> biet vi sao "No data"
+    b.row("Exporter (pve_ceph_extra_exporter)")
+    coll = table("Collector",
+                 [tgt('max by (collector) (pve_ceph_extra_exporter_up{%s})' % J, "U", fmt="table"),
+                  tgt('max by (collector) (pve_ceph_extra_exporter_collect_seconds{%s})' % J, "S",
+                      fmt="table"),
+                  tgt('max by (collector, error) (pve_ceph_extra_exporter_last_error{%s})' % J, "E",
+                      fmt="table")],
+                 [{"id": "joinByField", "options": {"byField": "collector", "mode": "outer"}},
+                  drop_extra_fields("^(Time.*|Value #E)$"),
+                  organize(rename={"collector": "COLLECTOR", "Value #U": "TRẠNG THÁI",
+                                   "Value #S": "THỜI GIAN", "error": "LỖI GẦN NHẤT"},
+                           order={"collector": 0, "Value #U": 1, "Value #S": 2, "error": 3}),
+                  {"id": "sortBy", "options": {"sort": [{"field": "COLLECTOR"}]}}],
+                 cell="auto", no_value="Không có metric exporter trong job này",
+                 desc="ceph_mgr: phát lại /metrics của ceph mgr · pve: node Proxmox · ceph: Ceph Status / "
+                      "Recovery · ha: HA Groups. Collector lỗi thì các ô dùng dữ liệu đó sẽ No data.",
+                 overrides=[
+                     override("TRẠNG THÁI", ("custom.width", 120),
+                              ("custom.cellOptions", {"type": "color-background", "mode": "basic"}),
+                              ("mappings", [{"type": "value", "options": {
+                                  "1": {"text": "OK", "color": "green", "index": 0},
+                                  "0": {"text": "LỖI", "color": "red", "index": 1}}}])),
+                     override("THỜI GIAN", ("unit", "s"), ("decimals", 2), ("custom.width", 110),
+                              ("thresholds", steps("green", 5, "orange", 15, "red")),
+                              ("custom.cellOptions", {"type": "color-text"})),
+                     override("LỖI GẦN NHẤT", ("custom.align", "left"),
+                              ("custom.cellOptions", {"type": "color-text"}),
+                              ("color", {"mode": "fixed", "fixedColor": "red"}))])
+    age = stat("Dữ liệu cũ", [tgt('time() - max(pve_ceph_extra_exporter_last_collect_timestamp{%s})' % J)],
+               unit="s", decimals=0, th=steps("green", 90, "orange", 180, "red"),
+               no_value="Exporter không chạy",
+               desc="Bao lâu từ lần thu thập gần nhất. Bình thường < INTERVAL (30s) + scrape_interval.")
+    mode = stat("Chế độ", [tgt('max by (mode) (pve_ceph_extra_exporter_mode{%s})' % J,
+                               legend="{{mode}}")],
+                text_mode="name", color_mode="none", no_value="-")
+    ver = stat("Phiên bản", [tgt('max by (version) (pve_ceph_extra_exporter_build_info{%s})' % J,
+                                 legend="{{version}}")],
+               text_mode="name", color_mode="none", no_value="-")
+    for p, label in ((mode, "mode"), (ver, "version")):
+        p["fieldConfig"]["defaults"]["displayName"] = "${__field.labels.%s}" % label
+        p["options"]["reduceOptions"]["limit"] = 1
+    b.line(6, (coll, 15), (age, 3), (mode, 3), (ver, 3))
+
     # ---------------- variables
     templating = {"list": [
         {"type": "datasource", "name": "Site", "label": "Site", "query": "prometheus",

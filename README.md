@@ -10,6 +10,7 @@ Bộ tool dựng dashboard **Proxmox - Ceph Prometheus** và lấp các ô đang
 | `make_dashboard.py` | Sinh JSON dashboard Grafana, import thẳng vào Grafana |
 | `exporter/pve_ceph_extra_exporter.py` | Exporter bổ sung: trạng thái recovery/rebalance, Total Health %, Recovery Speed, HA Groups |
 | `exporter/install_exporter.sh` | Cài exporter thành service systemd trên 1 node Proxmox |
+| `alerts/pve-ceph-alerts.yml` | Alert rules Prometheus: exporter, Ceph, Proxmox |
 
 ## Vì sao dashboard cũ có ô "No data"
 
@@ -237,6 +238,38 @@ Chọn `n` ở câu gộp (service chạy với `--no-ceph-mgr --no-pve`). Targe
           - 10.0.0.11:9830   # pve_ceph_extra_exporter (mới)
 ```
 
+### Cảnh báo (alert rules)
+
+File `alerts/pve-ceph-alerts.yml` có sẵn các rule, chỉ áp cho job chứa `Proxmox-`:
+
+| Nhóm | Alert | Khi nào |
+|---|---|---|
+| Exporter | `PveCephExporterDown` | Target không scrape được 2 phút |
+| | `PveCephExporterCollectorFailed` | Một collector lỗi 5 phút (ô dashboard tương ứng sẽ No data) |
+| | `PveCephExporterStale` | Không thu thập mới quá 3 phút (lệnh ceph / API treo) |
+| Ceph | `CephHealthError` / `CephHealthWarning` | HEALTH_ERR 1 phút / HEALTH_WARN 15 phút |
+| | `CephOsdDown` / `CephOsdOut` | OSD down 5 phút / out 15 phút |
+| | `CephOsdNearFull` / `CephOsdFull` | OSD dùng > 85% / > 90% |
+| | `CephPoolNearFull` | Pool dùng > 80% |
+| | `CephPgInconsistent`, `CephUnfoundObjects` | Có PG inconsistent / object unfound |
+| | `CephRecoveryTooLong` | Recovery / rebalance quá 6 giờ |
+| | `CephOsdHighLatency` | Apply latency > 200 ms trong 10 phút |
+| Proxmox | `PveNodeDown`, `PveClusterNotQuorate`, `PveHaNodeFenced` | Node offline, mất quorum, HA fence / lost |
+| | `PveNodeHighCpu` / `PveNodeHighMemory` | CPU / RAM > 90% trong 15 phút |
+
+Chép file lên máy Prometheus rồi thêm vào `prometheus.yml`:
+
+```yaml
+rule_files:
+  - /etc/prometheus/rules/pve-ceph-alerts.yml
+```
+
+```bash
+promtool check rules /etc/prometheus/rules/pve-ceph-alerts.yml
+```
+
+Sau đó reload Prometheus. Gửi cảnh báo đi (Telegram, email ...) cấu hình ở Alertmanager. Ngưỡng và thời gian `for:` sửa thẳng trong file.
+
 ## 3. Sinh và import dashboard
 
 ```bash
@@ -280,7 +313,17 @@ Grafana → Dashboards → New → Import → chọn file JSON.
 | `pve_ha_groups_custom_info{host,groups}` | HA group / node-affinity rule của node |
 
 Cột **HA** và **HA Groups** trong bảng *Resource Cluster* chỉ hiện khi cluster đang chọn ở biến `$job` có HA group / node-affinity rule; cluster không có HA thì hai cột này tự ẩn.
-| `pve_ceph_extra_exporter_up{collector}` | 1 = thu thập OK (`ceph`, `ha`) |
+
+Metric tự giám sát của exporter (hàng **Exporter** cuối dashboard):
+
+| Metric | Ý nghĩa |
+|---|---|
+| `pve_ceph_extra_exporter_up{collector}` | 1 = thu thập OK. Collector: `ceph_mgr`, `pve`, `ceph`, `ha` (`ceph_mgr` / `pve` không có khi chạy `--no-ceph-mgr` / `--no-pve`) |
+| `pve_ceph_extra_exporter_last_error{collector,error}` | Lỗi gần nhất của collector đang hỏng (401, timeout, mgr standby ...) |
+| `pve_ceph_extra_exporter_collect_seconds{collector}` | Thời gian thu thập lần gần nhất (giây) |
+| `pve_ceph_extra_exporter_last_collect_timestamp` | Thời điểm thu thập gần nhất (unix) — dùng để phát hiện dữ liệu cũ |
+| `pve_ceph_extra_exporter_mode{mode}` | `local` / `remote` |
+| `pve_ceph_extra_exporter_build_info{version}` | Phiên bản exporter |
 
 ---
 

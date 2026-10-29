@@ -1,0 +1,175 @@
+# FIX NHANH - Prometheus alert rules cho Proxmox + Ceph (pve_ceph_extra_exporter)
+# Ban quyen (c) 2026 FIX NHANH. Bao luu moi quyen.
+#
+# Cai: chep file vao thu muc rules cua Prometheus, them vao prometheus.yml:
+#   rule_files:
+#     - /etc/prometheus/rules/pve-ceph-alerts.yml
+# Kiem tra: promtool check rules pve-ceph-alerts.yml
+# Chi ap cho job chua "Proxmox-" (giong bien $job cua dashboard).
+
+groups:
+  - name: pve-ceph-exporter
+    rules:
+      - alert: PveCephExporterDown
+        expr: up{job=~".*Proxmox-.*"} == 0
+        for: 2m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Target {{ $labels.instance }} ({{ $labels.job }}) khong scrape duoc"
+          description: "Prometheus khong lay duoc /metrics. Kiem tra service / container exporter va firewall (menu 3, 22)."
+
+      - alert: PveCephExporterCollectorFailed
+        expr: pve_ceph_extra_exporter_up == 0
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Collector {{ $labels.collector }} cua {{ $labels.job }} dang loi"
+          description: "Cac o dashboard dung du lieu cua collector nay se No data. Xem loi: pve_ceph_extra_exporter_last_error{job=\"{{ $labels.job }}\"} hoac menu 3 / 19."
+
+      - alert: PveCephExporterStale
+        expr: time() - pve_ceph_extra_exporter_last_collect_timestamp > 180
+        for: 2m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Exporter {{ $labels.instance }} khong thu thap moi > 3 phut"
+          description: "Vong thu thap nen bi treo (lenh ceph / API Proxmox khong tra loi). Khoi dong lai service (menu 6)."
+
+  - name: ceph
+    rules:
+      - alert: CephHealthError
+        expr: ceph_health_status == 2
+        for: 1m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Ceph {{ $labels.job }} HEALTH_ERR"
+          description: "Xem bang Detailed Alarms tren dashboard hoac 'ceph health detail'."
+
+      - alert: CephHealthWarning
+        expr: ceph_health_status == 1
+        for: 15m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Ceph {{ $labels.job }} HEALTH_WARN qua 15 phut"
+
+      - alert: CephOsdDown
+        expr: ceph_osd_up == 0
+        for: 5m
+        labels:
+          severity: critical
+        annotations:
+          summary: "{{ $labels.ceph_daemon }} cua {{ $labels.job }} dang DOWN"
+
+      - alert: CephOsdOut
+        expr: ceph_osd_in == 0
+        for: 15m
+        labels:
+          severity: warning
+        annotations:
+          summary: "{{ $labels.ceph_daemon }} cua {{ $labels.job }} dang OUT qua 15 phut"
+
+      - alert: CephOsdNearFull
+        expr: ceph_osd_stat_bytes_used / ceph_osd_stat_bytes * 100 > 85
+        for: 10m
+        labels:
+          severity: warning
+        annotations:
+          summary: "{{ $labels.ceph_daemon }} cua {{ $labels.job }} da dung {{ $value | printf \"%.1f\" }}%"
+          description: "Ceph mac dinh nearfull 85%, backfillfull 90%, full 95% (dung ghi)."
+
+      - alert: CephOsdFull
+        expr: ceph_osd_stat_bytes_used / ceph_osd_stat_bytes * 100 > 90
+        for: 5m
+        labels:
+          severity: critical
+        annotations:
+          summary: "{{ $labels.ceph_daemon }} cua {{ $labels.job }} da dung {{ $value | printf \"%.1f\" }}% (>= backfillfull)"
+
+      - alert: CephPoolNearFull
+        expr: ceph_pool_percent_used > 0.8
+        for: 15m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Pool id {{ $labels.pool_id }} cua {{ $labels.job }} da dung {{ $value | humanizePercentage }}"
+
+      - alert: CephPgInconsistent
+        expr: sum by (job) (ceph_pg_inconsistent) > 0
+        for: 5m
+        labels:
+          severity: critical
+        annotations:
+          summary: "{{ $labels.job }} co {{ $value }} PG inconsistent"
+          description: "Can 'ceph pg repair'. Xem 'ceph health detail'."
+
+      - alert: CephUnfoundObjects
+        expr: ceph_custom_unfound_objects > 0
+        for: 1m
+        labels:
+          severity: critical
+        annotations:
+          summary: "{{ $labels.job }} co {{ $value }} object unfound"
+          description: "Nguy co mat du lieu. Xem 'ceph health detail' va 'ceph pg <pgid> list_unfound'."
+
+      - alert: CephRecoveryTooLong
+        expr: ceph_custom_recovery_percent < 100
+        for: 6h
+        labels:
+          severity: warning
+        annotations:
+          summary: "Recovery / rebalance cua {{ $labels.job }} keo dai qua 6 gio ({{ $value | printf \"%.2f\" }}%)"
+
+      - alert: CephOsdHighLatency
+        expr: ceph_osd_apply_latency_ms > 200
+        for: 10m
+        labels:
+          severity: warning
+        annotations:
+          summary: "{{ $labels.ceph_daemon }} cua {{ $labels.job }} latency {{ $value }} ms qua 10 phut"
+
+  - name: proxmox
+    rules:
+      - alert: PveNodeDown
+        expr: pve_up{id=~"node/.*"} == 0
+        for: 2m
+        labels:
+          severity: critical
+        annotations:
+          summary: "{{ $labels.id }} cua {{ $labels.job }} offline"
+
+      - alert: PveClusterNotQuorate
+        expr: pve_cluster_info{quorate!="1"} == 1
+        for: 1m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Cluster {{ $labels.id }} ({{ $labels.job }}) mat quorum"
+          description: "/etc/pve chuyen sang chi doc, khong khoi dong / migrate duoc VM."
+
+      - alert: PveHaNodeFenced
+        expr: pve_ha_state{state=~"fence|lost|gone|unknown"} == 1
+        for: 2m
+        labels:
+          severity: critical
+        annotations:
+          summary: "HA: {{ $labels.id }} cua {{ $labels.job }} o trang thai {{ $labels.state }}"
+
+      - alert: PveNodeHighCpu
+        expr: pve_cpu_usage_ratio{id=~"node/.*"} > 0.9
+        for: 15m
+        labels:
+          severity: warning
+        annotations:
+          summary: "{{ $labels.id }} cua {{ $labels.job }} CPU {{ $value | humanizePercentage }} qua 15 phut"
+
+      - alert: PveNodeHighMemory
+        expr: pve_memory_usage_bytes{id=~"node/.*"} / pve_memory_size_bytes{id=~"node/.*"} > 0.9
+        for: 15m
+        labels:
+          severity: warning
+        annotations:
+          summary: "{{ $labels.id }} cua {{ $labels.job }} RAM {{ $value | humanizePercentage }} qua 15 phut"
