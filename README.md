@@ -101,9 +101,13 @@ bash /root/monitor-grafana-proxmox-full/menu.sh
 | 17 | Thêm / sửa cluster theo dõi từ xa (API token) |
 | 18 | Danh sách cluster từ xa: port, service, trạng thái từng phần |
 | 19 | Kiểm tra kết nối 1 cluster (báo rõ 401 / 403 / firewall) |
-| 20 | Xoá cluster từ xa (dừng service, xoá token) |
+| 20 | Xoá cluster từ xa (dừng service / container, xoá token) |
+| 21 | Cài gói cần thiết — tự nhận `apt` / `dnf` / `yum` / `zypper` / `pacman` / `apk` |
+| 22 | Mở firewall cho IP Prometheus — tự nhận `ufw` / `firewalld` / `pve-firewall` |
+| 23 | Chạy cluster (đã thêm ở 17) bằng Docker: build image, chuyển từ systemd sang container cùng port |
+| 24 | Quản lý container: xem trạng thái, log, khởi động lại, xoá (quay về systemd) |
 
-Chạy 1 lệnh không qua menu: `bash menu.sh setup | check | install [port] | status | metrics | logs | restart | port <số> | uninstall | dashboard | import | prom | prom-check | doctor | update | about | remote-add [tên] | remote-list | remote-test | remote-remove`.
+Chạy 1 lệnh không qua menu: `bash menu.sh setup | check | install [port] | status | metrics | logs | restart | port <số> | uninstall | dashboard | import | prom | prom-check | doctor | update | about | remote-add [tên] | remote-list | remote-test | remote-remove | deps | firewall | docker-run | docker-manage`.
 
 Menu nhớ Grafana URL, Prometheus URL, tiêu đề/UID dashboard trong `.menu.conf` (không lưu token).
 
@@ -166,14 +170,28 @@ Máy monitor cần đi tới được **node:8006** và **mgr:9283**.
 - Token chỉ nằm trong file `.env` quyền 600, không xuất hiện trên dòng lệnh / `ps`.
 - Mỗi 30 giây: 5–6 request API + 1 request mgr cho mỗi cluster. Phía Proxmox gần như không tốn gì.
 
-### Docker (tuỳ chọn)
+### Chạy trên server không phải Ubuntu
+
+| Hệ điều hành | Ghi chú |
+|---|---|
+| Debian, Ubuntu, Rocky / Alma / RHEL 8+, Fedora, openSUSE, Arch | Đầy đủ: menu **21** cài gói, **17** thêm cluster |
+| CentOS 7 / RHEL 7 | Chạy được; systemd cũ bỏ qua `DynamicUser` nên service chạy bằng root |
+| Alpine, máy không có systemd, Windows (Docker Desktop / WSL2) | Dùng Docker: menu **17** rồi **23** |
+
+Firewall (ufw / firewalld / pve-firewall): menu **22**, nhập IP Prometheus là mở đủ các port exporter trên máy.
+
+### Docker
+
+Thêm cluster ở menu **17** (để có file cấu hình), rồi menu **23**: tool build image `fixnhanh/pve-ceph-exporter:<version>`, dừng service systemd của cluster đó và chạy container `fixnhanh-pve-<tên>` cùng port (giới hạn 256 MB / 0.25 CPU, read-only, bỏ mọi capability). Target Prometheus giữ nguyên. Menu **24** xem log / khởi động lại / xoá container (tự quay về systemd).
+
+Chạy tay không qua menu:
 
 ```bash
 docker build -t fixnhanh/pve-ceph-exporter exporter/
 ```
 
 ```bash
-docker run -d --name pve-FPT-HCM --restart unless-stopped -p 9830:9830 --env-file /etc/pve-ceph-extra-exporter/FPT-HCM.env fixnhanh/pve-ceph-exporter
+docker run -d --name fixnhanh-pve-FPT-HCM --restart unless-stopped -p 9830:9830 --env-file /etc/pve-ceph-extra-exporter/FPT-HCM.env fixnhanh/pve-ceph-exporter
 ```
 
 ## 1. Cài exporter thủ công (trên 1 node Ceph của mỗi cluster)

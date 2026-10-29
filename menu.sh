@@ -9,14 +9,15 @@
 #  Chay 1 lenh:      bash menu.sh <lenh>
 #      setup | check | install | status | metrics | logs | restart | port <so> |
 #      uninstall | dashboard | import | prom | prom-check | doctor | update | about | help |
-#      remote-add [ten] | remote-list | remote-test | remote-remove
+#      remote-add [ten] | remote-list | remote-test | remote-remove |
+#      deps | firewall | docker-run | docker-manage
 #
 #  Ban quyen © 2026 FIX NHANH. Bao luu moi quyen.
 # =============================================================================
 set -uo pipefail
 
 TOOL_NAME="FIX NHANH · Monitor Proxmox + Ceph"
-TOOL_VERSION="2026.10.29"
+TOOL_VERSION="2026.10.30"
 REPO_URL="https://github.com/fixnhanh-linux/monitor-grafana-proxmox-full"
 COPYRIGHT="© 2026 FIX NHANH · Bao luu moi quyen"
 
@@ -154,7 +155,7 @@ svc_state() { systemctl is-active "$SERVICE" 2>/dev/null || true; }
 # Nhan dien may (chay 1 lan khi mo menu)
 # =============================================================================
 detect_env() {
-    ENV_OS=$(. /etc/os-release 2>/dev/null && echo "${PRETTY_NAME:-?}")
+    ENV_OS=$(. /etc/os-release 2>/dev/null && echo "${NAME%% *} ${VERSION_ID:-}${VERSION_CODENAME:+ ($VERSION_CODENAME)}")
     ENV_PVE=""; has pveversion && ENV_PVE=$(pveversion 2>/dev/null | sed -n 's|^pve-manager/\([^/ ]*\).*|\1|p')
     ENV_CEPH=0
     has ceph && timeout 8 ceph status >/dev/null 2>&1 && ENV_CEPH=1
@@ -784,11 +785,12 @@ do_remote_list() {
     for n in $names; do
         f="$REMOTE_DIR/$n.env"; p=$(env_get "$f" PORT)
         st=$(systemctl is-active "$SERVICE@$n" 2>/dev/null)
+        [ "$st" != active ] && has docker && [ "$(container_state "$n")" = running ] && st=docker
         m=$(curl -sf --max-time 10 "http://127.0.0.1:$p/metrics" 2>/dev/null)
         c() { local v; v=$(echo "$m" | sed -n "s/^pve_ceph_extra_exporter_up{collector=\"$1\"} //p")
               if [ "$v" = 1 ]; then printf '%s✔%s' "$G" "$N"; elif [ -z "$v" ]; then printf '%s-%s' "$D" "$N"; else printf '%s✘%s' "$R" "$N"; fi; }
         printf '%s  %-16s %-6s %s%-10s%s %-22s %s     %s     %s     %s\n' "$IND" "$n" "$p" \
-            "$([ "$st" = active ] && echo "$G" || echo "$R")" "$st" "$N" "$(env_get "$f" JOB)" \
+            "$([ "$st" = active ] || [ "$st" = docker ] && echo "$G" || echo "$R")" "$st" "$N" "$(env_get "$f" JOB)" \
             "$(c pve)" "$(c ceph)" "$(c ceph_mgr)" "$(c ha)"
     done
     echo
@@ -817,16 +819,176 @@ do_remote_remove() {
     [ -f "$REMOTE_DIR/$n.env" ] || { err "Khong co cluster '$n'"; return 1; }
     confirm "Dung service va xoa cau hinh cluster '$n' (token cung bi xoa)?" || { info "Huy"; return 0; }
     systemctl disable --now "$SERVICE@$n" >/dev/null 2>&1
+    has docker && docker rm -f "$(container_of "$n")" >/dev/null 2>&1
     rm -f "$REMOTE_DIR/$n.env"
     ok "Da xoa $n - nho bo target cua no khoi prometheus.yml"
+}
+
+# =============================================================================
+# 21. Cai goi can thiet  22. Mo firewall  23. Chay bang Docker  24. Quan ly container
+# =============================================================================
+pkg_manager() {
+    local m
+    for m in apt-get dnf yum zypper pacman apk; do has "$m" && { echo "$m"; return; }; done
+}
+
+do_deps() {
+    title "CAI GOI CAN THIET"
+    need_root || return 1
+    local pm pk missing="" c
+    pm=$(pkg_manager)
+    [ -n "$pm" ] || { err "Khong nhan ra trinh quan ly goi (apt/dnf/yum/zypper/pacman/apk)"; return 1; }
+    info "He dieu hanh: ${W}${ENV_OS:-?}${N} · trinh quan ly goi: ${W}$pm${N}"
+    for c in git python3 curl ss; do
+        if has "$c"; then ok "$c"; else warn "Thieu $c"; missing+=" $c"; fi
+    done
+    [ -n "$missing" ] || { ok "Da du goi, khong can cai them"; return 0; }
+    case "$pm" in
+        apt-get) pk="git python3 curl iproute2" ;;
+        dnf|yum) pk="git python3 curl iproute" ;;
+        zypper)  pk="git python3 curl iproute2" ;;
+        pacman)  pk="git python curl iproute2" ;;
+        apk)     pk="bash git python3 curl iproute2" ;;
+    esac
+    confirm "Cai bang $pm: $pk ?" || { info "Huy"; return 0; }
+    case "$pm" in
+        apt-get) { apt-get update -qq || warn "apt update co loi (repo enterprise?), van thu cai"; }
+                 DEBIAN_FRONTEND=noninteractive apt-get install -y $pk ;;
+        dnf|yum) $pm install -y $pk ;;
+        zypper)  zypper -n install $pk ;;
+        pacman)  pacman -Sy --noconfirm --needed $pk ;;
+        apk)     apk add $pk ;;
+    esac 2>&1 | tail -5 | sub
+    for c in git python3 curl; do has "$c" && ok "$c" || err "Van thieu $c"; done
+}
+
+do_firewall() {
+    title "MO FIREWALL CHO PROMETHEUS"
+    need_root || return 1
+    local ports src p fw=""
+    ports=$(all_ports | tr '|' ' ')
+    [ -n "$ports" ] || ports=$(current_port)
+    info "Port exporter tren may nay: ${W}$ports${N}"
+    src=$(ask "IP may Prometheus duoc phep truy cap (vd 10.16.16.38)" "${PROM_IP:-}")
+    [[ "$src" =~ ^[0-9a-fA-F.:/]+$ ]] || { err "IP khong hop le: $src"; return 1; }
+    save_conf PROM_IP "$src"
+
+    if has ufw && ufw status 2>/dev/null | grep -q "Status: active"; then
+        fw=ufw
+        for p in $ports; do ufw allow from "$src" to any port "$p" proto tcp | sub; done
+    fi
+    if has firewall-cmd && firewall-cmd --state >/dev/null 2>&1; then
+        fw="$fw firewalld"
+        for p in $ports; do
+            firewall-cmd -q --permanent --add-rich-rule="rule family=ipv4 source address=$src port port=$p protocol=tcp accept"
+        done
+        firewall-cmd -q --reload && ok "firewalld: da mo $ports cho $src"
+    fi
+    if has pve-firewall && pve-firewall status 2>/dev/null | grep -q "enabled/running"; then
+        fw="$fw pve-firewall"
+        for p in $ports; do
+            pvesh create /cluster/firewall/rules --action ACCEPT --type in --proto tcp --dport "$p" \
+                --source "$src" --enable 1 --comment "FIX NHANH exporter" >/dev/null 2>&1 \
+                && ok "pve-firewall: mo $p cho $src" || err "pve-firewall: khong them duoc rule port $p"
+        done
+    fi
+    if [ -z "$fw" ]; then
+        info "Khong co ufw / firewalld / pve-firewall dang bat → khong can mo gi them"
+    else
+        ok "Da xu ly firewall:${W}$fw${N}"
+    fi
+    info "Neu giua 2 may con firewall mang (pfSense, FortiGate...) thi mo tcp $ports tu $src"
+}
+
+DOCKER_IMAGE=fixnhanh/pve-ceph-exporter
+docker_ok() {
+    has docker || { err "Chua cai Docker → curl -fsSL https://get.docker.com | sh"; return 1; }
+    docker info >/dev/null 2>&1 || { err "Docker chua chay → systemctl enable --now docker"; return 1; }
+}
+container_of() { echo "fixnhanh-pve-$1"; }
+container_state() { docker inspect -f '{{.State.Status}}' "$(container_of "$1")" 2>/dev/null; }
+
+do_docker_run() {
+    title "CHAY CLUSTER BANG DOCKER"
+    need_root || return 1
+    docker_ok || return 1
+    local names sel list n f p ver c
+    names=$(remote_names)
+    [ -n "$names" ] || { err "Chua co cluster nao → them o menu 17 truoc (Docker dung lai file cau hinh do)"; return 1; }
+    info "Cluster dang co: ${W}$(echo $names)${N}"
+    sel=$(ask "Chay cluster nao bang Docker (ten, cach nhau dau cach, hoac all)" "all")
+    if [ "$sel" = all ]; then list=$names; else list=$sel; fi
+
+    ver=$(sed -n 's/^VERSION = "\(.*\)"/\1/p' "$EXPORTER_SRC")
+    info "Build image ${W}$DOCKER_IMAGE:$ver${N}..."
+    docker build -q -t "$DOCKER_IMAGE:$ver" -t "$DOCKER_IMAGE:latest" "$DIR/exporter" 2>&1 | sub \
+        || { err "Build image loi"; return 1; }
+
+    for n in $list; do
+        f="$REMOTE_DIR/$n.env"
+        [ -f "$f" ] || { err "Khong co cluster '$n'"; continue; }
+        p=$(env_get "$f" PORT); c=$(container_of "$n")
+        if [ "$(systemctl is-active "$SERVICE@$n" 2>/dev/null)" = active ]; then
+            info "$n: dung service systemd de chuyen sang Docker (cung port $p)"
+            systemctl disable --now "$SERVICE@$n" >/dev/null 2>&1
+        fi
+        docker rm -f "$c" >/dev/null 2>&1
+        if docker run -d --name "$c" --restart unless-stopped -p "$p:$p" --env-file "$f" \
+                --memory 256m --cpus 0.25 --read-only --cap-drop ALL \
+                --security-opt no-new-privileges "$DOCKER_IMAGE:$ver" >/dev/null; then
+            sleep 5
+            if curl -sf --max-time 60 "http://127.0.0.1:$p/metrics" | grep -q '^pve_ceph_extra_exporter_up'; then
+                ok "$n: container ${W}$c${N} chay tai ${W}http://$(local_ip):$p/metrics${N}"
+            else
+                err "$n: container chua tra metric → docker logs $c"
+            fi
+        else
+            err "$n: docker run loi"
+        fi
+    done
+    info "Target Prometheus khong doi: $(local_ip):<port> nhu khi chay systemd"
+}
+
+do_docker_manage() {
+    title "QUAN LY CONTAINER"
+    docker_ok || return 1
+    local out a n c
+    out=$(docker ps -a --filter name=fixnhanh-pve- --format '{{.Names}}|{{.Status}}|{{.Ports}}')
+    if [ -z "$out" ]; then info "Chua co container nao (menu 23 de tao)"; return 0; fi
+    printf '%s  %s%-28s %-28s %s%s\n' "$IND" "$W" "CONTAINER" "TRANG THAI" "PORT" "$N"
+    while IFS='|' read -r c st pt; do
+        printf '%s  %-28s %s%-28s%s %s\n' "$IND" "$c" "$([[ "$st" == Up* ]] && echo "$G" || echo "$R")" \
+            "$(echo "$st" | cut -c1-28)" "$N" "$(echo "$pt" | sed 's/0.0.0.0://; s/, .*//' | cut -c1-20)"
+    done <<< "$out"
+    echo
+    a=$(ask "Thao tac: l=log  r=khoi dong lai  x=xoa (quay ve systemd)  Enter=thoat" "")
+    [ -n "$a" ] || return 0
+    n=$(pick_remote) || return 1; c=$(container_of "$n")
+    case "$a" in
+        l|L) docker logs --tail 40 "$c" 2>&1 | sub ;;
+        r|R) docker restart "$c" >/dev/null && ok "Da khoi dong lai $c" ;;
+        x|X) need_root || return 1
+             confirm "Xoa container $c va chay lai bang systemd?" || return 0
+             docker rm -f "$c" >/dev/null && ok "Da xoa $c"
+             remote_install_files && systemctl enable --now "$SERVICE@$n" >/dev/null 2>&1 \
+                 && ok "Da chay lai $n bang systemd" ;;
+        *) warn "Thao tac khong hop le: $a" ;;
+    esac
 }
 
 remote_refresh_after_update() {  # sau cap nhat: chay lai cac service remote bang ban exporter moi
     local names; names=$(remote_names)
     [ -n "$names" ] || return 0
     if [ "$(id -u)" != 0 ]; then warn "Can root de cap nhat ${W}$(echo $names)${N} → chay lai menu 14 bang root"; return 0; fi
-    remote_install_files && for n in $names; do systemctl restart "$SERVICE@$n"; done
-    ok "Da chay lai exporter remote: ${W}$(echo $names)${N}"
+    local n sd="" dk=""
+    remote_install_files || return 1
+    for n in $names; do
+        if has docker && [ "$(container_state "$n")" = running ]; then dk+=" $n"
+        else systemctl restart "$SERVICE@$n"; sd+=" $n"; fi
+    done
+    [ -n "$sd" ] && ok "Da chay lai exporter remote (systemd):${W}$sd${N}"
+    [ -n "$dk" ] && info "Cluster chay Docker:${W}$dk${N} → menu 23 de build lai image ban moi"
+    return 0
 }
 
 # =============================================================================
@@ -1056,7 +1218,7 @@ do_setup() {
 # Menu
 # =============================================================================
 show_help() {
-    sed -n '2,15p' "$0" | grep '^#' | sed 's/^# \{0,1\}//'
+    sed -n '2,16p' "$0" | grep '^#' | sed 's/^# \{0,1\}//'
 }
 
 banner() {
@@ -1118,6 +1280,9 @@ menu_body() {
     box_title "THEO DOI TU XA  ${D}(qua API, khong cai len node)${N}" "$G"
     box_row2 "$(mi 17 "Them / sua cluster" "$G")"    "$(mi 19 "Kiem tra ket noi" "$G")"
     box_row2 "$(mi 18 "Danh sach cluster" "$G")"     "$(mi 20 "Xoa cluster" "$G")"
+    box_title "HE THONG & DOCKER" "$Y"
+    box_row2 "$(mi 21 "Cai goi can thiet" "$Y")"     "$(mi 23 "Chay cluster bang Docker" "$Y")"
+    box_row2 "$(mi 22 "Mo firewall cho Prometheus" "$Y")" "$(mi 24 "Quan ly container" "$Y")"
     box_title "TIEN ICH" "$B"
     box_row2 "$(mi 14 "Cap nhat tool (git pull)" "$B")" "$(mi 16 "Gioi thieu & ban quyen" "$B")"
     box_row2 "$(mi 15 "Cau hinh da luu" "$B")"         "$(mi 0 "Thoat" "$R")"
@@ -1140,6 +1305,7 @@ menu() {
             13) do_doctor ;;    14) do_update ;;   15) do_config ;;
             16) do_about ;;
             17) do_remote_add ;; 18) do_remote_list ;; 19) do_remote_test ;; 20) do_remote_remove ;;
+            21) do_deps ;; 22) do_firewall ;; 23) do_docker_run ;; 24) do_docker_manage ;;
             s|S) do_setup ;;
             0|q|Q) echo; echo "${IND}  ${D}Tam biet! $COPYRIGHT${N}"; echo; exit 0 ;;
             "") continue ;;
@@ -1169,6 +1335,10 @@ if [ $# -gt 0 ]; then
         remote-list) do_remote_list ;;
         remote-test) NONINTERACTIVE=0; do_remote_test ;;
         remote-remove) NONINTERACTIVE=0; do_remote_remove ;;
+        deps) NONINTERACTIVE=0; detect_env; do_deps ;;
+        firewall) NONINTERACTIVE=0; do_firewall ;;
+        docker-run) NONINTERACTIVE=0; do_docker_run ;;
+        docker-manage) NONINTERACTIVE=0; do_docker_manage ;;
         help|-h|--help) show_help ;;
         *) err "Lenh khong ro: $cmd"; show_help; exit 1 ;;
     esac
