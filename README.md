@@ -232,7 +232,7 @@ Menu **10** (hoặc `bash menu.sh prom-all`) gộp mọi cluster thành `prometh
 
 | Prometheus của bạn | Cách đưa vào |
 |---|---|
-| Tách file: `prometheus.yml` có `scrape_config_files: [/etc/prometheus/scrape_configs/*.yml]` | Chép **nguyên file** vào thư mục đó, vd `proxmox-fixnhanh-<máy-monitor>.yml` |
+| Tách file: `prometheus.yml` có `scrape_config_files: [/etc/prometheus/scrape_configs/*.yml]` | Chép **nguyên file** vào thư mục đó, vd `proxmox-ceph-<tên-máy-monitor>.yml` |
 | 1 file (mặc định) | Dán các khối `- job_name:` vào dưới `scrape_configs:` của `prometheus.yml` |
 
 Với kiểu tách file, trả lời `y` ở câu *Đẩy file lên máy Prometheus qua SSH* (hoặc `bash menu.sh prom-push`). Tool tự làm:

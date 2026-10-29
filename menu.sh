@@ -738,7 +738,9 @@ EOF
     fi
 }
 
-prom_file_name() { echo "proxmox-fixnhanh-$(hostname -s 2>/dev/null || hostname).yml"; }   # ten file tren may Prometheus
+prom_host_slug() { (hostname -s 2>/dev/null || hostname) | tr 'A-Z' 'a-z'; }
+prom_file_name() { echo "proxmox-ceph-$(prom_host_slug).yml"; }      # ten file tren may Prometheus
+prom_file_old() { echo "proxmox-fixnhanh-$(hostname -s 2>/dev/null || hostname).yml"; }  # ten cu (ban 9f7a591)
 
 # Day file scrape len may Prometheus dung scrape_config_files: kiem tra job trung o file khac
 # (Prometheus se khong khoi dong), canh bao target :9283/:9221 cu, promtool loi thi tra lai file cu.
@@ -763,13 +765,14 @@ prom_push() {
 
     jobs=$(sed -n 's/^  - job_name: //p' "$f" | paste -sd'|' -)
     pat="^[[:space:]]*-[[:space:]]*job_name:[[:space:]]*.?($jobs).?[[:space:]]*\$"
-    out=$(ssh "$host" "cd '$dir' && grep -HnE '$pat' *.yml *.yaml 2>/dev/null | grep -v '^$(prom_file_name):'")
+    local mine="^($(prom_file_name)|$(prom_file_old)):" old="$dir/$(prom_file_old)"
+    out=$(ssh "$host" "cd '$dir' && grep -HnE '$pat' *.yml *.yaml 2>/dev/null | grep -vE '$mine'")
     if [ -n "$out" ]; then
         err "Job da co o file khac (trung job_name → Prometheus khong khoi dong):"; echo "$out" | sub
         info "Xoa / doi ten job cu tren may Prometheus, hoac doi JOB o menu 17, roi chay lai"
         return 1
     fi
-    out=$(ssh "$host" "cd '$dir' && grep -HnE ':(9283|9221)\\b' *.yml *.yaml 2>/dev/null | grep -v '^$(prom_file_name):'")
+    out=$(ssh "$host" "cd '$dir' && grep -HnE ':(9283|9221)\\b' *.yml *.yaml 2>/dev/null | grep -vE '$mine'")
     if [ -n "$out" ]; then
         warn "Target ceph mgr / pve exporter cu dang co (neu la cung cluster thi XOA, khong se nhan doi so lieu):"
         echo "$out" | sub
@@ -777,11 +780,15 @@ prom_push() {
 
     confirm "Chep file → ${W}$host:$dst${N} roi reload Prometheus?" || { info "Huy"; return 0; }
     scp -q "$f" "$host:$dst.new" || { err "scp loi"; return 1; }
+    # File ten cu (proxmox-fixnhanh-*) cung chua cac job nay -> cat di, loi thi tra lai
     out=$(ssh "$host" "cp -p '$dst' '$dst.bak' 2>/dev/null; mv '$dst.new' '$dst'
+        [ -f '$old' ] && mv '$old' '$old.old'
         if command -v promtool >/dev/null && ! promtool check config '$cfg' >/tmp/.promcheck 2>&1; then
             if [ -f '$dst.bak' ]; then mv '$dst.bak' '$dst'; else rm -f '$dst'; fi
+            [ -f '$old.old' ] && mv '$old.old' '$old'
             cat /tmp/.promcheck; echo CHECK_FAIL; exit 1
         fi
+        rm -f '$old.old'
         systemctl reload prometheus 2>/dev/null || curl -sf -X POST http://127.0.0.1:9090/-/reload || { echo RELOAD_FAIL; exit 1; }
         echo PUSH_OK" 2>&1)
     if [[ "$out" == *PUSH_OK* ]]; then
@@ -1241,18 +1248,42 @@ do_update() {
 }
 
 # Dat dia chi Prometheus / Grafana ma khong can import hay kiem tra target truoc.
-set_urls() {
+ask_url() {  # ask_url "Cau hoi" "mac dinh" -> URL chuan (them http:// neu thieu), hoi lai neu sai scheme
     local u
-    u=$(ask "Prometheus URL (vd http://10.16.16.x:9090; Enter = giu)" "${PROM_URL:-}"); u=${u%/}
+    while :; do
+        u=$(ask "$1" "$2"); u=${u%/}
+        [ -z "$u" ] && { echo ""; return; }
+        [[ "$u" == *://* ]] || u="http://$u"
+        [[ "$u" =~ ^https?://[^/:]+(:[0-9]+)?(/.*)?$ ]] && { echo "$u"; return; }
+        err "URL sai: '$u' → phai dang http://IP:port hoac https://IP:port" >&2
+    done
+}
+
+url_probe() {  # url_probe URL PATH GREP -> in URL dung duoc (thu ca http <-> https); rong neu khong
+    local u="$1" alt x rc
+    case "$u" in https://*) alt="http://${u#https://}" ;; *) alt="https://${u#http://}" ;; esac
+    for x in "$u" "$alt"; do
+        curl -sf --max-time 8 "$x$2" 2>/dev/null | grep -q "$3" && { echo "$x"; return 0; }
+    done
+    curl -s --max-time 8 -o /dev/null "$u$2" 2>/dev/null; rc=$?
+    [ "$rc" = 60 ] && warn "Cert TLS cua $u khong duoc tin (tu ky?) → dung http://, hoac cai CA vao may nay (update-ca-certificates)" >&2
+    return 1
+}
+
+set_urls() {
+    local u w
+    u=$(ask_url "Prometheus URL (vd http://10.16.16.x:9090; Enter = giu)" "${PROM_URL:-}")
     if [ -n "$u" ]; then
-        if curl -sf --max-time 10 "$u/-/ready" >/dev/null; then ok "Prometheus tra loi: $u"
-        else warn "Khong ket noi duoc $u/-/ready (sai URL / firewall?)"; fi
+        if w=$(url_probe "$u" "/-/ready" "Ready"); then
+            [ "$w" != "$u" ] && warn "Dung $w (khong phai $u)"; u=$w; ok "Prometheus tra loi: $u"
+        else warn "Khong ket noi duoc $u/-/ready → kiem tra IP/port, firewall may Prometheus (port 9090)"; fi
         save_conf PROM_URL "$u"; PROM_URL=$u
     fi
-    u=$(ask "Grafana URL (vd http://10.16.16.x:3000; Enter = giu)" "${GRAFANA_URL:-}"); u=${u%/}
+    u=$(ask_url "Grafana URL (vd http://10.16.16.x:3000; Enter = giu)" "${GRAFANA_URL:-}")
     if [ -n "$u" ]; then
-        if curl -sf --max-time 10 "$u/api/health" | grep -q '"database"'; then ok "Grafana tra loi: $u"
-        else warn "Khong ket noi duoc $u/api/health (sai URL / firewall?)"; fi
+        if w=$(url_probe "$u" "/api/health" '"database"'); then
+            [ "$w" != "$u" ] && warn "Dung $w (khong phai $u)"; u=$w; ok "Grafana tra loi: $u"
+        else warn "Khong ket noi duoc $u/api/health → kiem tra IP/port, firewall may Grafana (port 3000)"; fi
         save_conf GRAFANA_URL "$u"; GRAFANA_URL=$u
     fi
     info "Token Grafana khong luu: nhap khi import (menu 11)"
