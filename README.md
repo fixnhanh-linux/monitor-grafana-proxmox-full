@@ -92,7 +92,7 @@ bash /root/monitor-grafana-proxmox-full/menu.sh
 | 4 | Xem metric (nếu chưa cài thì chạy thử 1 lần từ file nguồn) |
 | 5 / 6 / 7 / 8 | Log, restart, đổi port, gỡ cài |
 | 9 | Sinh dashboard JSON — tự đọc số node / pool / device class từ Ceph |
-| 10 | In đoạn `prometheus.yml` mẫu cho node này; máy có cluster từ xa thì gộp **tất cả cluster** vào `prometheus-scrape-all.yml` (kiểm tra từng exporter, bỏ job trùng, báo 2 cấu hình cùng 1 cluster), rồi tuỳ chọn đẩy qua SSH lên máy Prometheus (xem dưới) |
+| 10 | In đoạn `prometheus.yml` mẫu cho node này; máy có cluster từ xa thì gộp **tất cả cluster** vào `prometheus-scrape-all.yml` (kiểm tra từng exporter, bỏ job trùng, báo 2 cấu hình cùng 1 cluster), rồi tuỳ chọn đẩy qua SSH lên máy Prometheus, kèm alert rules (xem dưới) |
 | 11 | Import dashboard lên Grafana qua API (service account token, role Editor) |
 | 12 | Hỏi Prometheus: target exporter có `up`, job của exporter có khớp job ceph mgr, device class từng cluster |
 | 13 | Kiểm tra tổng thể (1 + 3 + 12) |
@@ -100,7 +100,7 @@ bash /root/monitor-grafana-proxmox-full/menu.sh
 | 15 | Xem / xoá cấu hình đã lưu (`.menu.conf`), **đặt Prometheus / Grafana URL** (kiểm tra kết nối) |
 | 16 | Giới thiệu & bản quyền FIX NHANH |
 | 17 | Thêm / sửa cluster theo dõi từ xa (API token) |
-| 18 | Danh sách cluster từ xa: port, service, trạng thái từng phần |
+| 18 | Danh sách cluster từ xa: port, service, cluster thật đọc được, trạng thái từng phần; tô đỏ khi 2 cấu hình cùng 1 cluster hoặc trùng job |
 | 19 | Kiểm tra kết nối 1 cluster (báo rõ 401 / 403 / firewall) |
 | 20 | Xoá cluster từ xa (dừng service / container, xoá token) |
 | 21 | Cài gói cần thiết — tự nhận `apt` / `dnf` / `yum` / `zypper` / `pacman` / `apk` |
@@ -108,7 +108,7 @@ bash /root/monitor-grafana-proxmox-full/menu.sh
 | 23 | Chạy cluster (đã thêm ở 17) bằng Docker: build image, chuyển từ systemd sang container cùng port |
 | 24 | Quản lý container: xem trạng thái, log, khởi động lại, xoá (quay về systemd) |
 
-Chạy 1 lệnh không qua menu: `bash menu.sh setup | check | install [port] | status | metrics | logs | restart | port <số> | uninstall | dashboard | import | prom | prom-check | doctor | update | about | remote-add [tên] | remote-list | prom-all | prom-push | urls | remote-test | remote-remove | deps | firewall | docker-run | docker-manage`.
+Chạy 1 lệnh không qua menu: `bash menu.sh setup | check | install [port] | status | metrics | logs | restart | port <số> | uninstall | dashboard | import | prom | prom-check | doctor | update | about | remote-add [tên] | remote-list | prom-all | prom-push | prom-rules | urls | remote-test | remote-remove | deps | firewall | docker-run | docker-manage`.
 
 Menu nhớ Grafana URL, Prometheus URL, tiêu đề/UID dashboard trong `.menu.conf` (không lưu token).
 
@@ -243,6 +243,10 @@ Với kiểu tách file, trả lời `y` ở câu *Đẩy file lên máy Prometh
 4. Chép file, chạy `promtool check config`; lỗi thì **trả lại file cũ**, Prometheus không bị ảnh hưởng; OK thì reload.
 
 Máy SSH, file cấu hình, thư mục được nhớ trong `.menu.conf` cho lần sau.
+
+Sau khi đẩy file scrape, tool hỏi đẩy luôn **alert rules** (hoặc `bash menu.sh prom-rules`): chép `alerts/pve-ceph-alerts.yml` vào thư mục `rule_files` đang dùng (mặc định lấy từ `prometheus.yml`, vd `/etc/prometheus/rules/`). Nếu `prometheus.yml` chưa nạp thư mục đó, tool thêm dòng vào `rule_files` (giữ bản sao `.bak`). `promtool check rules` + `check config` lỗi thì trả lại cả 2 file.
+
+Đầu menu hiện mã commit đang chạy (vd `2026.10.30 · de76e86`); GitHub có bản mới hơn thì hiện dòng **Có bản mới → chọn 14**.
 
 ### Không gộp (giữ target cũ)
 

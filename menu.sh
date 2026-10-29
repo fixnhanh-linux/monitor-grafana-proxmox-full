@@ -794,6 +794,68 @@ prom_push() {
     if [[ "$out" == *PUSH_OK* ]]; then
         ok "Da chep ${W}$dst${N} va reload Prometheus"
         info "Kiem tra target: menu 12 (sau ~1 phut)"
+        echo; confirm "Day luon alert rules (alerts/pve-ceph-alerts.yml)?" && prom_rules_push "$host" "$cfg"
+    elif [[ "$out" == *CHECK_FAIL* ]]; then
+        err "promtool bao loi → da tra lai file cu, Prometheus khong bi anh huong:"; echo "$out" | grep -v CHECK_FAIL | sub; return 1
+    else
+        err "Da chep file nhung reload loi → tren may Prometheus: systemctl reload prometheus"; echo "$out" | sub; return 1
+    fi
+}
+
+# Day alerts/pve-ceph-alerts.yml len may Prometheus: dat vao thu muc rule_files dang dung
+# (them dong rule_files neu thieu), promtool check rules + config, loi thi tra lai ca 2 file.
+prom_rules_push() {
+    local src="$DIR/alerts/pve-ceph-alerts.yml" host="${1:-}" cfg="${2:-}" out e entries="" def dir dst covered="" add=""
+    [ -s "$src" ] || { err "Khong thay $src"; return 1; }
+    has ssh && has scp || { err "Can ssh va scp"; return 1; }
+    [ -n "$host" ] || host=$(ask "SSH may Prometheus (user@ip)" "${PROM_SSH:-}")
+    [ -n "$host" ] || { err "Chua nhap may Prometheus"; return 1; }
+    [ -n "$cfg" ] || cfg=$(ask "File cau hinh chinh" "${PROM_CFG:-/etc/prometheus/prometheus.yml}")
+
+    out=$(ssh -o ConnectTimeout=10 "$host" "echo SSH_OK; command -v promtool >/dev/null && echo PROMTOOL_OK
+        grep -q '^rule_files:[[:space:]]*\$' '$cfg' && echo RF_BLOCK
+        grep -q '^rule_files:' '$cfg' && echo RF_KEY
+        sed -n '/^rule_files:/,/^[^[:space:]#-]/p' '$cfg' | sed -n 's/^[[:space:]]*-[[:space:]]*/RF:/p'; true" 2>&1)
+    [[ "$out" == *SSH_OK* ]] || { err "SSH toi $host loi:"; echo "$out" | sub; info "ssh-copy-id $host"; return 1; }
+    [[ "$out" == *PROMTOOL_OK* ]] || warn "May Prometheus khong co promtool → khong kiem tra duoc rule truoc khi reload"
+    entries=$(echo "$out" | sed -n "s/^RF://p" | tr -d "\"'" | sed 's/[[:space:]]*#.*//')
+
+    # Mac dinh: thu muc cua dong rule_files dang dung glob (vd /etc/prometheus/rules/*.yml)
+    def=$(echo "$entries" | grep '\*' | head -1); def=${def%/*}
+    dir=$(ask "Thu muc chua rule tren may Prometheus" "${PROM_RULES_DIR:-${def:-/etc/prometheus/rules}}")
+    dst="$dir/pve-ceph-alerts.yml"
+    while IFS= read -r e; do
+        # shellcheck disable=SC2053  # e la glob cua Prometheus, co y de khop mau
+        [ -n "$e" ] && [[ "$dst" == $e ]] && covered=1
+    done <<< "$entries"
+    if [ -z "$covered" ]; then
+        if [[ "$out" == *RF_BLOCK* ]] || [[ "$out" != *RF_KEY* ]]; then
+            warn "$cfg chua nap $dir → se them dong '  - $dir/*.yml' vao rule_files (giu ban sao $cfg.bak)"
+            add=1
+        else
+            err "$cfg co rule_files dang 1 dong ([...]) → them tay '$dir/*.yml' vao do roi chay lai"; return 1
+        fi
+    fi
+    save_conf PROM_SSH "$host"; save_conf PROM_CFG "$cfg"; save_conf PROM_RULES_DIR "$dir"
+
+    confirm "Chep alert rules → ${W}$host:$dst${N} roi reload Prometheus?" || { info "Huy"; return 0; }
+    ssh "$host" "mkdir -p '$dir'" && scp -q "$src" "$host:$dst.new" || { err "Chep file loi"; return 1; }
+    out=$(ssh "$host" "cp -p '$dst' '$dst.bak' 2>/dev/null; mv '$dst.new' '$dst'
+        if [ '$add' = 1 ]; then
+            cp -p '$cfg' '$cfg.bak'
+            if grep -q '^rule_files:' '$cfg'; then sed -i '/^rule_files:[[:space:]]*\$/a\\  - $dir/*.yml' '$cfg'
+            else printf '\nrule_files:\n  - %s/*.yml\n' '$dir' >> '$cfg'; fi
+        fi
+        if command -v promtool >/dev/null && ! { promtool check rules '$dst' && promtool check config '$cfg'; } >/tmp/.promcheck 2>&1; then
+            if [ -f '$dst.bak' ]; then mv '$dst.bak' '$dst'; else rm -f '$dst'; fi
+            [ '$add' = 1 ] && mv '$cfg.bak' '$cfg'
+            cat /tmp/.promcheck; echo CHECK_FAIL; exit 1
+        fi
+        systemctl reload prometheus 2>/dev/null || curl -sf -X POST http://127.0.0.1:9090/-/reload || { echo RELOAD_FAIL; exit 1; }
+        echo PUSH_OK" 2>&1)
+    if [[ "$out" == *PUSH_OK* ]]; then
+        ok "Da chep ${W}$dst${N}$([ "$add" = 1 ] && echo ", them rule_files vao $cfg") va reload Prometheus"
+        info "Xem alert: ${PROM_URL:-http://<prometheus>:9090}/alerts  (gui Telegram / email: cau hinh Alertmanager)"
     elif [[ "$out" == *CHECK_FAIL* ]]; then
         err "promtool bao loi → da tra lai file cu, Prometheus khong bi anh huong:"; echo "$out" | grep -v CHECK_FAIL | sub; return 1
     else
@@ -989,21 +1051,37 @@ do_remote_list() {
     title "CAC CLUSTER THEO DOI TU XA"
     local names; names=$(remote_names)
     if [ -z "$names" ]; then info "Chua co cluster nao (menu 17 de them)"; return 0; fi
-    printf '%s  %s%-16s %-6s %-10s %-22s %-6s %-5s %-5s %s%s\n' "$IND" "$W" "CLUSTER" "PORT" "SERVICE" \
-        "JOB" "PVE" "CEPH" "MGR" "HA" "$N"
-    local n f p st m c
-    for n in $names; do
+    printf '%s  %s%-16s %-6s %-10s %-22s %-16s %-6s %-5s %-5s %s%s\n' "$IND" "$W" "CLUSTER" "PORT" "SERVICE" \
+        "JOB" "CLUSTER THAT" "PVE" "CEPH" "MGR" "HA" "$N"
+    local n f p st m c real dup=""
+    local -A MET REAL CNT JOBN
+    for n in $names; do  # lay metric truoc de biet 2 cau hinh nao cung doc 1 cluster / trung job
         f="$REMOTE_DIR/$n.env"; p=$(env_get "$f" PORT)
+        MET[$n]=$(curl -sf --max-time 10 "http://127.0.0.1:$p/metrics" 2>/dev/null)
+        real=$(echo "${MET[$n]}" | sed -n 's/^pve_cluster_info{id="cluster\/\([^"]*\)".*/\1/p' | head -1)
+        REAL[$n]=$real; [ -n "$real" ] && CNT[$real]=$(( ${CNT[$real]:-0} + 1 ))
+        c=$(env_get "$f" JOB); c=${c:-Proxmox-$n}; JOBN[$c]=$(( ${JOBN[$c]:-0} + 1 ))
+    done
+    for n in $names; do
+        f="$REMOTE_DIR/$n.env"; p=$(env_get "$f" PORT); m=${MET[$n]}; real=${REAL[$n]}
         st=$(systemctl is-active "$SERVICE@$n" 2>/dev/null)
         [ "$st" != active ] && has docker && [ "$(container_state "$n")" = running ] && st=docker
-        m=$(curl -sf --max-time 10 "http://127.0.0.1:$p/metrics" 2>/dev/null)
         c() { local v; v=$(echo "$m" | sed -n "s/^pve_ceph_extra_exporter_up{collector=\"$1\"} //p")
               if [ "$v" = 1 ]; then printf '%s✔%s' "$G" "$N"; elif [ -z "$v" ]; then printf '%s-%s' "$D" "$N"; else printf '%s✘%s' "$R" "$N"; fi; }
-        printf '%s  %-16s %-6s %s%-10s%s %-22s %s     %s     %s     %s\n' "$IND" "$n" "$p" \
-            "$([ "$st" = active ] || [ "$st" = docker ] && echo "$G" || echo "$R")" "$st" "$N" "$(env_get "$f" JOB)" \
+        local rc=$D jc="" job; job=$(env_get "$f" JOB); job=${job:-Proxmox-$n}
+        [ -n "$real" ] && rc=$C
+        [ -n "$real" ] && [ "${CNT[$real]:-0}" -gt 1 ] && { rc=$R; dup+=" $n"; }
+        [ "${JOBN[$job]:-0}" -gt 1 ] && { jc=$R; dup+=" $n"; }
+        printf '%s  %-16s %-6s %s%-10s%s %s%-22s%s %s%-16s%s %s     %s     %s     %s\n' "$IND" "$n" "$p" \
+            "$([ "$st" = active ] || [ "$st" = docker ] && echo "$G" || echo "$R")" "$st" "$N" \
+            "$jc" "$job" "$N" "$rc" "${real:--}" "$N" \
             "$(c pve)" "$(c ceph)" "$(c ceph_mgr)" "$(c ha)"
     done
     echo
+    if [ -n "$dup" ]; then
+        warn "Cau hinh do: 2 cau hinh cung doc 1 cluster (CLUSTER THAT) hoac trung JOB → so lieu nhan doi tren dashboard"
+        info "Giu 1 cai dang ✔, xoa cai con lai: menu 20"
+    fi
     info "Chi tiet loi: curl -s http://127.0.0.1:<port>/metrics | grep last_error"
     info "Log: journalctl -u $SERVICE@<cluster> -n 30"
 }
@@ -1315,7 +1393,7 @@ do_about() {
     echo
     box_top
     box_center "${W}${C}$TOOL_NAME${N}"
-    box_center "${D}phien ban $TOOL_VERSION${N}"
+    box_center "${D}phien ban $TOOL_VERSION${N}${D}$(tool_rev | sed 's/^/ · /')${N}"
     box_sep
     box_row "$(kv "Phat trien" "${W}FIX NHANH${N}")"
     box_row "$(kv "Repo" "${REPO_URL#https://}")"
@@ -1494,8 +1572,21 @@ banner() {
     fi
 }
 
+tool_rev() { git -C "$DIR" rev-parse --short HEAD 2>/dev/null; }   # ma commit dang chay
+
+check_new_version() {  # hoi GitHub 1 lan / phien (toi da 5s) -> NEWVER = ma commit moi hon, rong neu khong
+    [ -n "${NEWVER_DONE:-}" ] && return 0
+    NEWVER_DONE=1; NEWVER=""
+    [ -d "$DIR/.git" ] && has git && has timeout || return 0
+    local r; r=$(GIT_TERMINAL_PROMPT=0 timeout 5 git -C "$DIR" ls-remote "$REPO_URL.git" refs/heads/main 2>/dev/null | cut -c1-40)
+    [ -n "$r" ] && [ "$r" != "$(git -C "$DIR" rev-parse HEAD 2>/dev/null)" ] || return 0
+    git -C "$DIR" merge-base --is-ancestor "$r" HEAD 2>/dev/null && return 0   # local da moi hon / bang
+    NEWVER=${r:0:7}
+}
+
 header() {
     clear 2>/dev/null || true
+    check_new_version
     setup_ui
     local st port ex grafana prom pve
     port=$(current_port)
@@ -1509,7 +1600,9 @@ header() {
     box_top
     banner
     box_center "${W}MONITOR PROXMOX + CEPH${N}  ${D}·${N}  ${B}Prometheus${N} ${D}→${N} ${O}Grafana${N}"
-    box_center "${D}phien ban $TOOL_VERSION${N}"
+    local rev; rev=$(tool_rev)
+    box_center "${D}phien ban $TOOL_VERSION${rev:+ · $rev}${N}"
+    [ -n "$NEWVER" ] && box_center "${Y}${W}▲ Co ban moi $NEWVER tren GitHub → chon 14 de cap nhat${N}"
     box_title "THONG TIN MAY" "$C"
     box_row2 "$(kv "May" "${W}$(hostname)${N}")" "$(kv "IP" "$(local_ip)")"
     box_row2 "$(kv "Proxmox" "$pve")" "$(kv "Ceph" "$(ceph_health_short)")"
@@ -1590,6 +1683,7 @@ if [ $# -gt 0 ]; then
         remote-list) do_remote_list ;;
         prom-all) NONINTERACTIVE=0; title "PROMETHEUS: GOP MOI CLUSTER"; prom_all ;;
         urls) NONINTERACTIVE=0; title "PROMETHEUS / GRAFANA URL"; set_urls ;;
+        prom-rules) NONINTERACTIVE=0; title "DAY ALERT RULES LEN PROMETHEUS"; prom_rules_push ;;
         prom-push) NONINTERACTIVE=0; title "DAY FILE SCRAPE LEN PROMETHEUS"; prom_push ;;
         remote-test) NONINTERACTIVE=0; do_remote_test ;;
         remote-remove) NONINTERACTIVE=0; do_remote_remove ;;
