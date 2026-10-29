@@ -697,7 +697,9 @@ remote_test() {  # remote_test ENVFILE -> chay thu 1 lan, in ket qua tung phan; 
     echo "$out" | grep -q 'HTTP Error 403\|Permission' && \
         warn "403 = token thieu quyen → pveum acl modify / --users monitor@pve --roles PVEAuditor (va --privsep 0)"
     echo "$out" | grep -q 'CERTIFICATE_VERIFY_FAILED' && \
-        warn "Cert Proxmox tu ky / CA chua tin cay (PVE_VERIFY_TLS=$(env_get "$1" PVE_VERIFY_TLS)) → chon N o cau 'Kiem tra chung chi TLS'"
+        warn "Cert Proxmox tu ky / CA chua tin cay (PVE_VERIFY_TLS=$(env_get "$1" PVE_VERIFY_TLS)) → Enter (N) o cau 'Proxmox da co cert hop le'"
+    echo "$out" | grep -q 'standby' && \
+        warn "Mgr da thu deu la standby (chi mgr active tra metric) → nhap TAT CA node o cau IP de tool tu thu tung node; xem mgr active: 'ceph mgr stat'"
     echo "$out" | grep -qi 'refused' && \
         warn "Connection refused = toi duoc may nhung port dong. :9283 → tren cluster chay 'ceph mgr module enable prometheus', xem dia chi bang 'ceph mgr services'; :8006 → pveproxy"
     echo "$out" | grep -qi 'timed out\|unreachable\|No route' && \
@@ -732,23 +734,44 @@ do_remote_add() {  # do_remote_add [TEN] -> them / sua 1 cluster
 
     hosts=$(ask "IP / ten cac node Proxmox, cach nhau dau phay (nhieu node = tu chuyen khi 1 node chet)" "$(env_get "$f" PVE_API)")
     hosts=${hosts// /}  # "a, b" -> "a,b": file .env bi source, dau cach lam hong dong
+    local other h oh
+    for other in $(remote_names); do  # cung node da theo doi o cluster khac -> du lieu trung 2 job
+        [ "$other" = "$name" ] && continue
+        for h in ${hosts//,/ }; do
+            for oh in $(env_get "$REMOTE_DIR/$other.env" PVE_API | tr ',' ' '); do
+                [ "${h#*://}" = "${oh#*://}" ] || continue
+                warn "Node ${W}$h${N} da co trong cluster ${W}$other${N} (port $(env_get "$REMOTE_DIR/$other.env" PORT)) → Prometheus se co 2 job trung du lieu"
+                info "Sua cluster do: menu 17 nhap ten ${W}$other${N}; hoac xoa: menu 20"
+                confirm "Van tiep tuc them ${W}$name${N}?" || return 1
+                break 3
+            done
+        done
+    done
     [ -n "$hosts" ] || { err "Can it nhat 1 node"; return 1; }
     local oldtok; oldtok=$(env_get "$f" PVE_TOKEN)
     local deftid="monitor@pve!exporter"; [ -n "$oldtok" ] && deftid=${oldtok%%=*}
     tid=$(ask "Token ID" "$deftid")
+    [[ "$tid" == root@pam!* ]] && warn "Token cua root@pam: tao tren web mac dinh bat Privilege Separation → khong co quyen (403). Nen dung monitor@pve!exporter + PVEAuditor (hop tren)"
     read -rsp "${IND}  ${C}❯${N} Token secret ${D}(khong hien; Enter = giu secret cu)${N}: " secret; echo
     [ -n "$secret" ] || { [ -n "$oldtok" ] && secret=${oldtok#*=}; }
     [ -n "$secret" ] || { err "Chua nhap token secret"; return 1; }
-    verify=$(ask "Kiem tra chung chi TLS cua Proxmox? (y/N - cert tu ky thi chon N)" \
+    verify=$(ask "Proxmox da co cert hop le (Let's Encrypt / CA noi bo)? (y/N - cert mac dinh cua Proxmox: Enter)" \
         "$([ "$(env_get "$f" PVE_VERIFY_TLS)" = 1 ] && echo y || echo N)")
-    local defmgr; defmgr=$(echo "$hosts" | tr ',' '\n' | sed 's|^ *https\?://||; s|:.*||; s|$|:9283|' | paste -sd,)
-    mgr=$(ask "Ceph mgr host:9283 (cach nhau dau phay)" "$(env_get "$f" CEPH_MGR)")
-    mgr=${mgr// /}; mgr=${mgr:-$defmgr}
+    # CEPH_MGR trong = exporter tu thu moi node cua cluster de tim mgr active.
+    # File cu ghi san "cac node PVE_API:9283" -> coi nhu trong de duoc tu do.
+    local oldmgr; oldmgr=$(env_get "$f" CEPH_MGR)
+    mgrdef() { echo "$1" | tr ',' '\n' | sed 's|^ *https\?://||; s|:.*||; s|$|:9283|' | paste -sd,; }
+    [ "$oldmgr" = "$(mgrdef "$hosts")" ] || [ "$oldmgr" = "$(mgrdef "$(env_get "$f" PVE_API)")" ] && oldmgr=""
+    mgr=$(ask "Ceph mgr host:9283, cach nhau dau phay (Enter = tu tim mgr active tren moi node)" "$oldmgr")
+    mgr=${mgr// /}
     job=$(ask "Ten job Prometheus (phai chua 'Proxmox-' de dashboard thay)" "$(env_get "$f" JOB)")
     job=${job:-Proxmox-$name}
     port=$(ask "Port exporter tren may nay" "$(env_get "$f" PORT)")
     port=${port:-$(next_free_port)}
     [[ "$port" =~ ^[0-9]+$ ]] && [ "$port" -ge 1024 ] && [ "$port" -le 65535 ] || { err "Port khong hop le: $port"; return 1; }
+    case "$port" in 9283|9221)
+        warn "Port $port trung port mac dinh cua $([ "$port" = 9283 ] && echo "ceph mgr" || echo "pve exporter") → de nham target trong prometheus.yml (goi y: $(next_free_port))" ;;
+    esac
 
     install -d -m 0700 "$REMOTE_DIR"
     tmp=$(mktemp "$REMOTE_DIR/.new.XXXX")

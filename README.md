@@ -118,7 +118,7 @@ Exporter chạy trên **máy monitor** (ví dụ 10.16.16.38, Ubuntu), lấy d�
 
 | Dữ liệu | Chế độ local (trên node) | Chế độ remote (máy monitor) |
 |---|---|---|
-| Metric Ceph (OSD, pool, latency) | `ceph mgr services` → mgr:9283 | Thử lần lượt `CEPH_MGR` (mgr standby trả rỗng → bỏ qua) |
+| Metric Ceph (OSD, pool, latency) | `ceph mgr services` → mgr:9283 | Thử lần lượt `CEPH_MGR`; để trống thì tự lấy IP mọi node từ `/cluster/status` (mgr standby trả rỗng → bỏ qua, tìm tới mgr active) |
 | Node, CPU, RAM, uptime, HA | `pvesh`, `/etc/pve` | API `/cluster/status`, `/cluster/resources`, `/cluster/ha/status/manager_status` |
 | Ceph Status / Recovery | `ceph status` | API `/cluster/ceph/status` |
 | HA Groups | `/etc/pve/ha/*.cfg` | API `/cluster/ha/groups`, `/cluster/ha/rules` (PVE 9) |
@@ -157,7 +157,7 @@ bash /root/monitor-grafana-proxmox-full/menu.sh remote-add
 | IP các node Proxmox | `10.16.16.60,10.16.16.61,10.16.16.62` — node đầu chết tự chuyển node sau |
 | Token ID / secret | `monitor@pve!exporter` / secret (gõ không hiện) |
 | Kiểm tra chứng chỉ TLS | `N` (Proxmox mặc định cert tự ký) |
-| Ceph mgr | mặc định các node trên `:9283` |
+| Ceph mgr | Enter = tự tìm mgr active trên mọi node của cluster (`:9283`) |
 | Tên job Prometheus | `Proxmox-FPT-HCM` (phải chứa `Proxmox-`) |
 | Port | port trống kế tiếp từ 9830 |
 

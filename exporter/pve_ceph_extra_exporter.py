@@ -12,7 +12,8 @@ Ban quyen (c) 2026 FIX NHANH. Bao luu moi quyen.
                PVE_API        node1,node2,...   (hoac https://node1:8006,...)
                PVE_TOKEN      monitor@pve!exporter=<secret>
                PVE_VERIFY_TLS 0 (mac dinh, cert tu ky) / 1
-               CEPH_MGR       node1:9283,node2:9283 (mac dinh = cac node PVE_API)
+               CEPH_MGR       node1:9283,node2:9283 (trong = cac node PVE_API + IP moi node
+                              lay tu /cluster/status, tu tim mgr active)
                PORT, INTERVAL
 
 Mac dinh GOP TAT CA metric ra 1 port (Prometheus chi can 1 target):
@@ -50,7 +51,7 @@ from socketserver import ThreadingMixIn
 from urllib.error import HTTPError
 from urllib.request import Request, urlopen
 
-VERSION = "2026.10.30-4"
+VERSION = "2026.10.30-5"
 
 HA_GROUPS_CFG = "/etc/pve/ha/groups.cfg"
 HA_RULES_CFG = "/etc/pve/ha/rules.cfg"  # PVE 9: HA group -> node-affinity rule
@@ -411,7 +412,7 @@ def remote_ha_groups(api):
 
 def remote_mgr_metrics(mgr_hosts, timeout, start=0):
     """Thu lan luot cac mgr, mgr standby tra rong -> bo qua. Tra (lines, index mgr tot)."""
-    last = RuntimeError("chua cau hinh CEPH_MGR")
+    errs = []
     for k in range(len(mgr_hosts)):
         i = (start + k) % len(mgr_hosts)
         h = mgr_hosts[i]
@@ -419,8 +420,8 @@ def remote_mgr_metrics(mgr_hosts, timeout, start=0):
         try:
             return ceph_mgr_metrics(url, timeout), i
         except Exception as e:
-            last = e
-    raise last
+            errs.append("%s: %s" % (h, e))
+    raise RuntimeError("; ".join(errs) or "chua cau hinh CEPH_MGR")
 
 
 # ---------------------------------------------------------------- server
@@ -438,10 +439,22 @@ class Collector(object):
         self.api = None
         if args.remote:
             self.api = PveApi(split_list(args.pve_api), args.pve_token, args.verify_tls, args.timeout)
+            self.mgr_auto = not split_list(args.ceph_mgr)  # trong -> tu do moi node cua cluster
             self.mgr_hosts = split_list(args.ceph_mgr) or [
                 h.split("//")[-1].split(":")[0] + ":9283" for h in split_list(args.pve_api)]
+            self.mgr_hosts_ts = 0.0
 
     def _remote_mgr(self):
+        # Mgr active co the nam o node khong khai bao trong PVE_API (node do la standby,
+        # /metrics rong) -> lay IP tat ca node tu /cluster/status, hoi lai moi 5 phut.
+        if self.mgr_auto and time.time() - self.mgr_hosts_ts > 300:
+            try:
+                ips = [n["ip"] + ":9283" for n in self.api.get("/cluster/status") or []
+                       if n.get("type") == "node" and n.get("ip")]
+                self.mgr_hosts = self.mgr_hosts + [h for h in ips if h not in self.mgr_hosts]
+                self.mgr_hosts_ts = time.time()
+            except Exception:
+                pass
         lines, self.mgr_good = remote_mgr_metrics(self.mgr_hosts, self.args.timeout, self.mgr_good)
         return lines
 
