@@ -679,6 +679,7 @@ remote_install_files() {  # cai / cap nhat exporter + unit mau (khong dong cham 
 remote_test() {  # remote_test ENVFILE -> chay thu 1 lan, in ket qua tung phan; 0 neu pve + ceph OK
     local out rc=0 name v
     out=$(set -a; . "$1"; set +a; REMOTE=1 INTERVAL=30 timeout 90 python3 "$EXPORTER_SRC" --remote --once --timeout 8 2>&1)
+    REMOTE_TEST_OUT=$out
     for name in pve ceph ceph_mgr ha; do
         v=$(echo "$out" | sed -n "s/^pve_ceph_extra_exporter_up{collector=\"$name\"} //p")
         local e; e=$(echo "$out" | sed -n "s/^pve_ceph_extra_exporter_last_error{collector=\"$name\",error=\"\(.*\)\"} 1/\1/p")
@@ -695,7 +696,11 @@ remote_test() {  # remote_test ENVFILE -> chay thu 1 lan, in ket qua tung phan; 
         warn "401 = sai token / secret. Kiem tra lai Token ID va secret (menu 17 → nhap lai secret)"
     echo "$out" | grep -q 'HTTP Error 403\|Permission' && \
         warn "403 = token thieu quyen → pveum acl modify / --users monitor@pve --roles PVEAuditor (va --privsep 0)"
-    echo "$out" | grep -qi 'timed out\|refused\|unreachable\|No route' && \
+    echo "$out" | grep -q 'CERTIFICATE_VERIFY_FAILED' && \
+        warn "Cert Proxmox tu ky / CA chua tin cay (PVE_VERIFY_TLS=$(env_get "$1" PVE_VERIFY_TLS)) → chon N o cau 'Kiem tra chung chi TLS'"
+    echo "$out" | grep -qi 'refused' && \
+        warn "Connection refused = toi duoc may nhung port dong. :9283 → tren cluster chay 'ceph mgr module enable prometheus', xem dia chi bang 'ceph mgr services'; :8006 → pveproxy"
+    echo "$out" | grep -qi 'timed out\|unreachable\|No route' && \
         warn "Khong ket noi duoc → kiem tra may nay toi node:8006 va mgr:9283 (firewall)"
     return $rc
 }
@@ -726,6 +731,7 @@ do_remote_add() {  # do_remote_add [TEN] -> them / sua 1 cluster
     [ -f "$f" ] && info "Cluster ${W}$name${N} da co → gia tri cu hien san, Enter de giu"
 
     hosts=$(ask "IP / ten cac node Proxmox, cach nhau dau phay (nhieu node = tu chuyen khi 1 node chet)" "$(env_get "$f" PVE_API)")
+    hosts=${hosts// /}  # "a, b" -> "a,b": file .env bi source, dau cach lam hong dong
     [ -n "$hosts" ] || { err "Can it nhat 1 node"; return 1; }
     local oldtok; oldtok=$(env_get "$f" PVE_TOKEN)
     local deftid="monitor@pve!exporter"; [ -n "$oldtok" ] && deftid=${oldtok%%=*}
@@ -737,7 +743,7 @@ do_remote_add() {  # do_remote_add [TEN] -> them / sua 1 cluster
         "$([ "$(env_get "$f" PVE_VERIFY_TLS)" = 1 ] && echo y || echo N)")
     local defmgr; defmgr=$(echo "$hosts" | tr ',' '\n' | sed 's|^ *https\?://||; s|:.*||; s|$|:9283|' | paste -sd,)
     mgr=$(ask "Ceph mgr host:9283 (cach nhau dau phay)" "$(env_get "$f" CEPH_MGR)")
-    mgr=${mgr:-$defmgr}
+    mgr=${mgr// /}; mgr=${mgr:-$defmgr}
     job=$(ask "Ten job Prometheus (phai chua 'Proxmox-' de dashboard thay)" "$(env_get "$f" JOB)")
     job=${job:-Proxmox-$name}
     port=$(ask "Port exporter tren may nay" "$(env_get "$f" PORT)")
@@ -759,9 +765,16 @@ EOF
     chmod 600 "$tmp"
 
     echo; info "Chay thu ket noi toi cluster ${W}$name${N}..."
-    if ! remote_test "$tmp"; then
+    while ! remote_test "$tmp"; do
+        if [ "$(env_get "$tmp" PVE_VERIFY_TLS)" = 1 ] && [[ "$REMOTE_TEST_OUT" == *CERTIFICATE_VERIFY_FAILED* ]] \
+            && confirm "Tat kiem tra TLS (PVE_VERIFY_TLS=0) roi chay thu lai?"; then
+            sed -i 's/^PVE_VERIFY_TLS=1$/PVE_VERIFY_TLS=0/' "$tmp"
+            echo; info "Chay thu lai voi PVE_VERIFY_TLS=0..."
+            continue
+        fi
         confirm "Ket noi chua dat. Van luu va chay service?" || { rm -f "$tmp"; info "Huy - chua luu gi"; return 1; }
-    fi
+        break
+    done
     mv -f "$tmp" "$f"
     remote_install_files || { err "Cai file loi"; return 1; }
     systemctl enable "$SERVICE@$name" >/dev/null 2>&1

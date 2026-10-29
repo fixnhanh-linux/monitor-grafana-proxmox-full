@@ -50,7 +50,7 @@ from socketserver import ThreadingMixIn
 from urllib.error import HTTPError
 from urllib.request import Request, urlopen
 
-VERSION = "2026.10.30-3"
+VERSION = "2026.10.30-4"
 
 HA_GROUPS_CFG = "/etc/pve/ha/groups.cfg"
 HA_RULES_CFG = "/etc/pve/ha/rules.cfg"  # PVE 9: HA group -> node-affinity rule
@@ -390,13 +390,14 @@ def remote_ceph_status(api):
 
 
 def remote_ha_groups(api):
-    groups, ok = {}, False
+    groups, ok, last = {}, False, None
     for path, kind, key in (("/cluster/ha/groups", None, "group"),
                             ("/cluster/ha/rules", "node-affinity", "rule")):  # PVE 9
         try:
             items = api.get(path) or []
             ok = True
-        except Exception:
+        except Exception as e:
+            last = e
             continue
         for it in items:
             if kind and it.get("type") != kind:
@@ -404,7 +405,7 @@ def remote_ha_groups(api):
             for n in parse_nodes(it.get("nodes")):
                 groups.setdefault(n, set()).add(it.get(key, "?"))
     if not ok:
-        raise RuntimeError("khong doc duoc HA groups / rules")
+        raise RuntimeError("khong doc duoc HA groups / rules: %s" % last)
     return {h: ",".join(sorted(g)) for h, g in groups.items()}
 
 
