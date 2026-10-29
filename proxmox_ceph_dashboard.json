@@ -1158,6 +1158,75 @@
       }
     },
     {
+      "type": "stat",
+      "title": "Cluster Proxmox",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${Site}"
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${Site}"
+          },
+          "expr": "max by (cluster, nodes, quorate) (label_replace(pve_cluster_info{job=~\"$job\"}, \"cluster\", \"$1\", \"id\", \"cluster/(.*)\"))",
+          "refId": "A",
+          "range": false,
+          "instant": true
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "none",
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              }
+            ]
+          },
+          "mappings": [],
+          "color": {
+            "mode": "thresholds"
+          },
+          "noValue": "Job nay khong co pve_cluster_info",
+          "displayName": "${__field.labels.cluster} · ${__field.labels.nodes} node · quorate ${__field.labels.quorate}"
+        },
+        "overrides": []
+      },
+      "options": {
+        "colorMode": "none",
+        "graphMode": "none",
+        "justifyMode": "center",
+        "orientation": "auto",
+        "textMode": "name",
+        "wideLayout": true,
+        "showPercentChange": false,
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "text": {
+          "valueSize": 20,
+          "titleSize": 20
+        }
+      },
+      "description": "Cluster Proxmox (pve_cluster_info) cua job dang chon. Hai job ra cung ten cluster thi bang ben duoi giong nhau la dung; mot job ra nhieu o la job dang tron nhieu cluster.",
+      "id": 17,
+      "gridPos": {
+        "h": 3,
+        "w": 24,
+        "x": 0,
+        "y": 18
+      }
+    },
+    {
       "type": "table",
       "title": "Resource Cluster with HA Groups",
       "datasource": {
@@ -1517,12 +1586,12 @@
         }
       },
       "description": "Cột HA và HA Groups chỉ hiện khi cluster đang chọn có HA group / node-affinity rule (pve_ceph_extra_exporter đọc groups.cfg / rules.cfg).",
-      "id": 17,
+      "id": 18,
       "gridPos": {
         "h": 20,
         "w": 24,
         "x": 0,
-        "y": 18
+        "y": 21
       }
     },
     {
@@ -1704,12 +1773,12 @@
           "countRows": false
         }
       },
-      "id": 18,
+      "id": 19,
       "gridPos": {
         "h": 10,
         "w": 24,
         "x": 0,
-        "y": 38
+        "y": 41
       }
     },
     {
@@ -1982,12 +2051,12 @@
           "countRows": false
         }
       },
-      "id": 19,
+      "id": 20,
       "gridPos": {
         "h": 20,
         "w": 24,
         "x": 0,
-        "y": 48
+        "y": 51
       }
     },
     {
@@ -1995,12 +2064,12 @@
       "title": "Latency All OSD (High → Low)",
       "collapsed": false,
       "panels": [],
-      "id": 20,
+      "id": 21,
       "gridPos": {
         "h": 1,
         "w": 24,
         "x": 0,
-        "y": 68
+        "y": 71
       }
     },
     {
@@ -2056,12 +2125,12 @@
           "sort": "desc"
         }
       },
-      "id": 21,
+      "id": 22,
       "gridPos": {
         "h": 12,
         "w": 24,
         "x": 0,
-        "y": 69
+        "y": 72
       }
     },
     {
@@ -2230,12 +2299,12 @@
       "repeat": "class",
       "repeatDirection": "h",
       "maxPerRow": 2,
-      "id": 22,
+      "id": 23,
       "gridPos": {
         "h": 12,
         "w": 12,
         "x": 0,
-        "y": 81
+        "y": 84
       }
     },
     {
@@ -2243,12 +2312,12 @@
       "title": "Ceph Recovery & Rebalance Operations",
       "collapsed": false,
       "panels": [],
-      "id": 23,
+      "id": 24,
       "gridPos": {
         "h": 1,
         "w": 24,
         "x": 0,
-        "y": 93
+        "y": 96
       }
     },
     {
@@ -2318,12 +2387,12 @@
         }
       },
       "description": "Dòng trạng thái giống giao diện Proxmox (pve_ceph_extra_exporter).",
-      "id": 24,
+      "id": 25,
       "gridPos": {
         "h": 3,
         "w": 24,
         "x": 0,
-        "y": 94
+        "y": 97
       }
     },
     {
@@ -2386,12 +2455,12 @@
         "showThresholdLabels": false,
         "showThresholdMarkers": true
       },
-      "id": 25,
+      "id": 26,
       "gridPos": {
         "h": 8,
         "w": 5,
         "x": 0,
-        "y": 97
+        "y": 100
       }
     },
     {
@@ -2485,12 +2554,12 @@
           "sort": "none"
         }
       },
-      "id": 26,
+      "id": 27,
       "gridPos": {
         "h": 8,
         "w": 19,
         "x": 5,
-        "y": 97
+        "y": 100
       }
     },
     {
@@ -2498,12 +2567,12 @@
       "title": "Exporter (pve_ceph_extra_exporter)",
       "collapsed": false,
       "panels": [],
-      "id": 27,
+      "id": 28,
       "gridPos": {
         "h": 1,
         "w": 24,
         "x": 0,
-        "y": 105
+        "y": 108
       }
     },
     {
@@ -2745,12 +2814,12 @@
         }
       },
       "description": "ceph_mgr: phát lại /metrics của ceph mgr · pve: node Proxmox · ceph: Ceph Status / Recovery · ha: HA Groups. Collector lỗi thì các ô dùng dữ liệu đó sẽ No data.",
-      "id": 28,
+      "id": 29,
       "gridPos": {
         "h": 6,
         "w": 15,
         "x": 0,
-        "y": 106
+        "y": 109
       }
     },
     {
@@ -2818,12 +2887,12 @@
         }
       },
       "description": "Bao lâu từ lần thu thập gần nhất. Bình thường < INTERVAL (30s) + scrape_interval.",
-      "id": 29,
+      "id": 30,
       "gridPos": {
         "h": 6,
         "w": 3,
         "x": 15,
-        "y": 106
+        "y": 109
       }
     },
     {
@@ -2884,12 +2953,12 @@
           "limit": 1
         }
       },
-      "id": 30,
+      "id": 31,
       "gridPos": {
         "h": 6,
         "w": 3,
         "x": 18,
-        "y": 106
+        "y": 109
       }
     },
     {
@@ -2950,12 +3019,12 @@
           "limit": 1
         }
       },
-      "id": 31,
+      "id": 32,
       "gridPos": {
         "h": 6,
         "w": 3,
         "x": 21,
-        "y": 106
+        "y": 109
       }
     }
   ],

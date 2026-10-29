@@ -255,6 +255,19 @@ def build(args):
 
     # ---------------- Proxmox Resource - HA Group
     b.row("Proxmox Resource - HA Group")
+    # Ten cluster Proxmox that cua job dang chon: 2 job cung 1 ten = cung 1 cluster;
+    # 1 job ra 2 o = job dang tron 2 cluster (target scrape nham).
+    pc = stat("Cluster Proxmox",
+              [tgt('max by (cluster, nodes, quorate) (label_replace(pve_cluster_info{%s},'
+                   ' "cluster", "$1", "id", "cluster/(.*)"))' % J)],
+              text_mode="name", color_mode="none", value_size=20,
+              no_value="Job nay khong co pve_cluster_info",
+              desc="Cluster Proxmox (pve_cluster_info) cua job dang chon. Hai job ra cung ten cluster "
+                   "thi bang ben duoi giong nhau la dung; mot job ra nhieu o la job dang tron nhieu cluster.")
+    pc["fieldConfig"]["defaults"]["displayName"] = \
+        "${__field.labels.cluster} · ${__field.labels.nodes} node · quorate ${__field.labels.quorate}"
+    pc["options"]["text"]["titleSize"] = 20
+    b.line(3, (pc, 24))
     nj = 'id=~"node/.*", %s' % J
     ha = table("Resource Cluster with HA Groups",
                [tgt(node_q('pve_cpu_usage_ratio{%s} * 100' % nj), "CPU", fmt="table"),
