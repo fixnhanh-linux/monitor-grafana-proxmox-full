@@ -92,7 +92,7 @@ bash /root/monitor-grafana-proxmox-full/menu.sh
 | 4 | Xem metric (nếu chưa cài thì chạy thử 1 lần từ file nguồn) |
 | 5 / 6 / 7 / 8 | Log, restart, đổi port, gỡ cài |
 | 9 | Sinh dashboard JSON — tự đọc số node / pool / device class từ Ceph |
-| 10 | In đoạn `prometheus.yml` mẫu cho node này; máy có cluster từ xa thì gộp **tất cả cluster** vào `prometheus-scrape-all.yml` (kiểm tra từng exporter, bỏ job trùng, báo 2 cấu hình cùng 1 cluster) |
+| 10 | In đoạn `prometheus.yml` mẫu cho node này; máy có cluster từ xa thì gộp **tất cả cluster** vào `prometheus-scrape-all.yml` (kiểm tra từng exporter, bỏ job trùng, báo 2 cấu hình cùng 1 cluster), rồi tuỳ chọn đẩy qua SSH lên máy Prometheus (xem dưới) |
 | 11 | Import dashboard lên Grafana qua API (service account token, role Editor) |
 | 12 | Hỏi Prometheus: target exporter có `up`, job của exporter có khớp job ceph mgr, device class từng cluster |
 | 13 | Kiểm tra tổng thể (1 + 3 + 12) |
@@ -108,7 +108,7 @@ bash /root/monitor-grafana-proxmox-full/menu.sh
 | 23 | Chạy cluster (đã thêm ở 17) bằng Docker: build image, chuyển từ systemd sang container cùng port |
 | 24 | Quản lý container: xem trạng thái, log, khởi động lại, xoá (quay về systemd) |
 
-Chạy 1 lệnh không qua menu: `bash menu.sh setup | check | install [port] | status | metrics | logs | restart | port <số> | uninstall | dashboard | import | prom | prom-check | doctor | update | about | remote-add [tên] | remote-list | prom-all | remote-test | remote-remove | deps | firewall | docker-run | docker-manage`.
+Chạy 1 lệnh không qua menu: `bash menu.sh setup | check | install [port] | status | metrics | logs | restart | port <số> | uninstall | dashboard | import | prom | prom-check | doctor | update | about | remote-add [tên] | remote-list | prom-all | prom-push | remote-test | remote-remove | deps | firewall | docker-run | docker-manage`.
 
 Menu nhớ Grafana URL, Prometheus URL, tiêu đề/UID dashboard trong `.menu.conf` (không lưu token).
 
@@ -225,6 +225,24 @@ Exporter phát lại `/metrics` của ceph mgr đang active (lấy địa chỉ 
 Điều kiện: đã bật module prometheus của ceph mgr (`ceph mgr module enable prometheus`), menu **1** sẽ kiểm tra.
 
 **Phải xoá** target `:9283` (ceph mgr) và `:9221` (pve exporter) cũ của cluster đó khỏi job, nếu không mọi số liệu bị nhân đôi. Menu **12** báo `Trùng` khi một job có 2 target cùng xuất metric ceph hoặc Proxmox.
+
+### Nhiều cluster trên 1 máy monitor
+
+Menu **10** (hoặc `bash menu.sh prom-all`) gộp mọi cluster thành `prometheus-scrape-all.yml`, file đã có sẵn dòng `scrape_configs:`.
+
+| Prometheus của bạn | Cách đưa vào |
+|---|---|
+| Tách file: `prometheus.yml` có `scrape_config_files: [/etc/prometheus/scrape_configs/*.yml]` | Chép **nguyên file** vào thư mục đó, vd `proxmox-fixnhanh-<máy-monitor>.yml` |
+| 1 file (mặc định) | Dán các khối `- job_name:` vào dưới `scrape_configs:` của `prometheus.yml` |
+
+Với kiểu tách file, trả lời `y` ở câu *Đẩy file lên máy Prometheus qua SSH* (hoặc `bash menu.sh prom-push`). Tool tự làm:
+
+1. SSH vào máy Prometheus (cần đăng nhập bằng key: `ssh-copy-id root@<prometheus>`), kiểm tra thư mục và `scrape_config_files`.
+2. **Dừng** nếu `job_name` đã có ở file khác — Prometheus không cho trùng job giữa các file.
+3. Liệt kê target `:9283` / `:9221` cũ để bạn xoá nếu là cùng cluster (tránh nhân đôi số liệu).
+4. Chép file, chạy `promtool check config`; lỗi thì **trả lại file cũ**, Prometheus không bị ảnh hưởng; OK thì reload.
+
+Máy SSH, file cấu hình, thư mục được nhớ trong `.menu.conf` cho lần sau.
 
 ### Không gộp (giữ target cũ)
 

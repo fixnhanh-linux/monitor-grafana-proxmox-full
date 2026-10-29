@@ -723,10 +723,75 @@ EOF
     fi
     info "Da ghi ${W}$cnt job${N} vao ${W}$f${N}$([ "$skip" -gt 0 ] && echo " (bo qua $skip job trung)")"
     echo; sed -n '4,$p' "$f" | sed "s/^/${IND}    ${O}/; s/$/${N}/"; echo
-    warn "Xoa target cu (:9283 ceph mgr, :9221 pve exporter) cua cac cluster nay khoi prometheus.yml, neu khong so lieu bi nhan doi"
-    info "Firewall may nay cho IP Prometheus: menu 22. Sau khi sua prometheus.yml:"
+    warn "Xoa target cu (:9283 ceph mgr, :9221 pve exporter) cua cac cluster nay khoi Prometheus, neu khong so lieu bi nhan doi"
+    info "Firewall may nay cho IP Prometheus: menu 22."
+    info "${W}Prometheus tach file (scrape_config_files, vd /etc/prometheus/scrape_configs/*.yml):${N}"
+    echo "chep NGUYEN file nay vao thu muc do (file da co san dong scrape_configs:)" | sub
+    printf '%s\n' "scp root@$ip:$f /etc/prometheus/scrape_configs/$(prom_file_name)" | sub
+    info "${W}Prometheus 1 file (mac dinh):${N}"
+    echo "dan cac khoi '- job_name:' vao duoi dong scrape_configs: cua prometheus.yml (khong chep dong scrape_configs:)" | sub
+    info "Sau do tren may Prometheus:"
     printf '%s\n' "promtool check config /etc/prometheus/prometheus.yml" \
         "systemctl reload prometheus      # hoac: curl -X POST http://<prom>:9090/-/reload" | sub
+    if [ "$cnt" -gt 0 ] && has ssh && has scp; then
+        echo; confirm "Day file len may Prometheus qua SSH ngay (kiem tra trung, promtool, reload)?" && prom_push "$f"
+    fi
+}
+
+prom_file_name() { echo "proxmox-fixnhanh-$(hostname -s 2>/dev/null || hostname).yml"; }   # ten file tren may Prometheus
+
+# Day file scrape len may Prometheus dung scrape_config_files: kiem tra job trung o file khac
+# (Prometheus se khong khoi dong), canh bao target :9283/:9221 cu, promtool loi thi tra lai file cu.
+prom_push() {
+    local f="${1:-$DIR/prometheus-scrape-all.yml}" host def dir cfg dst jobs pat out
+    [ -s "$f" ] || { err "Chua co $f → chay menu 10 truoc"; return 1; }
+    def=${PROM_SSH:-}
+    [ -z "$def" ] && [ -n "${PROM_URL:-}" ] && def="root@$(echo "$PROM_URL" | sed -E 's|^https?://||; s|[:/].*||')"
+    host=$(ask "SSH may Prometheus (user@ip)" "$def")
+    [ -n "$host" ] || { err "Chua nhap may Prometheus"; return 1; }
+    cfg=$(ask "File cau hinh chinh" "${PROM_CFG:-/etc/prometheus/prometheus.yml}")
+    dir=$(ask "Thu muc scrape_config_files" "${PROM_DIR:-/etc/prometheus/scrape_configs}")
+    dst="$dir/$(prom_file_name)"
+
+    info "Kiem tra tren ${W}$host${N}..."
+    out=$(ssh -o ConnectTimeout=10 "$host" "echo SSH_OK; test -d '$dir' && echo DIR_OK; grep -q '^scrape_config_files:' '$cfg' && echo CFG_OK; command -v promtool >/dev/null && echo PROMTOOL_OK; true" 2>&1)
+    [[ "$out" == *SSH_OK* ]] || { err "SSH toi $host loi:"; echo "$out" | sub; info "Can dang nhap SSH bang key: ssh-copy-id $host"; return 1; }
+    [[ "$out" == *DIR_OK* ]] || { err "Khong co thu muc $dir tren $host"; return 1; }
+    [[ "$out" == *CFG_OK* ]] || warn "$cfg chua co 'scrape_config_files:' tro toi $dir → Prometheus se khong doc file nay"
+    [[ "$out" == *PROMTOOL_OK* ]] || warn "May Prometheus khong co promtool → bo qua buoc kiem tra cu phap"
+    save_conf PROM_SSH "$host"; save_conf PROM_DIR "$dir"; save_conf PROM_CFG "$cfg"
+
+    jobs=$(sed -n 's/^  - job_name: //p' "$f" | paste -sd'|' -)
+    pat="^[[:space:]]*-[[:space:]]*job_name:[[:space:]]*.?($jobs).?[[:space:]]*\$"
+    out=$(ssh "$host" "cd '$dir' && grep -HnE '$pat' *.yml *.yaml 2>/dev/null | grep -v '^$(prom_file_name):'")
+    if [ -n "$out" ]; then
+        err "Job da co o file khac (trung job_name → Prometheus khong khoi dong):"; echo "$out" | sub
+        info "Xoa / doi ten job cu tren may Prometheus, hoac doi JOB o menu 17, roi chay lai"
+        return 1
+    fi
+    out=$(ssh "$host" "cd '$dir' && grep -HnE ':(9283|9221)\\b' *.yml *.yaml 2>/dev/null | grep -v '^$(prom_file_name):'")
+    if [ -n "$out" ]; then
+        warn "Target ceph mgr / pve exporter cu dang co (neu la cung cluster thi XOA, khong se nhan doi so lieu):"
+        echo "$out" | sub
+    fi
+
+    confirm "Chep file → ${W}$host:$dst${N} roi reload Prometheus?" || { info "Huy"; return 0; }
+    scp -q "$f" "$host:$dst.new" || { err "scp loi"; return 1; }
+    out=$(ssh "$host" "cp -p '$dst' '$dst.bak' 2>/dev/null; mv '$dst.new' '$dst'
+        if command -v promtool >/dev/null && ! promtool check config '$cfg' >/tmp/.promcheck 2>&1; then
+            if [ -f '$dst.bak' ]; then mv '$dst.bak' '$dst'; else rm -f '$dst'; fi
+            cat /tmp/.promcheck; echo CHECK_FAIL; exit 1
+        fi
+        systemctl reload prometheus 2>/dev/null || curl -sf -X POST http://127.0.0.1:9090/-/reload || { echo RELOAD_FAIL; exit 1; }
+        echo PUSH_OK" 2>&1)
+    if [[ "$out" == *PUSH_OK* ]]; then
+        ok "Da chep ${W}$dst${N} va reload Prometheus"
+        info "Kiem tra target: menu 12 (sau ~1 phut)"
+    elif [[ "$out" == *CHECK_FAIL* ]]; then
+        err "promtool bao loi → da tra lai file cu, Prometheus khong bi anh huong:"; echo "$out" | grep -v CHECK_FAIL | sub; return 1
+    else
+        err "Da chep file nhung reload loi → tren may Prometheus: systemctl reload prometheus"; echo "$out" | sub; return 1
+    fi
 }
 
 # =============================================================================
@@ -1472,6 +1537,7 @@ if [ $# -gt 0 ]; then
         remote-add) NONINTERACTIVE=0; do_remote_add "${1:-}" ;;
         remote-list) do_remote_list ;;
         prom-all) NONINTERACTIVE=0; title "PROMETHEUS: GOP MOI CLUSTER"; prom_all ;;
+        prom-push) NONINTERACTIVE=0; title "DAY FILE SCRAPE LEN PROMETHEUS"; prom_push ;;
         remote-test) NONINTERACTIVE=0; do_remote_test ;;
         remote-remove) NONINTERACTIVE=0; do_remote_remove ;;
         deps) NONINTERACTIVE=0; detect_env; do_deps ;;
