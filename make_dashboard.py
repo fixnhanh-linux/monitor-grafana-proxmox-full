@@ -172,7 +172,7 @@ def parse_ha_alias(items):
 
 def safe_uid(uid):
     """Grafana chi nhan UID [A-Za-z0-9_-], toi da 40 ky tu ("uid contains illegal characters")."""
-    return re.sub(r"[^A-Za-z0-9_-]+", "-", uid).strip("-")[:40] or "pve-ceph-prom"
+    return re.sub(r"[^A-Za-z0-9_]*[^A-Za-z0-9_-][^A-Za-z0-9_]*|-{2,}", "-", uid).strip("-")[:40] or "pve-ceph-prom"
 
 
 def node_q(expr):
@@ -192,6 +192,9 @@ HIDE = "^(Time.*|__name__.*|instance.*|job.*|job_type.*|id( \\d+)?|state( \\d+)?
 # --------------------------------------------------------------------------- dashboard
 def build(args):
     b = Builder()
+    # Dashboard khach hang: khoa cung 1 job, an Site / Job, bo phan noi bo
+    # (Detailed Alarms, HA Groups, hang Exporter), khong cho sua.
+    cust = getattr(args, "customer_job", "") or ""
 
     # ---------------- Cluster State
     b.row("Cluster State")
@@ -210,10 +213,11 @@ def build(args):
                                            "OK": {"color": "green"},
                                            "HEALTH_WARN": {"color": "orange"},
                                            "HEALTH_ERR": {"color": "red"}}}]))])
-    b.line(5,
-           (stat("Cluster Health Status", [tgt('max(ceph_health_status{%s})' % J)],
-                 th=steps("green", 1, "orange", 2, "red"), mappings=health_map), 4),
-           (alarms, 4),
+    health = stat("Cluster Health Status", [tgt('max(ceph_health_status{%s})' % J)],
+                  th=steps("green", 1, "orange", 2, "red"), mappings=health_map)
+    # Khach hang: khong hien Detailed Alarms (thong diep loi Ceph goc, ten host noi bo)
+    first = [(health, 8)] if cust else [(health, 4), (alarms, 4)]
+    b.line(5, *(first + [
            (stat("Cluster Capacity", [tgt('sum(ceph_cluster_total_bytes{%s})' % J)],
                  unit="decbytes", color_mode="value", fixed_color="green", value_size=60), 4),
            (stat("Used Capacity", [tgt('sum(ceph_cluster_total_used_bytes{%s})' % J)],
@@ -221,7 +225,7 @@ def build(args):
            (stat("PG Inconsistent", [tgt('sum(ceph_pg_inconsistent{%s}) or vector(0)' % J)],
                  th=steps("green", 1, "red")), 4),
            (stat("Avg Apply Latency", [tgt('avg(ceph_osd_apply_latency_ms{%s})' % J)],
-                 unit="ms", decimals=2, th=steps("green", 10, "orange", 50, "red")), 4))
+                 unit="ms", decimals=2, th=steps("green", 10, "orange", 50, "red")), 4)]))
 
     # ---------------- OSD State
     b.row("OSD State")
@@ -260,7 +264,7 @@ def build(args):
     b.y += 5
 
     # ---------------- Proxmox Resource - HA Group
-    b.row("Proxmox Resource - HA Group")
+    b.row("Proxmox Resource" if cust else "Proxmox Resource - HA Group")
     # Ten cluster Proxmox that cua job dang chon: 2 job cung 1 ten = cung 1 cluster;
     # 1 job ra 2 o = job dang tron 2 cluster (target scrape nham).
     pc = stat("Cluster Proxmox",
@@ -275,16 +279,17 @@ def build(args):
     pc["options"]["text"]["titleSize"] = 20
     b.line(3, (pc, 24))
     nj = 'id=~"node/.*", %s' % J
-    ha = table("Resource Cluster with HA Groups",
-               [tgt(node_q('pve_cpu_usage_ratio{%s} * 100' % nj), "CPU", fmt="table"),
-                tgt(node_q('pve_memory_usage_bytes{%s} / pve_memory_size_bytes{%s} * 100' % (nj, nj)),
-                    "RAM_Pct", fmt="table"),
-                tgt(node_q('pve_memory_size_bytes{%s}' % nj), "RAM_Total", fmt="table"),
-                tgt(node_q('pve_uptime_seconds{%s}' % nj), "Uptime", fmt="table"),
-                # Cot HA / HA Groups chi co khi cluster co HA group: query rong -> cot tu an
-                tgt('%s\nand on() count(pve_ha_groups_custom_info{%s})'
-                    % (node_q('pve_ha_state{state="online", %s}' % nj), J), "HA", fmt="table"),
-                tgt('max by (host, groups) (pve_ha_groups_custom_info{%s})' % J, "Group", fmt="table")],
+    res_t = [tgt(node_q('pve_cpu_usage_ratio{%s} * 100' % nj), "CPU", fmt="table"),
+             tgt(node_q('pve_memory_usage_bytes{%s} / pve_memory_size_bytes{%s} * 100' % (nj, nj)),
+                 "RAM_Pct", fmt="table"),
+             tgt(node_q('pve_memory_size_bytes{%s}' % nj), "RAM_Total", fmt="table"),
+             tgt(node_q('pve_uptime_seconds{%s}' % nj), "Uptime", fmt="table")]
+    if not cust:
+        # Cot HA / HA Groups chi co khi cluster co HA group: query rong -> cot tu an
+        res_t += [tgt('%s\nand on() count(pve_ha_groups_custom_info{%s})'
+                      % (node_q('pve_ha_state{state="online", %s}' % nj), J), "HA", fmt="table"),
+                  tgt('max by (host, groups) (pve_ha_groups_custom_info{%s})' % J, "Group", fmt="table")]
+    ha = table("Resource Cluster" if cust else "Resource Cluster with HA Groups", res_t,
                [{"id": "joinByField", "options": {"byField": "host", "mode": "outer"}},
                 drop_extra_fields(HIDE),
                 organize(rename={"host": "Node Proxmox", "groups": "HA Groups", "Value #HA": "HA",
@@ -294,7 +299,7 @@ def build(args):
                                 "Value #RAM_Pct": 4, "Value #RAM_Total": 5, "Value #Uptime": 6}),
                 {"id": "sortBy", "options": {"sort": [{"field": "Node Proxmox"}]}}],
                cell="auto", filterable=True,
-               desc="Cột HA và HA Groups chỉ hiện khi cluster đang chọn có HA group / node-affinity rule (pve_ceph_extra_exporter đọc groups.cfg / rules.cfg).",
+               desc="CPU, RAM, uptime từng node Proxmox." if cust else "Cột HA và HA Groups chỉ hiện khi cluster đang chọn có HA group / node-affinity rule (pve_ceph_extra_exporter đọc groups.cfg / rules.cfg).",
                overrides=[
                    override("HA", ("mappings", [
                        {"type": "value", "options": {
@@ -439,6 +444,12 @@ def build(args):
                          "tooltip": {"mode": "multi", "sort": "none"}}}
     b.line(8, (gauge, 5), (speed, 19))
 
+    if not cust:
+        exporter_row(b)
+    return dashboard(args, b, cust)
+
+
+def exporter_row(b):
     # ---------------- Exporter: collector nao loi, du lieu cu bao lau -> biet vi sao "No data"
     b.row("Exporter (pve_ceph_extra_exporter)")
     coll = table("Collector",
@@ -483,16 +494,25 @@ def build(args):
         p["options"]["reduceOptions"]["limit"] = 1
     b.line(6, (coll, 15), (age, 3), (mode, 3), (ver, 3))
 
+
+def dashboard(args, b, cust):
     # ---------------- variables
-    templating = {"list": [
-        {"type": "datasource", "name": "Site", "label": "Site", "query": "prometheus",
-         "regex": args.site_regex, "refresh": 1, "includeAll": False, "options": [], "current": {}},
-        {"type": "query", "name": "job", "label": "Job / Cluster", "datasource": DS,
-         "definition": "label_values(pve_cluster_info,job)",
-         "query": {"qryType": 1, "query": "label_values(pve_cluster_info,job)",
-                   "refId": "PrometheusVariableQueryEditor-VariableQuery"},
-         "regex": args.job_regex, "refresh": 1, "includeAll": False, "multi": False,
-         "options": [], "current": {}, "sort": 1},
+    site = {"type": "datasource", "name": "Site", "label": "Site", "query": "prometheus",
+            "regex": args.site_regex, "refresh": 1, "includeAll": False, "options": [], "current": {}}
+    if cust:
+        # Khach hang: an Site (datasource lay theo --site-regex) va khoa job bang hang so an
+        site["hide"] = 2
+        job = {"type": "constant", "name": "job", "label": "Job", "hide": 2, "query": cust,
+               "current": {"text": cust, "value": cust},
+               "options": [{"text": cust, "value": cust, "selected": True}]}
+    else:
+        job = {"type": "query", "name": "job", "label": "Job / Cluster", "datasource": DS,
+               "definition": "label_values(pve_cluster_info,job)",
+               "query": {"qryType": 1, "query": "label_values(pve_cluster_info,job)",
+                         "refId": "PrometheusVariableQueryEditor-VariableQuery"},
+               "regex": args.job_regex, "refresh": 1, "includeAll": False, "multi": False,
+               "options": [], "current": {}, "sort": 1}
+    templating = {"list": [site, job,
         {"type": "query", "name": "class", "label": "OSD Class", "datasource": DS,
          "definition": 'label_values(ceph_osd_metadata{job=~"$job"},device_class)',
          "query": {"qryType": 1, "query": 'label_values(ceph_osd_metadata{job=~"$job"},device_class)',
@@ -502,9 +522,10 @@ def build(args):
     ]}
 
     return {
-        "title": args.title, "uid": safe_uid(args.uid), "editable": True, "graphTooltip": 0,
+        "title": args.title, "uid": safe_uid(args.uid), "editable": not cust, "graphTooltip": 0,
         "refresh": "30s", "schemaVersion": 41, "timezone": "Asia/Ho_Chi_Minh",
-        "time": {"from": args.time_from, "to": "now"}, "tags": ["proxmox", "ceph"],
+        "time": {"from": args.time_from, "to": "now"},
+        "tags": ["proxmox", "ceph"] + (["khach-hang"] if cust else ["noi-bo"]),
         "annotations": {"list": [{"builtIn": 1, "datasource": {"type": "grafana", "uid": "-- Grafana --"},
                                   "enable": True, "hide": True, "iconColor": "rgba(0, 211, 255, 1)",
                                   "name": "Annotations & Alerts", "type": "dashboard"}]},
@@ -527,7 +548,13 @@ def main():
     ap.add_argument("--ha-alias", action="append", default=[], metavar="GROUPS=TEXT[:mau]",
                     help='ten ngan cho chuoi HA Groups, vd "Gold-6146,HIGH-FREQUENCY,P1-XD=Gold+HIGH+P1-XD:orange"')
     ap.add_argument("--time-from", default="now-15m", help="khoang thoi gian mac dinh")
+    ap.add_argument("--customer-job", default="", metavar="JOB",
+                    help="dashboard KHACH HANG: khoa cung job nay, an Site/Job, bo Detailed Alarms, "
+                         "HA Groups, hang Exporter; can --site-regex chi dung datasource cua khach")
     args = ap.parse_args()
+    if args.customer_job and not args.site_regex:
+        ap.error("--customer-job can --site-regex (vd \"/^Prometheus FPT HCM$/\") de khach khong "
+                 "thay datasource khac")
 
     dash = build(args)
     with open(args.out, "w", encoding="utf-8") as f:

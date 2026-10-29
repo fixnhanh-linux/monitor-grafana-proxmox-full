@@ -93,7 +93,7 @@ bash /root/monitor-grafana-proxmox-full/menu.sh
 | 3 | Trạng thái service, collector OK/lỗi, dòng Ceph Status, Total Health |
 | 4 | Xem metric (nếu chưa cài thì chạy thử 1 lần từ file nguồn) |
 | 5 / 6 / 7 / 8 | Log, restart, đổi port, gỡ cài |
-| 9 | Sinh dashboard JSON — tự đọc số node / pool / device class từ Ceph |
+| 9 | Sinh dashboard JSON — tự đọc số node / pool / device class từ Ceph. Chọn **1 Nội bộ** (mọi cluster) hoặc **2 Khách hàng** (xem dưới) |
 | 10 | In đoạn `prometheus.yml` mẫu cho node này; máy có cluster từ xa thì gộp **tất cả cluster** vào `prometheus-scrape-all.yml` (kiểm tra từng exporter, bỏ job trùng, báo 2 cấu hình cùng 1 cluster), rồi tuỳ chọn đẩy qua SSH lên máy Prometheus, kèm alert rules (xem dưới) |
 | 11 | Import dashboard lên Grafana qua API (service account token, role **Editor**); kiểm tra trước Grafana có datasource Prometheus khớp biến Site; Grafana dùng cert tự ký thì đề nghị **ghim cert** (so SHA-256 với trình duyệt), không tắt kiểm tra TLS |
 | 12 | Hỏi Prometheus: target exporter có `up`, job của exporter có khớp job ceph mgr, device class từng cluster |
@@ -109,8 +109,9 @@ bash /root/monitor-grafana-proxmox-full/menu.sh
 | 22 | Mở firewall cho IP Prometheus — tự nhận `ufw` / `firewalld` / `pve-firewall` |
 | 23 | Chạy cluster (đã thêm ở 17) bằng Docker: build image, chuyển từ systemd sang container cùng port |
 | 24 | Quản lý container: xem trạng thái, log, khởi động lại, xoá (quay về systemd) |
+| 25 | Đổi dải IP Docker (`docker0` + dải cho mạng mới): kiểm tra dải nội bộ / trùng route, sao lưu `daemon.json`, restart Docker, kiểm tra container chạy lại; Docker không lên thì trả file cũ |
 
-Chạy 1 lệnh không qua menu: `bash menu.sh setup | check | install [port] | status | metrics | logs | restart | port <số> | uninstall | dashboard | import | prom | prom-check | doctor | update | about | remote-add [tên] | remote-list | prom-all | prom-push | prom-rules | urls | remote-test | remote-remove | deps | firewall | docker-run | docker-manage`.
+Chạy 1 lệnh không qua menu: `bash menu.sh setup | check | install [port] | status | metrics | logs | restart | port <số> | uninstall | dashboard | import | prom | prom-check | doctor | update | about | remote-add [tên] | remote-list | prom-all | prom-push | prom-rules | urls | remote-test | remote-remove | deps | firewall | docker-run | docker-manage | docker-net`.
 
 Menu nhớ Grafana URL, Prometheus URL, tiêu đề/UID dashboard trong `.menu.conf`; token Grafana (nếu chọn lưu) nằm riêng ở `.grafana-token`.
 
@@ -322,6 +323,26 @@ python make_dashboard.py -o cmc.json --title "Proxmox - Ceph Prometheus CMC Q7 -
 Lưu ý: import với `--uid fix` sẽ ghi đè dashboard đang có uid `fix`.
 
 Grafana → Dashboards → New → Import → chọn file JSON.
+
+## Dashboard khách hàng
+
+Menu **9** → `2` sinh `dashboard-kh-<job>.json` cho **1 khách**:
+
+| | Nội bộ | Khách hàng |
+|---|---|---|
+| Site / Job | Chọn được mọi datasource, mọi cluster | **Ẩn**, khoá cứng 1 datasource + 1 job |
+| Health, dung lượng, OSD, pool, latency, recovery | ✔ | ✔ |
+| CPU / RAM / uptime node | ✔ | ✔ |
+| Detailed Alarms (thông điệp lỗi Ceph gốc) | ✔ | ✘ |
+| Cột HA / HA Groups | ✔ | ✘ |
+| Hàng Exporter (collector, lỗi, phiên bản) | ✔ | ✘ |
+| Sửa dashboard | Được | Khoá (`editable: false`) |
+
+Tool hỏi job của khách (liệt kê sẵn từ Prometheus), tên khách, **tên datasource** trong Grafana (khớp đúng tên đó), tiêu đề, UID `kh-<job>`. Phân quyền trong Grafana: tạo **folder riêng** cho khách → import dashboard vào folder đó (menu 11 hỏi file nào, nhập Folder UID) → cấp quyền **Viewer** cho user / team của khách **trên folder**, không cấp ở cấp tổ chức. Biến ẩn chỉ giấu giao diện — muốn khách tuyệt đối không truy vấn được cluster khác thì khách cần Grafana org riêng có datasource riêng.
+
+```bash
+python make_dashboard.py --customer-job Proxmox-P1-XD --site-regex "/^Prometheus FPT HCM$/" --title "Khách P1-XD - Proxmox Ceph" --uid kh-p1-xd -o dashboard-kh-p1-xd.json
+```
 
 ## Metric của exporter
 

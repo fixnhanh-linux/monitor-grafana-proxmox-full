@@ -572,7 +572,7 @@ import json, re, sys
 d = json.load(open(sys.argv[1], encoding="utf-8"))
 d["id"] = None
 # Grafana chi nhan UID [A-Za-z0-9_-] <= 40 ky tu (file sinh tu ban cu co the sai)
-uid = re.sub(r"[^A-Za-z0-9_-]+", "-", str(d.get("uid") or "")).strip("-")[:40] or "pve-ceph-prom"
+uid = re.sub(r"[^A-Za-z0-9_]*[^A-Za-z0-9_-][^A-Za-z0-9_]*|-{2,}", "-", str(d.get("uid") or "")).strip("-")[:40] or "pve-ceph-prom"
 if uid != d.get("uid"):
     sys.stderr.write("UID '%s' -> '%s'\n" % (d.get("uid"), uid))
     d["uid"] = uid
@@ -710,7 +710,7 @@ ask_dashboard() {  # hoi cac tuy chon dashboard -> bien DASH_*
     dash_defaults
     DASH_TITLE=$(ask "Tieu de dashboard" "$DASH_TITLE")
     DASH_UID=$(ask "UID (khong dau, khong cach; trung UID se ghi de)" "$DASH_UID")
-    local u2; u2=$(echo "$DASH_UID" | sed -E 's/[^A-Za-z0-9_-]+/-/g; s/^-+|-+$//g' | cut -c1-40)
+    local u2; u2=$(echo "$DASH_UID" | sed -E 's/[^A-Za-z0-9_-]+/-/g; s/-{2,}/-/g; s/^-+|-+$//g' | cut -c1-40)
     [ "$u2" != "$DASH_UID" ] && { warn "UID chi duoc chu, so, - va _ (toi da 40) → dung '${u2:=pve-ceph-prom}'"; DASH_UID=$u2; }
     DASH_SITE=$(ask "Regex loc datasource Site (bo trong = tat ca Prometheus)" "$DASH_SITE")
     DASH_JOB=$(ask "Regex loc job cluster" "$DASH_JOB")
@@ -729,6 +729,9 @@ ask_dashboard() {  # hoi cac tuy chon dashboard -> bien DASH_*
 
 do_dashboard() {
     title "SINH DASHBOARD GRAFANA"
+    info "${W}1${N} Noi bo  ${D}- moi cluster, chon Site / Job, co canh bao chi tiet, HA Groups, hang Exporter${N}"
+    info "${W}2${N} Khach hang  ${D}- khoa 1 cluster, an Site / Job va phan noi bo, khong cho sua${N}"
+    if [ "$(ask "Loai dashboard" "1")" = 2 ]; then do_dashboard_customer; return; fi
     ask_dashboard
     DASH_JSON=$(ask "File xuat" "$DASH_JSON")
     if [ "$(cd "$(dirname "$DASH_JSON")" 2>/dev/null && pwd)/$(basename "$DASH_JSON")" = "$DASH_REPO_JSON" ]; then
@@ -738,6 +741,48 @@ do_dashboard() {
     gen_dashboard || return 1
     save_dash_conf
     info "Import: Grafana → Dashboards → New → Import → Upload JSON, hoac dung menu 11"
+}
+
+# Dashboard khach hang: 1 file / khach (dashboard-kh-<job>.json), khoa job, chi 1 datasource.
+# Import vao folder rieng cua khach roi cap quyen Viewer cho khach tren folder do.
+do_dashboard_customer() {
+    has python3 || { err "Thieu python3"; return 1; }
+    dash_defaults
+    local jobs="" job name ds slug title uid out
+    if [ -n "${PROM_URL:-}" ]; then
+        jobs=$(curl -sG --max-time 10 "$PROM_URL/api/v1/label/job/values" 2>/dev/null \
+            | python3 -c 'import json,sys;print(" ".join(j for j in json.load(sys.stdin).get("data",[]) if "Proxmox-" in j))' 2>/dev/null)
+        [ -n "$jobs" ] && info "Job tren Prometheus: ${W}$jobs${N}"
+    fi
+    job=$(ask "Job (cluster) cua khach" ""); [ -n "$job" ] || { err "Chua nhap job"; return 1; }
+    if [ -n "$jobs" ] && [[ " $jobs " != *" $job "* ]]; then
+        warn "Job '$job' khong co tren $PROM_URL → kiem tra lai ten (phan biet hoa thuong)"
+        confirm "Van tiep tuc?" || return 1
+    fi
+    name=$(ask "Ten khach hang (hien tren tieu de)" "${job#Proxmox-}")
+    ds=$(ask "Ten DATASOURCE Prometheus trong Grafana chua job nay (dung y het, vd Prometheus FPT HCM)" "")
+    [ -n "$ds" ] || { err "Can ten datasource (khach chi duoc thay datasource nay)"; return 1; }
+    slug=$(echo "$job" | tr 'A-Z' 'a-z' | sed -E 's/[^a-z0-9_-]+/-/g; s/^-+|-+$//g')
+    title=$(ask "Tieu de" "$name - Proxmox Ceph")
+    uid=$(ask "UID (rieng cho khach nay)" "kh-$slug")
+    out="$DIR/dashboard-kh-$slug.json"
+    # Ten datasource -> regex khop dung 1 ten (escape ky tu dac biet)
+    local rx; rx="/^$(printf '%s' "$ds" | sed 's/[][\.^$*+?(){}|/]/\\&/g')\$/"
+    python3 "$MAKE_DASH" -o "$out" --customer-job "$job" --site-regex "$rx" --title "$title" --uid "$uid" \
+        --nodes "$DASH_NODES" --pools "$DASH_POOLS" --classes "$DASH_CLASSES" \
+        --lat-th "$DASH_LAT" --time-from "$DASH_TIME" >/dev/null || { err "Sinh dashboard loi"; return 1; }
+    ok "Da tao ${W}$out${N} (khoa job ${W}$job${N}, datasource ${W}$ds${N})"
+    info "Phan quyen: tao folder rieng cho khach trong Grafana, import vao do, cap quyen Viewer cho khach tren folder"
+    DASH_JSON=$out
+    if confirm "Import len Grafana ngay?"; then
+        local url folder
+        url=$(ask "Grafana URL" "${GRAFANA_URL:-}")
+        ask_token; [ -n "$TOKEN" ] || { err "Chua nhap token"; return 1; }
+        folder=$(ask "Folder UID cua khach (bo trong = General)" "")
+        import_dashboard "$url" "$TOKEN" "$folder"
+    else
+        info "Import sau: menu 11 → chon $(basename "$out")"
+    fi
 }
 
 # =============================================================================
@@ -763,8 +808,16 @@ forget_token() { [ -f "$GRAFANA_TOKEN_FILE" ] && rm -f "$GRAFANA_TOKEN_FILE" && 
 
 do_import() {
     title "IMPORT DASHBOARD LEN GRAFANA"
+    local url folder f files=() i=1 pick
+    # Co dashboard khach hang (dashboard-kh-*.json) -> cho chon file nao
+    for f in "$DIR/dashboard-local.json" "$DIR"/dashboard-kh-*.json; do [ -f "$f" ] && files+=("$f"); done
+    if [ "${#files[@]}" -gt 1 ]; then
+        for f in "${files[@]}"; do info "${W}$i${N} $(basename "$f")"; i=$((i + 1)); done
+        pick=$(ask "Import file nao" "1")
+        [[ "$pick" =~ ^[0-9]+$ ]] && [ "$pick" -ge 1 ] && [ "$pick" -le "${#files[@]}" ] || { err "Chon sai"; return 1; }
+        DASH_JSON=${files[$((pick - 1))]}
+    fi
     [ -f "$DASH_JSON" ] || { warn "Chua co $DASH_JSON → sinh truoc"; do_dashboard || return 1; }
-    local url folder
     url=$(ask "Grafana URL" "${GRAFANA_URL:-${ENV_GRAFANA:-http://127.0.0.1:3000}}")
     ask_token
     [ -n "$TOKEN" ] || { err "Chua nhap token"; return 1; }
@@ -1119,8 +1172,13 @@ remote_test() {  # remote_test ENVFILE -> chay thu 1 lan, in ket qua tung phan; 
     [ -n "$cl" ] && info "Cluster doc duoc: ${W}$cl${N}"
     echo "$out" | grep -q 'HTTP Error 401' && \
         warn "401 = sai token / secret. Kiem tra lai Token ID va secret (menu 17 → nhap lai secret)"
-    echo "$out" | grep -q 'HTTP Error 403\|Permission' && \
-        warn "403 = token thieu quyen → pveum acl modify / --users monitor@pve --roles PVEAuditor (va --privsep 0)"
+    if echo "$out" | grep -q 'HTTP Error 403\|Permission'; then
+        local tid user; tid=$(env_get "$1" PVE_TOKEN); tid=${tid%%=*}; user=${tid%%!*}
+        warn "403 = token thieu quyen doc (Sys.Audit tren /). Chay tren 1 node cua cluster:"
+        printf '%s\n' "pveum acl modify / --users '$user' --roles PVEAuditor" \
+            "pveum acl modify / --tokens '$tid' --roles PVEAuditor   # token tao co Privilege Separation" | sub
+        info "Xem token co privsep khong: pveum user token list '$user'  (cot privsep = 1 thi can lenh thu 2)"
+    fi
     echo "$out" | grep -q 'CERTIFICATE_VERIFY_FAILED' && \
         warn "Cert Proxmox tu ky / CA chua tin cay (PVE_VERIFY_TLS=$(env_get "$1" PVE_VERIFY_TLS)) → Enter (N) o cau 'Proxmox da co cert hop le'"
     echo "$out" | grep -q 'standby' && \
@@ -1193,6 +1251,11 @@ do_remote_add() {  # do_remote_add [TEN] -> them / sua 1 cluster
     [ "$oldmgr" = "$(mgrdef "$hosts")" ] || [ "$oldmgr" = "$(mgrdef "$(env_get "$f" PVE_API)")" ] && oldmgr=""
     mgr=$(ask "Ceph mgr host:9283, cach nhau dau phay (Enter = tu tim mgr active tren moi node)" "$oldmgr")
     mgr=${mgr// /}
+    # Nhap nham so port (vd 9831 = port exporter) vao day -> exporter coi "9831" la ten may
+    while [ -n "$mgr" ] && echo "$mgr" | tr ',' '\n' | grep -qE '^[0-9]+$'; do
+        err "'$mgr': moi muc phai la IP / ten may (vd 10.2.50.11:9283), khong phai so port. Port exporter hoi o cau sau"
+        mgr=$(ask "Ceph mgr host:9283 (Enter = tu tim)" ""); mgr=${mgr// /}
+    done
     job=$(ask "Ten job Prometheus (phai chua 'Proxmox-' de dashboard thay)" "$(env_get "$f" JOB)")
     job=${job:-$(default_job "$name")}
     port=$(ask "Port exporter tren may nay" "$(env_get "$f" PORT)")
@@ -1428,6 +1491,82 @@ do_docker_run() {
         fi
     done
     info "Target Prometheus khong doi: $(local_ip):<port> nhu khi chay systemd"
+}
+
+# =============================================================================
+# 25. Doi dai IP Docker (docker0 + mang moi): tranh trung dai IP noi bo / VPN
+# =============================================================================
+do_docker_net() {
+    title "DOI DAI IP DOCKER"
+    need_root || return 1
+    has docker && has python3 || { err "Can docker va python3"; return 1; }
+    local f=${DOCKER_DAEMON_JSON:-/etc/docker/daemon.json} bak cur bip pool before after n miss="" out
+    cur=$(ip -4 addr show docker0 2>/dev/null | awk '/inet /{print $2}')
+    info "docker0 hien tai: ${W}${cur:-chua co}${N}"
+    docker network ls -q 2>/dev/null | xargs -r docker network inspect -f '{{.Name}} {{range .IPAM.Config}}{{.Subnet}} {{end}}' 2>/dev/null | sub
+    info "Service systemd (exporter @cluster) ${G}khong anh huong${N}; container Docker ${Y}tat vai giay${N} khi restart Docker roi tu chay lai"
+    info "Mang tao bang 'docker network create' tu truoc giu dai cu (phai xoa / tao lai neu muon doi)"
+
+    bip=$(ask "IP cho docker0 (IP/prefix)" "192.168.20.1/24")
+    pool=$(ask "Dai cap cho mang Docker moi sau nay (vd 192.168.21.0/24; Enter = bo qua)" "")
+    # Kiem tra: dung dinh dang, thuoc dai noi bo, khong trung route dang co tren may
+    if ! out=$(python3 - "$bip" "$pool" "$(ip -4 route 2>/dev/null | grep -v 'docker0\|br-')" <<'PY'
+import ipaddress, sys
+bip, pool, routes = sys.argv[1], sys.argv[2], sys.argv[3]
+try:
+    nets = [ipaddress.ip_interface(bip).network] + ([ipaddress.ip_network(pool)] if pool else [])
+except ValueError as e:
+    print("ERR sai dinh dang: %s" % e); sys.exit(1)
+for n in nets:
+    if not n.is_private:
+        print("PUBLIC %s la dai IP public tren Internet -> may nay se khong toi duoc cac may that trong dai do" % n)
+    for line in routes.splitlines():
+        dst = line.split()[0] if line.split() else ""
+        if dst in ("default", ""):
+            continue
+        try:
+            r = ipaddress.ip_network(dst, strict=False)
+        except ValueError:
+            continue
+        if n.overlaps(r):
+            print("OVERLAP %s trung route dang co: %s" % (n, line.strip()))
+PY
+    ); then err "${out#ERR }"; return 1; fi
+    if [ -n "$out" ]; then
+        echo "$out" | sed 's/^PUBLIC /▲ /; s/^OVERLAP /▲ /' | sub
+        confirm "Van dung dai nay?" || return 1
+    fi
+
+    before=$(docker ps --format '{{.Names}}' | sort)
+    [ -n "$before" ] && info "Container dang chay: ${W}$(echo $before)${N}"
+    confirm "Ghi $f va restart Docker?" || { info "Huy"; return 0; }
+    bak="$f.bak-$(date +%Y%m%d-%H%M%S)"
+    [ -f "$f" ] && cp -p "$f" "$bak"
+    mkdir -p "$(dirname "$f")"
+    python3 - "$f" "$bip" "$pool" <<'PY' || { err "Ghi $f loi (file cu khong phai JSON hop le?)"; return 1; }
+import json, os, sys
+f, bip, pool = sys.argv[1:4]
+d = json.load(open(f)) if os.path.exists(f) and os.path.getsize(f) else {}
+d["bip"] = bip
+if pool:
+    d["default-address-pools"] = [{"base": pool, "size": 28 if int(pool.split("/")[1]) <= 24 else int(pool.split("/")[1])}]
+json.dump(d, open(f, "w"), indent=2)
+PY
+    if ! systemctl restart docker; then
+        err "Docker khong khoi dong voi cau hinh moi → tra lai file cu"
+        if [ -f "$bak" ]; then cp -p "$bak" "$f"; else rm -f "$f"; fi
+        systemctl restart docker; journalctl -u docker -n 10 --no-pager | sub; return 1
+    fi
+    sleep 5
+    ok "docker0: ${W}$(ip -4 addr show docker0 | awk '/inet /{print $2}')${N} ${D}(file cu: ${bak:-khong co})${N}"
+    after=$(docker ps --format '{{.Names}}' | sort)
+    for n in $before; do grep -qx "$n" <<< "$after" || miss+=" $n"; done
+    if [ -n "$miss" ]; then
+        warn "Container chua chay lai:${W}$miss${N}"
+        confirm "Khoi dong cac container nay?" && docker start $miss | sub
+    elif [ -n "$before" ]; then
+        ok "Tat ca container da chay lai"
+    fi
 }
 
 do_docker_manage() {
@@ -1845,6 +1984,7 @@ menu_body() {
     box_title "HE THONG & DOCKER" "$Y"
     box_row2 "$(mi 21 "Cai goi can thiet" "$Y")"     "$(mi 23 "Chay cluster bang Docker" "$Y")"
     box_row2 "$(mi 22 "Mo firewall cho Prometheus" "$Y")" "$(mi 24 "Quan ly container" "$Y")"
+    box_row "$(mi 25 "Doi dai IP Docker (docker0, mang moi)" "$Y")"
     box_title "TIEN ICH" "$B"
     box_row2 "$(mi 14 "Cap nhat tool (git pull)" "$B")" "$(mi 16 "Gioi thieu & ban quyen" "$B")"
     box_row2 "$(mi 15 "Cau hinh da luu" "$B")"         "$(mi 0 "Thoat" "$R")"
@@ -1867,7 +2007,7 @@ menu() {
             13) do_doctor ;;    14) do_update ;;   15) do_config ;;
             16) do_about ;;
             17) do_remote_add ;; 18) do_remote_list ;; 19) do_remote_test ;; 20) do_remote_remove ;;
-            21) do_deps ;; 22) do_firewall ;; 23) do_docker_run ;; 24) do_docker_manage ;;
+            21) do_deps ;; 22) do_firewall ;; 23) do_docker_run ;; 24) do_docker_manage ;; 25) do_docker_net ;;
             s|S) do_setup ;;
             0|q|Q) echo; echo "${IND}  ${D}Tam biet! $COPYRIGHT${N}"; echo; exit 0 ;;
             "") continue ;;
@@ -1905,6 +2045,7 @@ if [ $# -gt 0 ]; then
         firewall) NONINTERACTIVE=0; do_firewall ;;
         docker-run) NONINTERACTIVE=0; do_docker_run ;;
         docker-manage) NONINTERACTIVE=0; do_docker_manage ;;
+        docker-net) NONINTERACTIVE=0; do_docker_net ;;
         help|-h|--help) show_help ;;
         *) err "Lenh khong ro: $cmd"; show_help; exit 1 ;;
     esac

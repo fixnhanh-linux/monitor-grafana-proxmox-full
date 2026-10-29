@@ -4,6 +4,10 @@ Mới nhất ở trên. Mã commit đang chạy hiện ở đầu menu (`phien b
 
 ## Chưa phát hành
 
+- **Menu 25 / `docker-net`**: đổi dải IP Docker (`bip`, `default-address-pools`) — cảnh báo dải public (vd `192.20.0.0`) và dải trùng route đang có, sao lưu `daemon.json`, restart Docker; exporter chạy systemd không bị ảnh hưởng, container tắt vài giây rồi tool kiểm tra / khởi động lại cái nào chưa lên; Docker không lên với cấu hình mới thì trả file cũ.
+- **Dashboard khách hàng** (menu 9 → 2, `make_dashboard.py --customer-job`): khoá 1 job + 1 datasource, ẩn Site / Job, bỏ Detailed Alarms, HA Groups, hàng Exporter, không cho sửa; menu 11 chọn file nào để import (vào folder riêng của khách).
+- UID gộp dấu `-` liên tiếp: `Proxmox - Ceph Prometheus` → `Proxmox-Ceph-Prometheus` (khớp dashboard đã có, không tạo bản trùng).
+- Menu 17: không nhận số port ở câu Ceph mgr; lỗi 403 in sẵn lệnh cấp `PVEAuditor` đúng token (kể cả token privsep).
 - **UID dashboard** tự chuẩn hoá về `[A-Za-z0-9_-]`, tối đa 40 ký tự (menu 9, `make_dashboard.py`, và ngay trước khi import) — hết lỗi Grafana `uid contains illegal characters`.
 - **Token Grafana gõ 1 lần**: chọn lưu thì nằm riêng ở `.grafana-token` (chỉ root đọc, không vào git); token sai / hết hạn tự xoá và hỏi lại; xoá tay ở menu 15.
 - **Menu 11 với Grafana cert tự ký**: tool lấy cert, in SHA-256 để so với trình duyệt, bạn đồng ý thì **ghim** cert đó (`.grafana-cert.pem`, chỉ dùng khi gọi Grafana) — vẫn kiểm tra TLS, không tắt. Cert ghi tên khác IP trong URL thì tool gọi bằng tên trong cert và trỏ về IP thật. Token thiếu quyền (Viewer) thì báo cần role Editor.

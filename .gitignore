@@ -7,3 +7,4 @@ dashboard_*_auto.json
 dashboard-local.json
 .grafana-cert.pem
 .grafana-token
+dashboard-kh-*.json

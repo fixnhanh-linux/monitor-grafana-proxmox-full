@@ -12,7 +12,8 @@
   },
   "tags": [
     "proxmox",
-    "ceph"
+    "ceph",
+    "noi-bo"
   ],
   "annotations": {
     "list": [
