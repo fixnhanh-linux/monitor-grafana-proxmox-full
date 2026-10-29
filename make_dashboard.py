@@ -170,7 +170,9 @@ def parse_ha_alias(items):
 
 
 def node_q(expr):
-    return 'label_replace(%s, "host", "$1", "id", "node/(.*)")' % expr
+    # Chi giu nhan host: join nhieu query ma con nhan id/instance/... thi Grafana doi ten
+    # nhan trung thanh "id 1", "id 2" ... -> loc cot an khong bat duoc, hien cot thua.
+    return 'max by (host) (label_replace(%s, "host", "$1", "id", "node/(.*)"))' % expr
 
 
 NO_ALARM = ('max by (severity, name, message) (ceph_health_detail{%s} > 0)\n'
@@ -178,7 +180,7 @@ NO_ALARM = ('max by (severity, name, message) (ceph_health_detail{%s} > 0)\n'
             '  "severity", "OK", "", ""), "name", "HEALTH_OK", "", ""),\n'
             '  "message", "Không có cảnh báo", "", "")' % J)
 
-HIDE = "^(Time.*|__name__.*|instance.*|job.*|job_type.*|id|state|group|Value #Group)$"
+HIDE = "^(Time.*|__name__.*|instance.*|job.*|job_type.*|id( \\d+)?|state( \\d+)?|group( \\d+)?|Value #Group)$"
 
 
 # --------------------------------------------------------------------------- dashboard
@@ -261,9 +263,9 @@ def build(args):
                 tgt(node_q('pve_memory_size_bytes{%s}' % nj), "RAM_Total", fmt="table"),
                 tgt(node_q('pve_uptime_seconds{%s}' % nj), "Uptime", fmt="table"),
                 # Cot HA / HA Groups chi co khi cluster co HA group: query rong -> cot tu an
-                tgt('%s\nand on(job) count by (job) (pve_ha_groups_custom_info{%s})'
+                tgt('%s\nand on() count(pve_ha_groups_custom_info{%s})'
                     % (node_q('pve_ha_state{state="online", %s}' % nj), J), "HA", fmt="table"),
-                tgt('pve_ha_groups_custom_info{%s}' % J, "Group", fmt="table")],
+                tgt('max by (host, groups) (pve_ha_groups_custom_info{%s})' % J, "Group", fmt="table")],
                [{"id": "joinByField", "options": {"byField": "host", "mode": "outer"}},
                 drop_extra_fields(HIDE),
                 organize(rename={"host": "Node Proxmox", "groups": "HA Groups", "Value #HA": "HA",
@@ -282,7 +284,7 @@ def build(args):
                        {"type": "special", "options": {"match": "null",
                                                        "result": {"text": "-", "color": "text"}}}]),
                        ("custom.cellOptions", {"type": "color-text"})),
-                   override("HA Groups", ("custom.width", 220),
+                   override("HA Groups", ("custom.width", 300),
                             ("custom.cellOptions", {"type": "color-text"}),
                             ("mappings", [
                                 {"type": "value", "options": parse_ha_alias(args.ha_alias)},

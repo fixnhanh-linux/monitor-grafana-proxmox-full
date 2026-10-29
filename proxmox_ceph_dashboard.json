@@ -1170,7 +1170,7 @@
             "type": "prometheus",
             "uid": "${Site}"
           },
-          "expr": "label_replace(pve_cpu_usage_ratio{id=~\"node/.*\", job=~\"$job\"} * 100, \"host\", \"$1\", \"id\", \"node/(.*)\")",
+          "expr": "max by (host) (label_replace(pve_cpu_usage_ratio{id=~\"node/.*\", job=~\"$job\"} * 100, \"host\", \"$1\", \"id\", \"node/(.*)\"))",
           "refId": "CPU",
           "range": false,
           "instant": true,
@@ -1181,7 +1181,7 @@
             "type": "prometheus",
             "uid": "${Site}"
           },
-          "expr": "label_replace(pve_memory_usage_bytes{id=~\"node/.*\", job=~\"$job\"} / pve_memory_size_bytes{id=~\"node/.*\", job=~\"$job\"} * 100, \"host\", \"$1\", \"id\", \"node/(.*)\")",
+          "expr": "max by (host) (label_replace(pve_memory_usage_bytes{id=~\"node/.*\", job=~\"$job\"} / pve_memory_size_bytes{id=~\"node/.*\", job=~\"$job\"} * 100, \"host\", \"$1\", \"id\", \"node/(.*)\"))",
           "refId": "RAM_Pct",
           "range": false,
           "instant": true,
@@ -1192,7 +1192,7 @@
             "type": "prometheus",
             "uid": "${Site}"
           },
-          "expr": "label_replace(pve_memory_size_bytes{id=~\"node/.*\", job=~\"$job\"}, \"host\", \"$1\", \"id\", \"node/(.*)\")",
+          "expr": "max by (host) (label_replace(pve_memory_size_bytes{id=~\"node/.*\", job=~\"$job\"}, \"host\", \"$1\", \"id\", \"node/(.*)\"))",
           "refId": "RAM_Total",
           "range": false,
           "instant": true,
@@ -1203,7 +1203,7 @@
             "type": "prometheus",
             "uid": "${Site}"
           },
-          "expr": "label_replace(pve_uptime_seconds{id=~\"node/.*\", job=~\"$job\"}, \"host\", \"$1\", \"id\", \"node/(.*)\")",
+          "expr": "max by (host) (label_replace(pve_uptime_seconds{id=~\"node/.*\", job=~\"$job\"}, \"host\", \"$1\", \"id\", \"node/(.*)\"))",
           "refId": "Uptime",
           "range": false,
           "instant": true,
@@ -1214,7 +1214,7 @@
             "type": "prometheus",
             "uid": "${Site}"
           },
-          "expr": "label_replace(pve_ha_state{state=\"online\", id=~\"node/.*\", job=~\"$job\"}, \"host\", \"$1\", \"id\", \"node/(.*)\")\nand on(job) count by (job) (pve_ha_groups_custom_info{job=~\"$job\"})",
+          "expr": "max by (host) (label_replace(pve_ha_state{state=\"online\", id=~\"node/.*\", job=~\"$job\"}, \"host\", \"$1\", \"id\", \"node/(.*)\"))\nand on() count(pve_ha_groups_custom_info{job=~\"$job\"})",
           "refId": "HA",
           "range": false,
           "instant": true,
@@ -1225,7 +1225,7 @@
             "type": "prometheus",
             "uid": "${Site}"
           },
-          "expr": "pve_ha_groups_custom_info{job=~\"$job\"}",
+          "expr": "max by (host, groups) (pve_ha_groups_custom_info{job=~\"$job\"})",
           "refId": "Group",
           "range": false,
           "instant": true,
@@ -1244,7 +1244,7 @@
           "id": "filterFieldsByName",
           "options": {
             "exclude": {
-              "pattern": "^(Time.*|__name__.*|instance.*|job.*|job_type.*|id|state|group|Value #Group)$"
+              "pattern": "^(Time.*|__name__.*|instance.*|job.*|job_type.*|id( \\d+)?|state( \\d+)?|group( \\d+)?|Value #Group)$"
             }
           }
         },
@@ -1361,7 +1361,7 @@
             "properties": [
               {
                 "id": "custom.width",
-                "value": 220
+                "value": 300
               },
               {
                 "id": "custom.cellOptions",

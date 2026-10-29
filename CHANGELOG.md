@@ -4,6 +4,10 @@ Mới nhất ở trên. Mã commit đang chạy hiện ở đầu menu (`phien b
 
 ## Chưa phát hành
 
+- **Dashboard**: bảng *Resource Cluster with HA Groups* hết các cột thừa `id 1 … id 5` (mỗi truy vấn chỉ giữ nhãn `host`); cột HA Groups rộng hơn.
+- **Menu 10**: cảnh báo khi IP nhập không phải của máy monitor (target sẽ trỏ sai máy); không nhận thư mục / glob làm file cấu hình chính; SSH chỉ hỏi mật khẩu 1 lần, đề nghị tạo key + `ssh-copy-id`.
+- **Menu 12**: target down vì trỏ tới máy khác thì chỉ ra cách sửa.
+- Tên job mặc định không còn bị lặp `Proxmox-Proxmox-…` khi tên cluster đã bắt đầu bằng `Proxmox-`.
 - **Menu 11** kiểm tra datasource Prometheus trên Grafana trước khi import: báo khi Grafana chưa có datasource nào, khi regex Site không khớp datasource nào, và chỉ ra datasource trỏ tới Prometheus đã cấu hình.
 - **Exporter 2026.10.30-6**: thêm `/health` (503 khi vòng thu thập treo quá `3 × INTERVAL`, tối thiểu 120 s); Docker image có `HEALTHCHECK` → `docker ps` hiện `unhealthy`.
 - **Unit test** exporter (`tests/`) và **CI GitHub Actions**: `bash -n`, `shellcheck`, unit test, sinh lại dashboard so với file trong repo, `promtool check rules`.

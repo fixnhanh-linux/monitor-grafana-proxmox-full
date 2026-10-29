@@ -579,8 +579,15 @@ prom_check() {  # prom_check URL -> 0 neu exporter duoc scrape va job khop
     if [ -z "$out" ]; then
         err "Prometheus chua scrape exporter → them target (menu 10) roi reload Prometheus"; rc=1
     else
+        local tip myips; myips=" $(hostname -I 2>/dev/null) "
         while read -r l; do
             if [[ "$l" == *" 1" ]]; then ok "$l"; else err "$l (target down)"; rc=1; fi
+            # target down vi tro sai may: exporter chay o may nay, target phai la IP may nay
+            tip=$(echo "$l" | sed -n 's/.*instance=\([^:,}]*\):.*/\1/p')
+            if [ -n "$tip" ] && [ "$myips" != "  " ] && [[ "$myips" != *" $tip "* ]] && [[ "$l" != *" 1" ]]; then
+                warn "  ↑ target tro toi $tip, khong phai may nay ($(echo $myips)) → chay lai menu 10, cau IP chi can Enter"
+                info "  Tren may Prometheus kiem tra: curl -s http://$(local_ip):<port>/metrics | head -3  (khong duoc → menu 22 mo firewall)"
+            fi
         done <<< "$out"
     fi
 
@@ -688,7 +695,13 @@ do_prom() {
 prom_all() {
     local ip f n p job m bad st jobs="|" cnt=0 skip=0 dn="" cl
     f="$DIR/prometheus-scrape-all.yml"
-    ip=$(ask "IP may nay ma Prometheus scrape toi" "$(local_ip)")
+    while :; do
+        ip=$(ask "IP CUA MAY NAY (may monitor) ma Prometheus scrape toi - thuong chi can Enter" "$(local_ip)")
+        # Nhap nham IP may Prometheus -> target tro ve chinh Prometheus, khong co du lieu
+        if hostname -I 2>/dev/null | tr ' ' '\n' | grep -qx "$ip"; then break; fi
+        warn "$ip khong phai IP cua may nay ($(hostname -I 2>/dev/null | xargs)) → exporter chay o day, target phai la IP may nay"
+        confirm "Van dung $ip (vd IP NAT / VIP)?" && break
+    done
     {
         echo "# FIX NHANH - sinh boi menu.sh tren $(hostname) ($ip) luc $(date '+%F %T')"
         echo "# Dan cac job duoi vao muc scrape_configs: cua prometheus.yml (giu nguyen thut le)."
@@ -737,7 +750,7 @@ EOF
     fi
     for n in $(remote_names); do
         job=$(env_get "$REMOTE_DIR/$n.env" JOB)
-        list+="$n|${job:-Proxmox-$n}|$(env_get "$REMOTE_DIR/$n.env" PORT)"$'\n'
+        list+="$n|${job:-$(default_job "$n")}|$(env_get "$REMOTE_DIR/$n.env" PORT)"$'\n'
     done
     # Lay metric 1 lan / exporter, xep exporter chay tot len truoc: khi 2 cluster trung job
     # thi giu cai dang OK, bo cai loi / khong tra loi.
@@ -782,6 +795,37 @@ EOF
     fi
 }
 
+# SSH toi may Prometheus: dung chung 1 ket noi (hoi mat khau toi da 1 lan / 2 phut),
+# chua co key thi de nghi tao + ssh-copy-id.
+SSH_CM=(-o ControlMaster=auto -o "ControlPath=${TMPDIR:-/tmp}/.monitor-ssh-%C" -o ControlPersist=120 -o ConnectTimeout=10)
+rssh() { ssh "${SSH_CM[@]}" "$@"; }
+rscp() { scp "${SSH_CM[@]}" "$@"; }
+
+ssh_prepare() {  # ssh_prepare USER@HOST
+    ssh -o BatchMode=yes -o ConnectTimeout=8 -o StrictHostKeyChecking=accept-new "$1" true 2>/dev/null && return 0
+    warn "May nay chua SSH vao $1 bang key → moi lenh se hoi mat khau"
+    if has ssh-copy-id && confirm "Tao SSH key va cai len $1 ngay (nhap mat khau 1 lan, lan sau khong hoi)?"; then
+        [ -f "$HOME/.ssh/id_ed25519" ] || ssh-keygen -q -t ed25519 -N "" -f "$HOME/.ssh/id_ed25519" || return 1
+        ssh-copy-id -o StrictHostKeyChecking=accept-new "$1" >/dev/null 2>&1 && ok "Da cai key, tu gio khong hoi mat khau" \
+            || warn "ssh-copy-id loi → se hoi mat khau (1 lan)"
+    else
+        info "Se hoi mat khau 1 lan cho ca lan chay nay"
+    fi
+}
+
+ask_prom_cfg() {  # file prometheus.yml tren may Prometheus (khong phai thu muc / glob)
+    case "${PROM_CFG:-}" in *"*"*|*/scrape_configs/*|*/rules/*|*/) PROM_CFG="" ;; esac  # gia tri sai da luu truoc day
+    local c
+    while :; do
+        c=$(ask "File cau hinh CHINH cua Prometheus (thuong chi can Enter)" "${PROM_CFG:-/etc/prometheus/prometheus.yml}")
+        case "$c" in
+            *'*'*|*/scrape_configs/*|*/rules/*|*/) err "'$c' khong phai file chinh → nhap file prometheus.yml (vd /etc/prometheus/prometheus.yml)" >&2 ;;
+            *) echo "$c"; return ;;
+        esac
+        PROM_CFG=""
+    done
+}
+
 prom_host_slug() { (hostname -s 2>/dev/null || hostname) | tr 'A-Z' 'a-z'; }
 prom_file_name() { echo "proxmox-ceph-$(prom_host_slug).yml"; }      # ten file tren may Prometheus
 prom_file_old() { echo "proxmox-fixnhanh-$(hostname -s 2>/dev/null || hostname).yml"; }  # ten cu (ban 9f7a591)
@@ -795,12 +839,13 @@ prom_push() {
     [ -z "$def" ] && [ -n "${PROM_URL:-}" ] && def="root@$(echo "$PROM_URL" | sed -E 's|^https?://||; s|[:/].*||')"
     host=$(ask "SSH may Prometheus (user@ip)" "$def")
     [ -n "$host" ] || { err "Chua nhap may Prometheus"; return 1; }
-    cfg=$(ask "File cau hinh chinh" "${PROM_CFG:-/etc/prometheus/prometheus.yml}")
+    ssh_prepare "$host"
+    cfg=$(ask_prom_cfg)
     dir=$(ask "Thu muc scrape_config_files" "${PROM_DIR:-/etc/prometheus/scrape_configs}")
     dst="$dir/$(prom_file_name)"
 
     info "Kiem tra tren ${W}$host${N}..."
-    out=$(ssh -o ConnectTimeout=10 "$host" "echo SSH_OK; test -d '$dir' && echo DIR_OK; grep -q '^scrape_config_files:' '$cfg' && echo CFG_OK; command -v promtool >/dev/null && echo PROMTOOL_OK; true" 2>&1)
+    out=$(rssh "$host" "echo SSH_OK; test -d '$dir' && echo DIR_OK; grep -q '^scrape_config_files:' '$cfg' && echo CFG_OK; command -v promtool >/dev/null && echo PROMTOOL_OK; true" 2>&1)
     [[ "$out" == *SSH_OK* ]] || { err "SSH toi $host loi:"; echo "$out" | sub; info "Can dang nhap SSH bang key: ssh-copy-id $host"; return 1; }
     [[ "$out" == *DIR_OK* ]] || { err "Khong co thu muc $dir tren $host"; return 1; }
     [[ "$out" == *CFG_OK* ]] || warn "$cfg chua co 'scrape_config_files:' tro toi $dir → Prometheus se khong doc file nay"
@@ -810,22 +855,22 @@ prom_push() {
     jobs=$(sed -n 's/^  - job_name: //p' "$f" | paste -sd'|' -)
     pat="^[[:space:]]*-[[:space:]]*job_name:[[:space:]]*.?($jobs).?[[:space:]]*\$"
     local mine="^($(prom_file_name)|$(prom_file_old)):" old="$dir/$(prom_file_old)"
-    out=$(ssh "$host" "cd '$dir' && grep -HnE '$pat' *.yml *.yaml 2>/dev/null | grep -vE '$mine'")
+    out=$(rssh "$host" "cd '$dir' && grep -HnE '$pat' *.yml *.yaml 2>/dev/null | grep -vE '$mine'")
     if [ -n "$out" ]; then
         err "Job da co o file khac (trung job_name → Prometheus khong khoi dong):"; echo "$out" | sub
         info "Xoa / doi ten job cu tren may Prometheus, hoac doi JOB o menu 17, roi chay lai"
         return 1
     fi
-    out=$(ssh "$host" "cd '$dir' && grep -HnE ':(9283|9221)\\b' *.yml *.yaml 2>/dev/null | grep -vE '$mine'")
+    out=$(rssh "$host" "cd '$dir' && grep -HnE ':(9283|9221)\\b' *.yml *.yaml 2>/dev/null | grep -vE '$mine'")
     if [ -n "$out" ]; then
         warn "Target ceph mgr / pve exporter cu dang co (neu la cung cluster thi XOA, khong se nhan doi so lieu):"
         echo "$out" | sub
     fi
 
     confirm "Chep file → ${W}$host:$dst${N} roi reload Prometheus?" || { info "Huy"; return 0; }
-    scp -q "$f" "$host:$dst.new" || { err "scp loi"; return 1; }
+    rscp -q "$f" "$host:$dst.new" || { err "scp loi"; return 1; }
     # File ten cu (proxmox-fixnhanh-*) cung chua cac job nay -> cat di, loi thi tra lai
-    out=$(ssh "$host" "cp -p '$dst' '$dst.bak' 2>/dev/null; mv '$dst.new' '$dst'
+    out=$(rssh "$host" "cp -p '$dst' '$dst.bak' 2>/dev/null; mv '$dst.new' '$dst'
         [ -f '$old' ] && mv '$old' '$old.old'
         if command -v promtool >/dev/null && ! promtool check config '$cfg' >/tmp/.promcheck 2>&1; then
             if [ -f '$dst.bak' ]; then mv '$dst.bak' '$dst'; else rm -f '$dst'; fi
@@ -854,9 +899,10 @@ prom_rules_push() {
     has ssh && has scp || { err "Can ssh va scp"; return 1; }
     [ -n "$host" ] || host=$(ask "SSH may Prometheus (user@ip)" "${PROM_SSH:-}")
     [ -n "$host" ] || { err "Chua nhap may Prometheus"; return 1; }
-    [ -n "$cfg" ] || cfg=$(ask "File cau hinh chinh" "${PROM_CFG:-/etc/prometheus/prometheus.yml}")
+    ssh_prepare "$host"
+    [ -n "$cfg" ] || cfg=$(ask_prom_cfg)
 
-    out=$(ssh -o ConnectTimeout=10 "$host" "echo SSH_OK; command -v promtool >/dev/null && echo PROMTOOL_OK
+    out=$(rssh "$host" "echo SSH_OK; command -v promtool >/dev/null && echo PROMTOOL_OK
         grep -q '^rule_files:[[:space:]]*\$' '$cfg' && echo RF_BLOCK
         grep -q '^rule_files:' '$cfg' && echo RF_KEY
         sed -n '/^rule_files:/,/^[^[:space:]#-]/p' '$cfg' | sed -n 's/^[[:space:]]*-[[:space:]]*/RF:/p'; true" 2>&1)
@@ -883,8 +929,8 @@ prom_rules_push() {
     save_conf PROM_SSH "$host"; save_conf PROM_CFG "$cfg"; save_conf PROM_RULES_DIR "$dir"
 
     confirm "Chep alert rules → ${W}$host:$dst${N} roi reload Prometheus?" || { info "Huy"; return 0; }
-    ssh "$host" "mkdir -p '$dir'" && scp -q "$src" "$host:$dst.new" || { err "Chep file loi"; return 1; }
-    out=$(ssh "$host" "cp -p '$dst' '$dst.bak' 2>/dev/null; mv '$dst.new' '$dst'
+    rssh "$host" "mkdir -p '$dir'" && rscp -q "$src" "$host:$dst.new" || { err "Chep file loi"; return 1; }
+    out=$(rssh "$host" "cp -p '$dst' '$dst.bak' 2>/dev/null; mv '$dst.new' '$dst'
         if [ '$add' = 1 ]; then
             cp -p '$cfg' '$cfg.bak'
             if grep -q '^rule_files:' '$cfg'; then sed -i '/^rule_files:[[:space:]]*\$/a\\  - $dir/*.yml' '$cfg'
@@ -930,6 +976,7 @@ do_doctor() {
 # 17-20. Theo doi tu xa: exporter chay tren may monitor, lay du lieu qua API
 #        Proxmox (token chi doc) + ceph mgr :9283. 1 cluster = 1 service @<ten>.
 # =============================================================================
+default_job() { case "$1" in Proxmox-*) echo "$1" ;; *) echo "Proxmox-$1" ;; esac; }  # khong lap "Proxmox-Proxmox-"
 remote_names() { ls "$REMOTE_DIR"/*.env 2>/dev/null | sed 's|.*/||; s|\.env$||'; }
 env_get() { sed -n "s/^$2=//p" "$1" 2>/dev/null | tail -1; }   # env_get FILE KEY
 
@@ -1045,7 +1092,7 @@ do_remote_add() {  # do_remote_add [TEN] -> them / sua 1 cluster
     mgr=$(ask "Ceph mgr host:9283, cach nhau dau phay (Enter = tu tim mgr active tren moi node)" "$oldmgr")
     mgr=${mgr// /}
     job=$(ask "Ten job Prometheus (phai chua 'Proxmox-' de dashboard thay)" "$(env_get "$f" JOB)")
-    job=${job:-Proxmox-$name}
+    job=${job:-$(default_job "$name")}
     port=$(ask "Port exporter tren may nay" "$(env_get "$f" PORT)")
     port=${port:-$(next_free_port)}
     [[ "$port" =~ ^[0-9]+$ ]] && [ "$port" -ge 1024 ] && [ "$port" -le 65535 ] || { err "Port khong hop le: $port"; return 1; }
@@ -1104,7 +1151,7 @@ do_remote_list() {
         MET[$n]=$(curl -sf --max-time 10 "http://127.0.0.1:$p/metrics" 2>/dev/null)
         real=$(echo "${MET[$n]}" | sed -n 's/^pve_cluster_info{id="cluster\/\([^"]*\)".*/\1/p' | head -1)
         REAL[$n]=$real; [ -n "$real" ] && CNT[$real]=$(( ${CNT[$real]:-0} + 1 ))
-        c=$(env_get "$f" JOB); c=${c:-Proxmox-$n}; JOBN[$c]=$(( ${JOBN[$c]:-0} + 1 ))
+        c=$(env_get "$f" JOB); c=${c:-$(default_job "$n")}; JOBN[$c]=$(( ${JOBN[$c]:-0} + 1 ))
     done
     for n in $names; do
         f="$REMOTE_DIR/$n.env"; p=$(env_get "$f" PORT); m=${MET[$n]}; real=${REAL[$n]}
@@ -1112,7 +1159,7 @@ do_remote_list() {
         [ "$st" != active ] && has docker && [ "$(container_state "$n")" = running ] && st=docker
         c() { local v; v=$(echo "$m" | sed -n "s/^pve_ceph_extra_exporter_up{collector=\"$1\"} //p")
               if [ "$v" = 1 ]; then printf '%s✔%s' "$G" "$N"; elif [ -z "$v" ]; then printf '%s-%s' "$D" "$N"; else printf '%s✘%s' "$R" "$N"; fi; }
-        local rc=$D jc="" job; job=$(env_get "$f" JOB); job=${job:-Proxmox-$n}
+        local rc=$D jc="" job; job=$(env_get "$f" JOB); job=${job:-$(default_job "$n")}
         [ -n "$real" ] && rc=$C
         [ -n "$real" ] && [ "${CNT[$real]:-0}" -gt 1 ] && { rc=$R; dup+=" $n"; }
         [ "${JOBN[$job]:-0}" -gt 1 ] && { jc=$R; dup+=" $n"; }
