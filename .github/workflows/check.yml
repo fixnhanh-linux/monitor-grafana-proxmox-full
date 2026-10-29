@@ -1,0 +1,32 @@
+# FIX NHANH - kiem tra moi lan day code: script, exporter, dashboard, alert rules
+name: check
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  check:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Cu phap bash
+        run: bash -n menu.sh && bash -n exporter/install_exporter.sh
+
+      - name: Shellcheck (chi loi nghiem trong)
+        run: shellcheck -S error menu.sh exporter/install_exporter.sh
+
+      - name: Python compile
+        run: python3 -m py_compile exporter/pve_ceph_extra_exporter.py make_dashboard.py
+
+      - name: Unit test exporter
+        run: python3 -m unittest discover -s tests -v
+
+      - name: Sinh dashboard, so voi file trong repo
+        run: |
+          python3 make_dashboard.py -o /tmp/dash.json
+          python3 -c "import json,sys; a=json.load(open('/tmp/dash.json')); b=json.load(open('proxmox_ceph_dashboard.json')); sys.exit(0 if a==b else 'proxmox_ceph_dashboard.json chua sinh lai sau khi sua make_dashboard.py')"
+
+      - name: promtool check rules
+        run: docker run --rm -v "$PWD/alerts:/a:ro" --entrypoint promtool prom/prometheus:v2.53.0 check rules /a/pve-ceph-alerts.yml

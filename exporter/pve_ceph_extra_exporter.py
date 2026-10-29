@@ -51,7 +51,7 @@ from socketserver import ThreadingMixIn
 from urllib.error import HTTPError
 from urllib.request import Request, urlopen
 
-VERSION = "2026.10.30-5"
+VERSION = "2026.10.30-6"
 
 HA_GROUPS_CFG = "/etc/pve/ha/groups.cfg"
 HA_RULES_CFG = "/etc/pve/ha/rules.cfg"  # PVE 9: HA group -> node-affinity rule
@@ -434,6 +434,7 @@ class Collector(object):
         self.lock = threading.Lock()
         self.ready = threading.Event()
         self.cache = ""
+        self.last_ts = 0.0
         self.mgr_url, self.mgr_url_ts = "", 0.0
         self.mgr_good = 0
         self.api = None
@@ -520,6 +521,7 @@ class Collector(object):
             text = self.collect()
             with self.lock:
                 self.cache = text
+                self.last_ts = time.time()
             self.ready.set()
             time.sleep(max(1.0, self.args.interval - (time.time() - t0)))
 
@@ -531,17 +533,32 @@ class Collector(object):
         with self.lock:
             return self.cache
 
+    def age(self):
+        """Giay tu lan thu thap xong gan nhat (None = chua thu thap lan nao)."""
+        with self.lock:
+            return time.time() - self.last_ts if self.last_ts else None
+
 
 def make_handler(collector):
     class Handler(BaseHTTPRequestHandler):
         def do_GET(self):
-            if self.path.split("?")[0] == "/metrics":
+            path, code = self.path.split("?")[0], 200
+            if path == "/metrics":
                 body = collector.get().encode("utf-8")
                 ctype = "text/plain; version=0.0.4; charset=utf-8"
+            elif path == "/health":
+                # 503 khi vong thu thap nen bi treo (lenh ceph / API khong tra loi) -> Docker / systemd biet
+                age, limit = collector.age(), max(3 * collector.args.interval, 120)
+                if age is not None and age <= limit:
+                    body = ("ok %ds\n" % age).encode()
+                else:
+                    code = 503
+                    body = ("stale %s\n" % ("chua thu thap" if age is None else "%ds" % age)).encode()
+                ctype = "text/plain"
             else:
-                body = b"<a href='/metrics'>/metrics</a>\n"
+                body = b"<a href='/metrics'>/metrics</a> <a href='/health'>/health</a>\n"
                 ctype = "text/html"
-            self.send_response(200)
+            self.send_response(code)
             self.send_header("Content-Type", ctype)
             self.send_header("Content-Length", str(len(body)))
             self.end_headers()

@@ -443,6 +443,49 @@ gen_dashboard() {  # sinh $DASH_JSON tu cac bien DASH_*
     ok "Da tao ${W}$DASH_JSON${N}"
 }
 
+# Dashboard chon datasource qua bien Site (loc theo DASH_SITE): Grafana khong co datasource
+# Prometheus nao khop thi moi o deu "No data" -> bao truoc khi import.
+grafana_ds_check() {  # grafana_ds_check URL TOKEN -> 1 neu nguoi dung huy
+    local url="$1" token="$2" ds code out
+    ds=$(curl -s --max-time 10 -w '\n%{http_code}' -H "Authorization: Bearer $token" "$url/api/datasources")
+    code=${ds##*$'\n'}; ds=${ds%$'\n'*}
+    if [ "$code" != 200 ]; then
+        [ "$code" = 401 ] && { err "Token sai / het han (401)"; return 1; }
+        info "Khong doc duoc danh sach datasource (HTTP $code, token thieu quyen) → bo qua kiem tra"
+        return 0
+    fi
+    out=$(printf '%s' "$ds" | python3 -c '
+import json, re, sys
+site, prom = sys.argv[1], sys.argv[2].rstrip("/")
+ds = [d for d in json.load(sys.stdin) if d.get("type") == "prometheus"]
+rx = site[1:-1] if len(site) > 1 and site.startswith("/") and site.endswith("/") else site
+for d in ds:
+    hit = (not rx) or re.search(rx, d.get("name", "")) is not None
+    same = prom and d.get("url", "").rstrip("/") == prom
+    print("%s|%s|%s|%s" % ("Y" if hit else "N", "Y" if same else "N", d.get("name", ""), d.get("url", "")))
+' "${DASH_SITE:-}" "${PROM_URL:-}" 2>/dev/null) || { info "Khong doc duoc danh sach datasource → bo qua kiem tra"; return 0; }
+    if [ -z "$out" ]; then
+        err "Grafana chua co datasource Prometheus nao → dashboard se trong"
+        info "Grafana → Connections → Data sources → Add → Prometheus, URL ${PROM_URL:-http://<prometheus>:9090}"
+        confirm "Van import?" || return 1; return 0
+    fi
+    info "Datasource Prometheus tren Grafana (✔ = hien trong bien Site):"
+    local hit same name dsurl nhit=0
+    while IFS='|' read -r hit same name dsurl; do
+        [ "$hit" = Y ] && nhit=$((nhit + 1))
+        printf '%s      %s %s%s  %s%s\n' "$IND" "$([ "$hit" = Y ] && echo "${G}✔${N}" || echo "${D}·${N}")" \
+            "$name" "$N" "${D}$dsurl" "$([ "$same" = Y ] && echo "  ${G}← Prometheus da cau hinh${N}")${N}"
+    done <<< "$out"
+    if [ "$nhit" = 0 ]; then
+        warn "Khong datasource nao khop regex Site '${DASH_SITE}' → sua o menu 9 (de trong = tat ca) roi sinh lai"
+        confirm "Van import?" || return 1
+    fi
+    if [ -n "${PROM_URL:-}" ] && ! grep -q '^.|Y|' <<< "$out"; then
+        warn "Khong datasource nao tro toi $PROM_URL (Prometheus dang scrape exporter) → kiem tra lai khi chon Site"
+    fi
+    return 0
+}
+
 import_dashboard() {  # import_dashboard URL TOKEN FOLDER
     local url="${1%/}" token="$2" folder="$3" payload resp
     has curl && has python3 || { err "Can curl va python3"; return 1; }
@@ -450,6 +493,7 @@ import_dashboard() {  # import_dashboard URL TOKEN FOLDER
     if ! curl -sf --max-time 10 -H "Authorization: Bearer $token" "$url/api/health" >/dev/null; then
         err "Khong ket noi duoc $url"; return 1
     fi
+    grafana_ds_check "$url" "$token" || return 1
     payload=$(mktemp)
     python3 - "$DASH_JSON" "$folder" > "$payload" <<'PY'
 import json, sys
@@ -683,7 +727,7 @@ EOF
         fi
     }
 
-    local list="" rank row
+    local list="" rank
     if [ -f "$UNIT" ]; then
         if [ -n "$(current_flags)" ]; then
             warn "Exporter local chay che do khong gop (--no-*) → dung mau rieng o tren, khong dua vao file nay"

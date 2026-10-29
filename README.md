@@ -11,6 +11,8 @@ Bộ tool dựng dashboard **Proxmox - Ceph Prometheus** và lấp các ô đang
 | `exporter/pve_ceph_extra_exporter.py` | Exporter bổ sung: trạng thái recovery/rebalance, Total Health %, Recovery Speed, HA Groups |
 | `exporter/install_exporter.sh` | Cài exporter thành service systemd trên 1 node Proxmox |
 | `alerts/pve-ceph-alerts.yml` | Alert rules Prometheus: exporter, Ceph, Proxmox |
+| `tests/` | Unit test exporter (`python3 -m unittest discover -s tests`), chạy tự động trên GitHub Actions |
+| `CHANGELOG.md` | Nhật ký thay đổi |
 
 ## Vì sao dashboard cũ có ô "No data"
 
@@ -93,7 +95,7 @@ bash /root/monitor-grafana-proxmox-full/menu.sh
 | 5 / 6 / 7 / 8 | Log, restart, đổi port, gỡ cài |
 | 9 | Sinh dashboard JSON — tự đọc số node / pool / device class từ Ceph |
 | 10 | In đoạn `prometheus.yml` mẫu cho node này; máy có cluster từ xa thì gộp **tất cả cluster** vào `prometheus-scrape-all.yml` (kiểm tra từng exporter, bỏ job trùng, báo 2 cấu hình cùng 1 cluster), rồi tuỳ chọn đẩy qua SSH lên máy Prometheus, kèm alert rules (xem dưới) |
-| 11 | Import dashboard lên Grafana qua API (service account token, role Editor) |
+| 11 | Import dashboard lên Grafana qua API (service account token, role Editor); kiểm tra trước Grafana có datasource Prometheus khớp biến Site |
 | 12 | Hỏi Prometheus: target exporter có `up`, job của exporter có khớp job ceph mgr, device class từng cluster |
 | 13 | Kiểm tra tổng thể (1 + 3 + 12) |
 | 14 | Cập nhật tool (`git pull`), tự hỏi cài lại exporter nếu exporter có thay đổi |
@@ -346,6 +348,8 @@ Metric tự giám sát của exporter (hàng **Exporter** cuối dashboard):
 | `pve_ceph_extra_exporter_last_collect_timestamp` | Thời điểm thu thập gần nhất (unix) — dùng để phát hiện dữ liệu cũ |
 | `pve_ceph_extra_exporter_mode{mode}` | `local` / `remote` |
 | `pve_ceph_extra_exporter_build_info{version}` | Phiên bản exporter |
+
+Ngoài `/metrics`, exporter có `/health`: `200 ok` khi lần thu thập gần nhất còn mới, `503 stale` khi vòng thu thập treo quá `3 × INTERVAL` (tối thiểu 120 s). Docker image dùng nó cho `HEALTHCHECK`, nên container treo hiện `unhealthy` trong `docker ps`.
 
 ---
 
