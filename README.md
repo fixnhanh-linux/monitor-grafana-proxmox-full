@@ -77,7 +77,7 @@ Các bước tool tự làm (tuỳ lựa chọn ở câu 1):
 | Tên ngắn HA Groups | Menu **9** → trả lời `y` ở câu HA Groups; `DASH_ALIASES` lưu dạng `chuoi=Ten:mau;;chuoi2=Ten2` |
 | Gỡ exporter | Menu **8** hoặc `bash menu.sh uninstall` |
 
-Token Grafana không bao giờ được lưu, mỗi lần import phải nhập lại.
+Token Grafana: gõ 1 lần ở menu 11, chọn lưu thì nằm riêng trong `.grafana-token` (chỉ root đọc, không vào git, không nằm trong `.menu.conf`). Token sai / hết hạn thì tool tự xoá và hỏi lại; xoá tay ở menu 15.
 
 ## Menu từng mục
 
@@ -112,7 +112,7 @@ bash /root/monitor-grafana-proxmox-full/menu.sh
 
 Chạy 1 lệnh không qua menu: `bash menu.sh setup | check | install [port] | status | metrics | logs | restart | port <số> | uninstall | dashboard | import | prom | prom-check | doctor | update | about | remote-add [tên] | remote-list | prom-all | prom-push | prom-rules | urls | remote-test | remote-remove | deps | firewall | docker-run | docker-manage`.
 
-Menu nhớ Grafana URL, Prometheus URL, tiêu đề/UID dashboard trong `.menu.conf` (không lưu token).
+Menu nhớ Grafana URL, Prometheus URL, tiêu đề/UID dashboard trong `.menu.conf`; token Grafana (nếu chọn lưu) nằm riêng ở `.grafana-token`.
 
 ## Theo dõi từ xa: không cài gì lên node Proxmox
 

@@ -514,7 +514,7 @@ grafana_ds_check() {  # grafana_ds_check URL TOKEN -> 1 neu nguoi dung huy
     ds=$(gcurl -s --max-time 10 -w '\n%{http_code}' -H "Authorization: Bearer $token" "$(gurl "$url")/api/datasources")
     code=${ds##*$'\n'}; ds=${ds%$'\n'*}
     if [ "$code" != 200 ]; then
-        [ "$code" = 401 ] && { err "Token sai / het han (401)"; return 1; }
+        [ "$code" = 401 ] && { err "Token sai / het han (401)"; forget_token; return 1; }
         info "Khong doc duoc danh sach datasource (HTTP $code, token thieu quyen) → bo qua kiem tra"
         return 0
     fi
@@ -568,9 +568,14 @@ import_dashboard() {  # import_dashboard URL TOKEN FOLDER
     grafana_ds_check "$url" "$token" || return 1
     payload=$(mktemp)
     python3 - "$DASH_JSON" "$folder" > "$payload" <<'PY'
-import json, sys
+import json, re, sys
 d = json.load(open(sys.argv[1], encoding="utf-8"))
 d["id"] = None
+# Grafana chi nhan UID [A-Za-z0-9_-] <= 40 ky tu (file sinh tu ban cu co the sai)
+uid = re.sub(r"[^A-Za-z0-9_-]+", "-", str(d.get("uid") or "")).strip("-")[:40] or "pve-ceph-prom"
+if uid != d.get("uid"):
+    sys.stderr.write("UID '%s' -> '%s'\n" % (d.get("uid"), uid))
+    d["uid"] = uid
 body = {"dashboard": d, "overwrite": True, "message": "menu.sh import"}
 if sys.argv[2]:
     body["folderUid"] = sys.argv[2]
@@ -587,7 +592,9 @@ PY
         ok "Import thanh cong: ${W}$url$(echo "$resp" | sed -En 's/.*"url": *"([^"]*)".*/\1/p')${N}"
         save_conf GRAFANA_URL "$url"; save_conf GRAFANA_FOLDER "$folder"
     else
-        err "Import loi: $resp"; return 1
+        err "Import loi: $resp"
+        case "$resp" in *[Ii]nvalid*[Kk]ey*|*[Uu]nauthorized*|*"status":401*) forget_token ;; esac
+        return 1
     fi
 }
 
@@ -703,6 +710,8 @@ ask_dashboard() {  # hoi cac tuy chon dashboard -> bien DASH_*
     dash_defaults
     DASH_TITLE=$(ask "Tieu de dashboard" "$DASH_TITLE")
     DASH_UID=$(ask "UID (khong dau, khong cach; trung UID se ghi de)" "$DASH_UID")
+    local u2; u2=$(echo "$DASH_UID" | sed -E 's/[^A-Za-z0-9_-]+/-/g; s/^-+|-+$//g' | cut -c1-40)
+    [ "$u2" != "$DASH_UID" ] && { warn "UID chi duoc chu, so, - va _ (toi da 40) → dung '${u2:=pve-ceph-prom}'"; DASH_UID=$u2; }
     DASH_SITE=$(ask "Regex loc datasource Site (bo trong = tat ca Prometheus)" "$DASH_SITE")
     DASH_JOB=$(ask "Regex loc job cluster" "$DASH_JOB")
     if detect_sizes; then
@@ -734,10 +743,23 @@ do_dashboard() {
 # =============================================================================
 # 11. Import dashboard qua Grafana API
 # =============================================================================
+# Token Grafana: go 1 lan, luu rieng trong .grafana-token (chmod 600, khong nam trong git,
+# khong nam trong .menu.conf). Token sai / het han (401) thi tu xoa va hoi lai lan sau.
+GRAFANA_TOKEN_FILE="$DIR/.grafana-token"
 ask_token() {
+    TOKEN=""
+    if [ -s "$GRAFANA_TOKEN_FILE" ]; then
+        TOKEN=$(cat "$GRAFANA_TOKEN_FILE")
+        info "Dung token Grafana da luu ${D}($GRAFANA_TOKEN_FILE; xoa: menu 15)${N}"
+        return 0
+    fi
     info "Tao token: Grafana → Administration → Service accounts → Add token (role Editor)"
     read -rsp "${IND}  ${C}❯${N} Service account token ${D}(khong hien khi go)${N}: " TOKEN; echo
+    if [ -n "$TOKEN" ] && confirm "Luu token de lan sau khong hoi (file chi root doc)?"; then
+        ( umask 077; printf '%s' "$TOKEN" > "$GRAFANA_TOKEN_FILE" ) && ok "Da luu token → $GRAFANA_TOKEN_FILE"
+    fi
 }
+forget_token() { [ -f "$GRAFANA_TOKEN_FILE" ] && rm -f "$GRAFANA_TOKEN_FILE" && warn "Da xoa token da luu (sai / het han) → lan sau go lai"; }
 
 do_import() {
     title "IMPORT DASHBOARD LEN GRAFANA"
@@ -1552,7 +1574,7 @@ set_urls() {
         else warn "Khong ket noi duoc $u/api/health → kiem tra IP/port, firewall may Grafana (port 3000)"; fi
         save_conf GRAFANA_URL "$u"; GRAFANA_URL=$u
     fi
-    info "Token Grafana khong luu: nhap khi import (menu 11)"
+    info "Token Grafana: nhap o menu 11, co the luu 1 lan (.grafana-token, chi root doc)"
 }
 
 do_config() {
@@ -1570,9 +1592,13 @@ do_config() {
     done < "$CONF"
     echo
     info "Sua: chay lai ${W}S${N} (gia tri cu hien san) hoac sua truc tiep file tren"
+    if [ -s "$GRAFANA_TOKEN_FILE" ]; then
+        info "Token Grafana da luu: $GRAFANA_TOKEN_FILE"
+        confirm "Xoa token Grafana da luu (lan import sau go lai)?" && { rm -f "$GRAFANA_TOKEN_FILE"; ok "Da xoa token"; }
+    fi
     if confirm "Dat / doi Prometheus, Grafana URL?"; then set_urls; return 0; fi
     if confirm "Xoa toan bo cau hinh da luu?"; then
-        rm -f "$CONF"; ok "Da xoa - lan chay sau se hoi lai tu dau"
+        rm -f "$CONF" "$GRAFANA_TOKEN_FILE"; ok "Da xoa (ca token Grafana) - lan chay sau se hoi lai tu dau"
         unset "${!DASH_@}" GRAFANA_URL GRAFANA_FOLDER PROM_URL PROM_JOB SETUP_ROLE 2>/dev/null || true
     fi
 }

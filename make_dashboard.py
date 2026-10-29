@@ -20,6 +20,7 @@ Vi du:
 
 import argparse
 import json
+import re
 
 DS = {"type": "prometheus", "uid": "${Site}"}
 J = 'job=~"$job"'
@@ -167,6 +168,11 @@ def parse_ha_alias(items):
         text, _, color = rest.partition(":")
         opts[raw] = {"text": text, "color": color or "blue", "index": i}
     return opts
+
+
+def safe_uid(uid):
+    """Grafana chi nhan UID [A-Za-z0-9_-], toi da 40 ky tu ("uid contains illegal characters")."""
+    return re.sub(r"[^A-Za-z0-9_-]+", "-", uid).strip("-")[:40] or "pve-ceph-prom"
 
 
 def node_q(expr):
@@ -496,7 +502,7 @@ def build(args):
     ]}
 
     return {
-        "title": args.title, "uid": args.uid, "editable": True, "graphTooltip": 0,
+        "title": args.title, "uid": safe_uid(args.uid), "editable": True, "graphTooltip": 0,
         "refresh": "30s", "schemaVersion": 41, "timezone": "Asia/Ho_Chi_Minh",
         "time": {"from": args.time_from, "to": "now"}, "tags": ["proxmox", "ceph"],
         "annotations": {"list": [{"builtIn": 1, "datasource": {"type": "grafana", "uid": "-- Grafana --"},

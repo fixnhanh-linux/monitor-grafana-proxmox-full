@@ -4,6 +4,8 @@ Mới nhất ở trên. Mã commit đang chạy hiện ở đầu menu (`phien b
 
 ## Chưa phát hành
 
+- **UID dashboard** tự chuẩn hoá về `[A-Za-z0-9_-]`, tối đa 40 ký tự (menu 9, `make_dashboard.py`, và ngay trước khi import) — hết lỗi Grafana `uid contains illegal characters`.
+- **Token Grafana gõ 1 lần**: chọn lưu thì nằm riêng ở `.grafana-token` (chỉ root đọc, không vào git); token sai / hết hạn tự xoá và hỏi lại; xoá tay ở menu 15.
 - **Menu 11 với Grafana cert tự ký**: tool lấy cert, in SHA-256 để so với trình duyệt, bạn đồng ý thì **ghim** cert đó (`.grafana-cert.pem`, chỉ dùng khi gọi Grafana) — vẫn kiểm tra TLS, không tắt. Cert ghi tên khác IP trong URL thì tool gọi bằng tên trong cert và trỏ về IP thật. Token thiếu quyền (Viewer) thì báo cần role Editor.
 - **Menu 11**: không gọi được Grafana thì nói rõ lý do (cert tự ký, nhầm http/https, bị từ chối, hết giờ chờ, DNS) kèm cách sửa, và tự thử dạng URL còn lại.
 - **Menu 9** ghi dashboard ra `dashboard-local.json` (không nằm trong git) thay vì ghi đè `proxmox_ceph_dashboard.json` — trước đây làm `git pull` ở menu 14 bị chặn.
