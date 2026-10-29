@@ -752,8 +752,12 @@ do_remote_add() {  # do_remote_add [TEN] -> them / sua 1 cluster
     local deftid="monitor@pve!exporter"; [ -n "$oldtok" ] && deftid=${oldtok%%=*}
     tid=$(ask "Token ID" "$deftid")
     [[ "$tid" == root@pam!* ]] && warn "Token cua root@pam: tao tren web mac dinh bat Privilege Separation → khong co quyen (403). Nen dung monitor@pve!exporter + PVEAuditor (hop tren)"
-    read -rsp "${IND}  ${C}❯${N} Token secret ${D}(khong hien; Enter = giu secret cu)${N}: " secret; echo
-    [ -n "$secret" ] || { [ -n "$oldtok" ] && secret=${oldtok#*=}; }
+    if [ -n "$oldtok" ] && [ "$tid" = "${oldtok%%=*}" ]; then
+        read -rsp "${IND}  ${C}❯${N} Token secret ${D}(khong hien; Enter = giu secret cu)${N}: " secret; echo
+        [ -n "$secret" ] || secret=${oldtok#*=}
+    else  # token moi / doi Token ID: secret cu thuoc token khac -> bat buoc nhap
+        read -rsp "${IND}  ${C}❯${N} Token secret cua ${W}$tid${N} ${D}(khong hien)${N}: " secret; echo
+    fi
     [ -n "$secret" ] || { err "Chua nhap token secret"; return 1; }
     verify=$(ask "Proxmox da co cert hop le (Let's Encrypt / CA noi bo)? (y/N - cert mac dinh cua Proxmox: Enter)" \
         "$([ "$(env_get "$f" PVE_VERIFY_TLS)" = 1 ] && echo y || echo N)")
