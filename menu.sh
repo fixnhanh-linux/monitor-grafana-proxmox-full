@@ -625,10 +625,108 @@ do_import() {
 do_prom() {
     title "CAU HINH PROMETHEUS"
     local job cn
-    cn=$(detect_cluster_name)
-    job=$(ask "Ten job cua cluster nay trong Prometheus (giong job cua ceph mgr)" "${PROM_JOB:-Proxmox-${cn:-CLUSTER}}")
-    save_conf PROM_JOB "$job"
-    prom_snippet "$job" "$(current_port)"
+    if [ -f "$UNIT" ]; then
+        cn=$(detect_cluster_name)
+        job=$(ask "Ten job cua cluster nay trong Prometheus (giong job cua ceph mgr)" "${PROM_JOB:-Proxmox-${cn:-CLUSTER}}")
+        save_conf PROM_JOB "$job"
+        prom_snippet "$job" "$(current_port)"
+    fi
+    if [ -n "$(remote_names)" ]; then
+        [ -f "$UNIT" ] && echo
+        prom_all
+    elif [ ! -f "$UNIT" ]; then
+        warn "May nay chua co exporter nao → menu 2 (cai tren node Ceph) hoac 17 (theo doi tu xa)"
+    fi
+}
+
+# Gop moi exporter tren may nay (local + tung cluster tu xa) thanh 1 file scrape_configs,
+# kiem tra tung exporter dang tra metric gi, bo job trung ten (Prometheus khong cho trung).
+prom_all() {
+    local ip f n p job m bad st jobs="|" cnt=0 skip=0 dn="" cl
+    f="$DIR/prometheus-scrape-all.yml"
+    ip=$(ask "IP may nay ma Prometheus scrape toi" "$(local_ip)")
+    {
+        echo "# FIX NHANH - sinh boi menu.sh tren $(hostname) ($ip) luc $(date '+%F %T')"
+        echo "# Dan cac job duoi vao muc scrape_configs: cua prometheus.yml (giu nguyen thut le)."
+        echo "scrape_configs:"
+    } > "$f"
+
+    printf '%s  %s%-18s %-22s %-20s %s%s\n' "$IND" "$W" "CLUSTER" "JOB" "TARGET" "TRANG THAI" "$N"
+    local -A MET
+    add_job() {  # add_job TEN JOB PORT -> ghi job vao file (metric da lay san trong MET)
+        local name="$1" job="$2" port="$3" up col
+        m=${MET[$port]}
+        up=$(echo "$m" | sed -n 's/^pve_ceph_extra_exporter_up{collector="\([^"]*\)"} \(.*\)/\1=\2/p')
+        bad=$(echo "$up" | sed -n 's/=0$//p' | paste -sd, -)
+        cl=$(echo "$m" | sed -n 's/^pve_cluster_info{id="cluster\/\([^"]*\)".*/\1/p' | head -1)
+        if [ -z "$m" ]; then st="exporter khong tra loi"; col=$R
+        elif [ -n "$bad" ]; then st="loi: $bad"; col=$Y
+        else st="OK${cl:+ (cluster $cl)}"; col=$G; fi
+        if [[ "$jobs" == *"|$job|"* ]]; then
+            st="TRUNG JOB → bo qua"; col=$R; skip=$((skip + 1))
+            echo "  # BO QUA $name: job '$job' da dung cho cluster khac (Prometheus khong cho trung job_name)" >> "$f"
+        else
+            jobs="$jobs$job|"; cnt=$((cnt + 1))
+            cat >> "$f" <<EOF
+  # $name - $st
+  - job_name: $job
+    scrape_interval: 30s
+    scrape_timeout: 25s
+    static_configs:
+      - targets: ['$ip:$port']
+EOF
+        fi
+        printf '%s  %-18s %-22s %-20s %s%s%s\n' "$IND" "$name" "$job" "$ip:$port" "$col" "$st" "$N"
+        if [ -n "$cl" ] && [[ "$st" != TRUNG* ]]; then
+            [[ "$dn" == *"|$cl|"* ]] && warn "  ↑ cluster ${W}$cl${N} da co o job khac → du lieu trung, nen xoa 1 (menu 20)"
+            dn="$dn|$cl|"
+        fi
+    }
+
+    local list="" rank row
+    if [ -f "$UNIT" ]; then
+        if [ -n "$(current_flags)" ]; then
+            warn "Exporter local chay che do khong gop (--no-*) → dung mau rieng o tren, khong dua vao file nay"
+        else
+            list="(local)|${PROM_JOB:-Proxmox-$(detect_cluster_name)}|$(current_port)"$'\n'
+        fi
+    fi
+    for n in $(remote_names); do
+        job=$(env_get "$REMOTE_DIR/$n.env" JOB)
+        list+="$n|${job:-Proxmox-$n}|$(env_get "$REMOTE_DIR/$n.env" PORT)"$'\n'
+    done
+    # Lay metric 1 lan / exporter, xep exporter chay tot len truoc: khi 2 cluster trung job
+    # thi giu cai dang OK, bo cai loi / khong tra loi.
+    local ranked=""
+    while IFS='|' read -r n job p; do
+        [ -n "$n" ] || continue
+        MET[$p]=$(curl -sf --max-time 15 "http://127.0.0.1:$p/metrics" 2>/dev/null)
+        if [ -z "${MET[$p]}" ]; then rank=2
+        elif echo "${MET[$p]}" | grep -q '^pve_ceph_extra_exporter_up{.*} 0$'; then rank=1
+        else rank=0; fi
+        ranked+="$rank|$n|$job|$p"$'\n'
+    done <<< "$list"
+    while IFS='|' read -r rank n job p; do
+        [ -n "$n" ] && add_job "$n" "$job" "$p"
+    done < <(printf '%s' "$ranked" | sort -t'|' -k1,1n -k2,2)
+    {
+        echo
+        echo "# Alert rules (tuy chon): chep alerts/pve-ceph-alerts.yml len may Prometheus roi them:"
+        echo "# rule_files:"
+        echo "#   - /etc/prometheus/rules/pve-ceph-alerts.yml"
+    } >> "$f"
+
+    echo
+    if has promtool; then
+        if promtool check config "$f" >/dev/null 2>&1; then ok "promtool: cu phap hop le"
+        else err "promtool bao loi:"; promtool check config "$f" 2>&1 | sub; fi
+    fi
+    info "Da ghi ${W}$cnt job${N} vao ${W}$f${N}$([ "$skip" -gt 0 ] && echo " (bo qua $skip job trung)")"
+    echo; sed -n '4,$p' "$f" | sed "s/^/${IND}    ${O}/; s/$/${N}/"; echo
+    warn "Xoa target cu (:9283 ceph mgr, :9221 pve exporter) cua cac cluster nay khoi prometheus.yml, neu khong so lieu bi nhan doi"
+    info "Firewall may nay cho IP Prometheus: menu 22. Sau khi sua prometheus.yml:"
+    printf '%s\n' "promtool check config /etc/prometheus/prometheus.yml" \
+        "systemctl reload prometheus      # hoac: curl -X POST http://<prom>:9090/-/reload" | sub
 }
 
 # =============================================================================
@@ -1373,6 +1471,7 @@ if [ $# -gt 0 ]; then
         about) do_about ;;
         remote-add) NONINTERACTIVE=0; do_remote_add "${1:-}" ;;
         remote-list) do_remote_list ;;
+        prom-all) NONINTERACTIVE=0; title "PROMETHEUS: GOP MOI CLUSTER"; prom_all ;;
         remote-test) NONINTERACTIVE=0; do_remote_test ;;
         remote-remove) NONINTERACTIVE=0; do_remote_remove ;;
         deps) NONINTERACTIVE=0; detect_env; do_deps ;;
