@@ -1,0 +1,36 @@
+# FIX NHANH - pve_ceph_extra_exporter che do REMOTE, 1 instance = 1 cluster.
+# Ban quyen (c) 2026 FIX NHANH. Bao luu moi quyen.
+#
+# Cau hinh: /etc/pve-ceph-extra-exporter/<ten-cluster>.env (chmod 600, chua token)
+# Bat:      systemctl enable --now pve-ceph-extra-exporter@<ten-cluster>
+[Unit]
+Description=FIX NHANH Proxmox+Ceph exporter remote (%i)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Environment=REMOTE=1
+EnvironmentFile=/etc/pve-ceph-extra-exporter/%i.env
+ExecStart=/usr/bin/python3 /usr/local/bin/pve_ceph_extra_exporter.py --remote
+Restart=always
+RestartSec=10
+
+# Chay bang user tam (khong phai root), chi doc mang
+DynamicUser=yes
+NoNewPrivileges=yes
+ProtectSystem=strict
+ProtectHome=yes
+PrivateTmp=yes
+PrivateDevices=yes
+ProtectKernelTunables=yes
+ProtectControlGroups=yes
+RestrictAddressFamilies=AF_INET AF_INET6 AF_UNIX
+
+# Gioi han tai nguyen
+Nice=10
+CPUQuota=25%
+MemoryMax=256M
+TasksMax=64
+
+[Install]
+WantedBy=multi-user.target

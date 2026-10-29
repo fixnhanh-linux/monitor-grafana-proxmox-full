@@ -98,10 +98,83 @@ bash /root/monitor-grafana-proxmox-full/menu.sh
 | 14 | Cập nhật tool (`git pull`), tự hỏi cài lại exporter nếu exporter có thay đổi |
 | 15 | Xem / xoá cấu hình đã lưu (`.menu.conf`) |
 | 16 | Giới thiệu & bản quyền FIX NHANH |
+| 17 | Thêm / sửa cluster theo dõi từ xa (API token) |
+| 18 | Danh sách cluster từ xa: port, service, trạng thái từng phần |
+| 19 | Kiểm tra kết nối 1 cluster (báo rõ 401 / 403 / firewall) |
+| 20 | Xoá cluster từ xa (dừng service, xoá token) |
 
-Chạy 1 lệnh không qua menu: `bash menu.sh setup | check | install [port] | status | metrics | logs | restart | port <số> | uninstall | dashboard | import | prom | prom-check | doctor | update | about`.
+Chạy 1 lệnh không qua menu: `bash menu.sh setup | check | install [port] | status | metrics | logs | restart | port <số> | uninstall | dashboard | import | prom | prom-check | doctor | update | about | remote-add [tên] | remote-list | remote-test | remote-remove`.
 
 Menu nhớ Grafana URL, Prometheus URL, tiêu đề/UID dashboard trong `.menu.conf` (không lưu token).
+
+## Theo dõi từ xa: không cài gì lên node Proxmox
+
+Exporter chạy trên **máy monitor** (ví dụ 10.16.16.38, Ubuntu), lấy dữ liệu qua **API Proxmox** bằng token chỉ đọc và `/metrics` của ceph mgr. Một máy monitor theo dõi được nhiều cluster, mỗi cluster là 1 service `pve-ceph-extra-exporter@<tên>` với 1 port riêng (9830, 9831, ...). Tên metric giống hệt chế độ local nên **dashboard không cần sửa**.
+
+| Dữ liệu | Chế độ local (trên node) | Chế độ remote (máy monitor) |
+|---|---|---|
+| Metric Ceph (OSD, pool, latency) | `ceph mgr services` → mgr:9283 | Thử lần lượt `CEPH_MGR` (mgr standby trả rỗng → bỏ qua) |
+| Node, CPU, RAM, uptime, HA | `pvesh`, `/etc/pve` | API `/cluster/status`, `/cluster/resources`, `/cluster/ha/status/manager_status` |
+| Ceph Status / Recovery | `ceph status` | API `/cluster/ceph/status` |
+| HA Groups | `/etc/pve/ha/*.cfg` | API `/cluster/ha/groups`, `/cluster/ha/rules` (PVE 9) |
+
+### Bước 1: trên 1 node bất kỳ của mỗi cluster (1 lần)
+
+```bash
+pveum user add monitor@pve --comment "FIX NHANH monitor"
+```
+
+```bash
+pveum acl modify / --users monitor@pve --roles PVEAuditor
+```
+
+```bash
+pveum user token add monitor@pve exporter --privsep 0
+```
+
+```bash
+ceph mgr module enable prometheus
+```
+
+`PVEAuditor` chỉ có quyền **xem**. Lệnh tạo token in ra `value` (secret) **chỉ một lần** — lưu lại.
+
+### Bước 2: trên máy monitor
+
+```bash
+bash /root/monitor-grafana-proxmox-full/menu.sh remote-add
+```
+
+(hoặc menu **17**, hoặc cài trọn gói **S → 4**). Tool hỏi:
+
+| Câu hỏi | Ví dụ / mặc định |
+|---|---|
+| Tên cluster | `FPT-HCM` |
+| IP các node Proxmox | `10.16.16.60,10.16.16.61,10.16.16.62` — node đầu chết tự chuyển node sau |
+| Token ID / secret | `monitor@pve!exporter` / secret (gõ không hiện) |
+| Kiểm tra chứng chỉ TLS | `N` (Proxmox mặc định cert tự ký) |
+| Ceph mgr | mặc định các node trên `:9283` |
+| Tên job Prometheus | `Proxmox-FPT-HCM` (phải chứa `Proxmox-`) |
+| Port | port trống kế tiếp từ 9830 |
+
+Tool **chạy thử kết nối** và báo từng phần ✔ / ✘ (401 = sai token, 403 = thiếu quyền, refused/timeout = firewall), sau đó lưu `/etc/pve-ceph-extra-exporter/<tên>.env` (chmod 600, chỉ root đọc), bật service và in mẫu `prometheus.yml` (1 target `IP-máy-monitor:port`).
+
+Máy monitor cần đi tới được **node:8006** và **mgr:9283**.
+
+### An toàn & tải
+
+- Service chạy bằng **user tạm** (`DynamicUser`), không phải root; hệ thống file chỉ đọc (`ProtectSystem=strict`); giới hạn `CPUQuota=25%`, `MemoryMax=256M`.
+- Token chỉ nằm trong file `.env` quyền 600, không xuất hiện trên dòng lệnh / `ps`.
+- Mỗi 30 giây: 5–6 request API + 1 request mgr cho mỗi cluster. Phía Proxmox gần như không tốn gì.
+
+### Docker (tuỳ chọn)
+
+```bash
+docker build -t fixnhanh/pve-ceph-exporter exporter/
+```
+
+```bash
+docker run -d --name pve-FPT-HCM --restart unless-stopped -p 9830:9830 --env-file /etc/pve-ceph-extra-exporter/FPT-HCM.env fixnhanh/pve-ceph-exporter
+```
 
 ## 1. Cài exporter thủ công (trên 1 node Ceph của mỗi cluster)
 

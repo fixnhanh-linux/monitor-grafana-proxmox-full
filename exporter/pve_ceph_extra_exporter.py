@@ -4,8 +4,16 @@
 pve_ceph_extra_exporter - bo sung metric cho dashboard Proxmox + Ceph.
 Ban quyen (c) 2026 FIX NHANH. Bao luu moi quyen.
 
-Chay tren 1 node Proxmox co Ceph (can quyen doc `ceph status` va /etc/pve).
-Chi dung thu vien chuan Python 3 (co san tren Proxmox 7/8/9).
+2 che do chay, chi dung thu vien chuan Python 3:
+  * local  : chay tren 1 node Proxmox co Ceph (doc `ceph`, `pvesh`, /etc/pve).
+  * remote : (--remote) chay tren may monitor bat ky, KHONG cai gi len node:
+             lay du lieu qua API Proxmox (token chi doc, role PVEAuditor) va
+             /metrics cua ceph mgr (:9283). Cau hinh qua bien moi truong:
+               PVE_API        node1,node2,...   (hoac https://node1:8006,...)
+               PVE_TOKEN      monitor@pve!exporter=<secret>
+               PVE_VERIFY_TLS 0 (mac dinh, cert tu ky) / 1
+               CEPH_MGR       node1:9283,node2:9283 (mac dinh = cac node PVE_API)
+               PORT, INTERVAL
 
 Mac dinh GOP TAT CA metric ra 1 port (Prometheus chi can 1 target):
   - phat lai /metrics cua ceph mgr dang active (tat bang --no-ceph-mgr)
@@ -33,13 +41,16 @@ import argparse
 import json
 import os
 import re
+import ssl
 import subprocess
 import threading
 import time
 from http.server import BaseHTTPRequestHandler, HTTPServer
 from socketserver import ThreadingMixIn
+from urllib.error import HTTPError
+from urllib.request import Request, urlopen
 
-VERSION = "2026.10.30-2"
+VERSION = "2026.10.30-3"
 
 HA_GROUPS_CFG = "/etc/pve/ha/groups.cfg"
 HA_RULES_CFG = "/etc/pve/ha/rules.cfg"  # PVE 9: HA group -> node-affinity rule
@@ -311,6 +322,106 @@ def collect_pve(pvesh_bin, timeout):
     return pve_metrics(status, resources, ha)
 
 
+# ---------------------------------------------------------------- remote (API Proxmox)
+def split_list(s):
+    return [x.strip() for x in (s or "").split(",") if x.strip()]
+
+
+def parse_nodes(s):
+    """'pve1:2,pve2' -> ['pve1', 'pve2'] (bo priority)."""
+    return [n.split(":")[0] for n in split_list(s)]
+
+
+class PveApi(object):
+    """Goi API Proxmox bang API token, tu chuyen sang node khac neu node dang dung loi."""
+
+    def __init__(self, hosts, token, verify_tls, timeout):
+        self.urls = [h.rstrip("/") if h.startswith("http")
+                     else "https://%s" % h if re.search(r":\d+$", h)  # host:port
+                     else "https://%s:8006" % h for h in hosts]
+        self.token = token
+        self.timeout = timeout
+        self.good = 0
+        self.ctx = ssl.create_default_context()
+        if not verify_tls:  # Proxmox mac dinh dung cert tu ky
+            self.ctx.check_hostname = False
+            self.ctx.verify_mode = ssl.CERT_NONE
+
+    def get(self, path):
+        last = RuntimeError("chua cau hinh PVE_API")
+        for i in [(self.good + k) % len(self.urls) for k in range(len(self.urls))]:
+            req = Request(self.urls[i] + "/api2/json" + path,
+                          headers={"Authorization": "PVEAPIToken=" + self.token})
+            try:
+                with urlopen(req, timeout=self.timeout, context=self.ctx) as resp:
+                    data = json.loads(resp.read().decode("utf-8", "replace")).get("data")
+                self.good = i
+                return data
+            except HTTPError as e:
+                if e.code in (401, 403):  # sai token / thieu quyen: node khac cung vay
+                    raise
+                last = e
+            except Exception as e:
+                last = e
+        raise last
+
+
+def remote_pve_metrics(api):
+    status = api.get("/cluster/status") or []
+    resources = api.get("/cluster/resources?type=node") or []
+    try:
+        ha = api.get("/cluster/ha/status/manager_status") or {}
+    except Exception:
+        ha = {}
+    return pve_metrics(status, resources, ha)
+
+
+def remote_ceph_status(api):
+    try:
+        return api.get("/cluster/ceph/status")
+    except HTTPError as e:
+        if e.code in (401, 403):
+            raise
+    # PVE cu: hoi qua 1 node dang online
+    for n in api.get("/cluster/status") or []:
+        if n.get("type") == "node" and n.get("online"):
+            return api.get("/nodes/%s/ceph/status" % n.get("name"))
+    raise RuntimeError("khong co node online")
+
+
+def remote_ha_groups(api):
+    groups, ok = {}, False
+    for path, kind, key in (("/cluster/ha/groups", None, "group"),
+                            ("/cluster/ha/rules", "node-affinity", "rule")):  # PVE 9
+        try:
+            items = api.get(path) or []
+            ok = True
+        except Exception:
+            continue
+        for it in items:
+            if kind and it.get("type") != kind:
+                continue
+            for n in parse_nodes(it.get("nodes")):
+                groups.setdefault(n, set()).add(it.get(key, "?"))
+    if not ok:
+        raise RuntimeError("khong doc duoc HA groups / rules")
+    return {h: ",".join(sorted(g)) for h, g in groups.items()}
+
+
+def remote_mgr_metrics(mgr_hosts, timeout, start=0):
+    """Thu lan luot cac mgr, mgr standby tra rong -> bo qua. Tra (lines, index mgr tot)."""
+    last = RuntimeError("chua cau hinh CEPH_MGR")
+    for k in range(len(mgr_hosts)):
+        i = (start + k) % len(mgr_hosts)
+        h = mgr_hosts[i]
+        url = h if h.startswith("http") else "http://%s" % (h if ":" in h else h + ":9283")
+        try:
+            return ceph_mgr_metrics(url, timeout), i
+        except Exception as e:
+            last = e
+    raise last
+
+
 # ---------------------------------------------------------------- server
 class Collector(object):
     """Thu thap o luong nen moi --interval giay; HTTP chi tra ket qua san co.
@@ -322,6 +433,16 @@ class Collector(object):
         self.ready = threading.Event()
         self.cache = ""
         self.mgr_url, self.mgr_url_ts = "", 0.0
+        self.mgr_good = 0
+        self.api = None
+        if args.remote:
+            self.api = PveApi(split_list(args.pve_api), args.pve_token, args.verify_tls, args.timeout)
+            self.mgr_hosts = split_list(args.ceph_mgr) or [
+                h.split("//")[-1].split(":")[0] + ":9283" for h in split_list(args.pve_api)]
+
+    def _remote_mgr(self):
+        lines, self.mgr_good = remote_mgr_metrics(self.mgr_hosts, self.args.timeout, self.mgr_good)
+        return lines
 
     def _mgr_url(self):
         a = self.args
@@ -334,29 +455,43 @@ class Collector(object):
 
     def collect(self):
         a = self.args
-        up, took, lines = {}, {}, []
+        up, took, errs, lines = {}, {}, {}, []
 
         def run(name, fn):
             t0 = time.time()
             try:
                 lines.extend(fn())
                 up[name] = 1
-            except Exception:
+            except Exception as e:
                 up[name] = 0
+                errs[name] = str(e)[:200]
                 if name == "ceph_mgr":
                     self.mgr_url = ""  # mgr co the da chuyen node
             took[name] = time.time() - t0
 
-        if not a.no_ceph_mgr:
-            run("ceph_mgr", lambda: ceph_mgr_metrics(self._mgr_url(), a.timeout))
-        if not a.no_pve:
-            run("pve", lambda: collect_pve(a.pvesh_bin, a.timeout))
-        run("ceph", lambda: ceph_metrics(parse_ceph_status(run_ceph_status(a.ceph_bin, a.timeout))))
-        run("ha", lambda: ha_metrics(ha_groups_by_host()))
+        if a.remote:
+            api = self.api
+            if not a.no_ceph_mgr:
+                run("ceph_mgr", self._remote_mgr)
+            if not a.no_pve:
+                run("pve", lambda: remote_pve_metrics(api))
+            run("ceph", lambda: ceph_metrics(parse_ceph_status(remote_ceph_status(api))))
+            run("ha", lambda: ha_metrics(remote_ha_groups(api)))
+        else:
+            if not a.no_ceph_mgr:
+                run("ceph_mgr", lambda: ceph_mgr_metrics(self._mgr_url(), a.timeout))
+            if not a.no_pve:
+                run("pve", lambda: collect_pve(a.pvesh_bin, a.timeout))
+            run("ceph", lambda: ceph_metrics(parse_ceph_status(run_ceph_status(a.ceph_bin, a.timeout))))
+            run("ha", lambda: ha_metrics(ha_groups_by_host()))
 
         lines.append("# TYPE pve_ceph_extra_exporter_up gauge")
         for k, v in sorted(up.items()):
             lines.append('pve_ceph_extra_exporter_up{collector="%s"} %d' % (k, v))
+        lines.append("# TYPE pve_ceph_extra_exporter_last_error gauge")
+        for k, v in sorted(errs.items()):
+            lines.append('pve_ceph_extra_exporter_last_error{collector="%s",error="%s"} 1' % (k, esc(v)))
+        lines.append('pve_ceph_extra_exporter_mode{mode="%s"} 1' % ("remote" if a.remote else "local"))
         lines.append("# TYPE pve_ceph_extra_exporter_collect_seconds gauge")
         for k, v in sorted(took.items()):
             lines.append('pve_ceph_extra_exporter_collect_seconds{collector="%s"} %.3f' % (k, v))
@@ -408,9 +543,17 @@ class Server(ThreadingMixIn, HTTPServer):
 
 
 def main():
-    ap = argparse.ArgumentParser(description="Exporter bo sung Ceph recovery + HA groups cho Proxmox")
-    ap.add_argument("--listen", default="0.0.0.0")
-    ap.add_argument("--port", type=int, default=9830)
+    env = os.environ.get
+    ap = argparse.ArgumentParser(description="Exporter Proxmox + Ceph (local tren node / remote qua API)")
+    ap.add_argument("--listen", default=env("LISTEN", "0.0.0.0"))
+    ap.add_argument("--port", type=int, default=int(env("PORT", "9830")))
+    ap.add_argument("--remote", action="store_true", default=env("REMOTE", "") == "1",
+                    help="lay du lieu qua API Proxmox + ceph mgr, khong can chay tren node")
+    ap.add_argument("--pve-api", default=env("PVE_API", ""), help="node1,node2 hoac https://node1:8006,...")
+    ap.add_argument("--pve-token", default=env("PVE_TOKEN", ""),
+                    help="USER@REALM!TOKENID=SECRET (nen dat qua bien moi truong PVE_TOKEN)")
+    ap.add_argument("--verify-tls", action="store_true", default=env("PVE_VERIFY_TLS", "0") == "1")
+    ap.add_argument("--ceph-mgr", default=env("CEPH_MGR", ""), help="host:9283,... (remote)")
     ap.add_argument("--ceph-bin", default="ceph")
     ap.add_argument("--pvesh-bin", default="pvesh")
     ap.add_argument("--ceph-mgr-url", default="", help="mac dinh lay tu `ceph mgr services`")
@@ -419,10 +562,12 @@ def main():
     ap.add_argument("--no-pve", action="store_true",
                     help="khong xuat metric Proxmox (da co prometheus-pve-exporter rieng)")
     ap.add_argument("--timeout", type=int, default=10, help="timeout lenh ceph (giay)")
-    ap.add_argument("--interval", type=int, default=30,
+    ap.add_argument("--interval", type=int, default=int(env("INTERVAL", "30")),
                     help="chu ky thu thap nen (giay); scrape chi doc ket qua san co")
     ap.add_argument("--once", action="store_true", help="in metric ra stdout roi thoat")
     args = ap.parse_args()
+    if args.remote and not (args.pve_api and args.pve_token):
+        ap.error("--remote can PVE_API va PVE_TOKEN")
 
     collector = Collector(args)
     if args.once:

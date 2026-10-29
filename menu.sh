@@ -8,7 +8,8 @@
 #  Cai tron goi:     bash menu.sh setup   (hoi 1 lan, tu lam het)
 #  Chay 1 lenh:      bash menu.sh <lenh>
 #      setup | check | install | status | metrics | logs | restart | port <so> |
-#      uninstall | dashboard | import | prom | prom-check | doctor | update | about | help
+#      uninstall | dashboard | import | prom | prom-check | doctor | update | about | help |
+#      remote-add [ten] | remote-list | remote-test | remote-remove
 #
 #  Ban quyen © 2026 FIX NHANH. Bao luu moi quyen.
 # =============================================================================
@@ -30,6 +31,8 @@ BIN=/usr/local/bin/pve_ceph_extra_exporter.py
 UNIT=/etc/systemd/system/$SERVICE.service
 CONF="$DIR/.menu.conf"          # nho Grafana URL, Prometheus URL, ... giua cac lan chay
 DEFAULT_PORT=9830
+REMOTE_DIR=/etc/pve-ceph-extra-exporter     # che do remote: 1 file .env / cluster (chmod 600)
+RUNIT=/etc/systemd/system/pve-ceph-extra-exporter@.service
 
 # =============================================================================
 # Giao dien: mau, khung can giua
@@ -160,7 +163,9 @@ detect_env() {
         curl -sf --max-time 2 http://127.0.0.1:3000/api/health >/dev/null 2>&1 && ENV_GRAFANA="http://127.0.0.1:3000"
         curl -sf --max-time 2 http://127.0.0.1:9090/-/ready >/dev/null 2>&1 && ENV_PROM="http://127.0.0.1:9090"
     fi
-    if [ $ENV_CEPH = 1 ]; then ENV_ROLE=1; else ENV_ROLE=3; fi
+    if [ $ENV_CEPH = 1 ]; then ENV_ROLE=1
+    elif [ -n "$ENV_PVE" ]; then ENV_ROLE=3
+    else ENV_ROLE=4; fi
 }
 
 ceph_health_short() {
@@ -523,8 +528,9 @@ prom_check() {  # prom_check URL -> 0 neu exporter duoc scrape va job khop
     save_conf PROM_URL "$url"
     port=$(current_port)
 
-    echo; info "Target exporter (up{instance=~\".*:$port\"}):"
-    out=$(prom_q "$url" "up{instance=~\".*:$port\"}")
+    local ports; ports=$(all_ports); [ -n "$ports" ] || ports=$port
+    echo; info "Target exporter (up{instance=~\".*:($ports)\"}):"
+    out=$(prom_q "$url" "up{instance=~\".*:($ports)\"}")
     if [ -z "$out" ]; then
         err "Prometheus chua scrape exporter → them target (menu 10) roi reload Prometheus"; rc=1
     else
@@ -644,12 +650,211 @@ do_doctor() {
 }
 
 # =============================================================================
+# 17-20. Theo doi tu xa: exporter chay tren may monitor, lay du lieu qua API
+#        Proxmox (token chi doc) + ceph mgr :9283. 1 cluster = 1 service @<ten>.
+# =============================================================================
+remote_names() { ls "$REMOTE_DIR"/*.env 2>/dev/null | sed 's|.*/||; s|\.env$||'; }
+env_get() { sed -n "s/^$2=//p" "$1" 2>/dev/null | tail -1; }   # env_get FILE KEY
+
+all_ports() {  # moi port exporter tren may nay (local + remote), cach nhau dau |
+    { [ -f "$UNIT" ] && current_port
+      for n in $(remote_names); do env_get "$REMOTE_DIR/$n.env" PORT; done; } | sort -un | paste -sd'|'
+}
+
+next_free_port() {
+    local p=$DEFAULT_PORT used
+    used="|$(all_ports)|"
+    while [[ "$used" == *"|$p|"* ]] || { has ss && ss -ltn 2>/dev/null | grep -q ":$p "; }; do p=$((p + 1)); done
+    echo "$p"
+}
+
+remote_install_files() {  # cai / cap nhat exporter + unit mau (khong dong cham service dang chay)
+    install -m 0755 "$EXPORTER_SRC" "$BIN" || return 1
+    install -m 0644 "$DIR/exporter/pve-ceph-extra-exporter@.service" "$RUNIT" || return 1
+    install -d -m 0700 "$REMOTE_DIR"
+    systemctl daemon-reload
+}
+
+remote_test() {  # remote_test ENVFILE -> chay thu 1 lan, in ket qua tung phan; 0 neu pve + ceph OK
+    local out rc=0 name v
+    out=$(set -a; . "$1"; set +a; REMOTE=1 INTERVAL=30 timeout 90 python3 "$EXPORTER_SRC" --remote --once --timeout 8 2>&1)
+    for name in pve ceph ceph_mgr ha; do
+        v=$(echo "$out" | sed -n "s/^pve_ceph_extra_exporter_up{collector=\"$name\"} //p")
+        local e; e=$(echo "$out" | sed -n "s/^pve_ceph_extra_exporter_last_error{collector=\"$name\",error=\"\(.*\)\"} 1/\1/p")
+        case "$name" in
+            pve) label="API Proxmox (node, CPU, RAM, HA)" ;; ceph) label="Ceph status (recovery)" ;;
+            ceph_mgr) label="Ceph mgr :9283 (OSD, pool, latency)" ;; ha) label="HA groups / rules" ;;
+        esac
+        if [ "$v" = 1 ]; then ok "$label"
+        else err "$label: ${e:-khong co du lieu}"; [ "$name" = pve ] || [ "$name" = ceph ] && rc=1; fi
+    done
+    local cl; cl=$(echo "$out" | sed -n 's/^pve_cluster_info{id="cluster\/\([^"]*\)".*nodes="\([^"]*\)".*/\1 (\2 node)/p')
+    [ -n "$cl" ] && info "Cluster doc duoc: ${W}$cl${N}"
+    echo "$out" | grep -q 'HTTP Error 401' && \
+        warn "401 = sai token / secret. Kiem tra lai Token ID va secret (menu 17 → nhap lai secret)"
+    echo "$out" | grep -q 'HTTP Error 403\|Permission' && \
+        warn "403 = token thieu quyen → pveum acl modify / --users monitor@pve --roles PVEAuditor (va --privsep 0)"
+    echo "$out" | grep -qi 'timed out\|refused\|unreachable\|No route' && \
+        warn "Khong ket noi duoc → kiem tra may nay toi node:8006 va mgr:9283 (firewall)"
+    return $rc
+}
+
+token_help() {
+    box_top
+    box_center "${W}${Y}TAO API TOKEN CHI DOC (chay 1 lan tren 1 node bat ky cua cluster)${N}"
+    box_sep
+    box_row "${O}pveum user add monitor@pve --comment \"FIX NHANH monitor\"${N}"
+    box_row "${O}pveum acl modify / --users monitor@pve --roles PVEAuditor${N}"
+    box_row "${O}pveum user token add monitor@pve exporter --privsep 0${N}"
+    box_sep
+    box_row "${D}PVEAuditor chi XEM duoc, khong sua VM / cau hinh / Ceph.${N}"
+    box_row "${D}Lenh cuoi in 'value' = secret (chi hien 1 lan) → dung o buoc duoi.${N}"
+    box_row "${D}Ceph mgr: ceph mgr module enable prometheus (mo :9283 tren cac mgr).${N}"
+    box_bottom
+}
+
+do_remote_add() {  # do_remote_add [TEN] -> them / sua 1 cluster
+    title "THEM / SUA CLUSTER (THEO DOI TU XA)"
+    need_root || return 1
+    has python3 || { err "Thieu python3 (apt install python3)"; return 1; }
+    token_help; echo
+    local name="${1:-}" f hosts tid secret verify mgr job port tmp
+    [ -n "$name" ] || name=$(ask "Ten cluster (khong dau, khong cach, vd FPT-HCM)" "")
+    [[ "$name" =~ ^[A-Za-z0-9_.-]+$ ]] || { err "Ten khong hop le: '$name'"; return 1; }
+    f="$REMOTE_DIR/$name.env"
+    [ -f "$f" ] && info "Cluster ${W}$name${N} da co → gia tri cu hien san, Enter de giu"
+
+    hosts=$(ask "IP / ten cac node Proxmox, cach nhau dau phay (nhieu node = tu chuyen khi 1 node chet)" "$(env_get "$f" PVE_API)")
+    [ -n "$hosts" ] || { err "Can it nhat 1 node"; return 1; }
+    local oldtok; oldtok=$(env_get "$f" PVE_TOKEN)
+    local deftid="monitor@pve!exporter"; [ -n "$oldtok" ] && deftid=${oldtok%%=*}
+    tid=$(ask "Token ID" "$deftid")
+    read -rsp "${IND}  ${C}❯${N} Token secret ${D}(khong hien; Enter = giu secret cu)${N}: " secret; echo
+    [ -n "$secret" ] || { [ -n "$oldtok" ] && secret=${oldtok#*=}; }
+    [ -n "$secret" ] || { err "Chua nhap token secret"; return 1; }
+    verify=$(ask "Kiem tra chung chi TLS cua Proxmox? (y/N - cert tu ky thi chon N)" \
+        "$([ "$(env_get "$f" PVE_VERIFY_TLS)" = 1 ] && echo y || echo N)")
+    local defmgr; defmgr=$(echo "$hosts" | tr ',' '\n' | sed 's|^ *https\?://||; s|:.*||; s|$|:9283|' | paste -sd,)
+    mgr=$(ask "Ceph mgr host:9283 (cach nhau dau phay)" "$(env_get "$f" CEPH_MGR)")
+    mgr=${mgr:-$defmgr}
+    job=$(ask "Ten job Prometheus (phai chua 'Proxmox-' de dashboard thay)" "$(env_get "$f" JOB)")
+    job=${job:-Proxmox-$name}
+    port=$(ask "Port exporter tren may nay" "$(env_get "$f" PORT)")
+    port=${port:-$(next_free_port)}
+    [[ "$port" =~ ^[0-9]+$ ]] && [ "$port" -ge 1024 ] && [ "$port" -le 65535 ] || { err "Port khong hop le: $port"; return 1; }
+
+    install -d -m 0700 "$REMOTE_DIR"
+    tmp=$(mktemp "$REMOTE_DIR/.new.XXXX")
+    cat > "$tmp" <<EOF
+# FIX NHANH - cluster $name (sinh boi menu.sh $(date '+%F %T'))
+JOB=$job
+PORT=$port
+PVE_API=$hosts
+PVE_TOKEN=$tid=$secret
+PVE_VERIFY_TLS=$([[ "$verify" =~ ^[YyCc] ]] && echo 1 || echo 0)
+CEPH_MGR=$mgr
+INTERVAL=30
+EOF
+    chmod 600 "$tmp"
+
+    echo; info "Chay thu ket noi toi cluster ${W}$name${N}..."
+    if ! remote_test "$tmp"; then
+        confirm "Ket noi chua dat. Van luu va chay service?" || { rm -f "$tmp"; info "Huy - chua luu gi"; return 1; }
+    fi
+    mv -f "$tmp" "$f"
+    remote_install_files || { err "Cai file loi"; return 1; }
+    systemctl enable "$SERVICE@$name" >/dev/null 2>&1
+    systemctl restart "$SERVICE@$name"
+    sleep 3
+    if curl -sf --max-time 60 "http://127.0.0.1:$port/metrics" | grep -q '^pve_ceph_extra_exporter_up'; then
+        ok "Service ${W}$SERVICE@$name${N} chay tai ${W}http://$(local_ip):$port/metrics${N}"
+    else
+        err "Service chua tra metric → journalctl -u $SERVICE@$name -n 30"; return 1
+    fi
+    echo; prom_snippet "$job" "$port" ""
+}
+
+do_remote_list() {
+    title "CAC CLUSTER THEO DOI TU XA"
+    local names; names=$(remote_names)
+    if [ -z "$names" ]; then info "Chua co cluster nao (menu 17 de them)"; return 0; fi
+    printf '%s  %s%-16s %-6s %-10s %-22s %-6s %-5s %-5s %s%s\n' "$IND" "$W" "CLUSTER" "PORT" "SERVICE" \
+        "JOB" "PVE" "CEPH" "MGR" "HA" "$N"
+    local n f p st m c
+    for n in $names; do
+        f="$REMOTE_DIR/$n.env"; p=$(env_get "$f" PORT)
+        st=$(systemctl is-active "$SERVICE@$n" 2>/dev/null)
+        m=$(curl -sf --max-time 10 "http://127.0.0.1:$p/metrics" 2>/dev/null)
+        c() { local v; v=$(echo "$m" | sed -n "s/^pve_ceph_extra_exporter_up{collector=\"$1\"} //p")
+              if [ "$v" = 1 ]; then printf '%s✔%s' "$G" "$N"; elif [ -z "$v" ]; then printf '%s-%s' "$D" "$N"; else printf '%s✘%s' "$R" "$N"; fi; }
+        printf '%s  %-16s %-6s %s%-10s%s %-22s %s     %s     %s     %s\n' "$IND" "$n" "$p" \
+            "$([ "$st" = active ] && echo "$G" || echo "$R")" "$st" "$N" "$(env_get "$f" JOB)" \
+            "$(c pve)" "$(c ceph)" "$(c ceph_mgr)" "$(c ha)"
+    done
+    echo
+    info "Chi tiet loi: curl -s http://127.0.0.1:<port>/metrics | grep last_error"
+    info "Log: journalctl -u $SERVICE@<cluster> -n 30"
+}
+
+pick_remote() {  # chon 1 cluster -> in ten
+    local names; names=$(remote_names)
+    [ -n "$names" ] || { err "Chua co cluster nao"; return 1; }
+    info "Cluster dang co: ${W}$(echo $names)${N}" >&2
+    ask "Ten cluster" "$(echo "$names" | head -1)"
+}
+
+do_remote_test() {
+    title "KIEM TRA KET NOI CLUSTER"
+    local n; n=$(pick_remote) || return 1
+    [ -f "$REMOTE_DIR/$n.env" ] || { err "Khong co cluster '$n'"; return 1; }
+    remote_test "$REMOTE_DIR/$n.env"
+}
+
+do_remote_remove() {
+    title "XOA CLUSTER THEO DOI TU XA"
+    need_root || return 1
+    local n; n=$(pick_remote) || return 1
+    [ -f "$REMOTE_DIR/$n.env" ] || { err "Khong co cluster '$n'"; return 1; }
+    confirm "Dung service va xoa cau hinh cluster '$n' (token cung bi xoa)?" || { info "Huy"; return 0; }
+    systemctl disable --now "$SERVICE@$n" >/dev/null 2>&1
+    rm -f "$REMOTE_DIR/$n.env"
+    ok "Da xoa $n - nho bo target cua no khoi prometheus.yml"
+}
+
+remote_refresh_after_update() {  # sau cap nhat: chay lai cac service remote bang ban exporter moi
+    local names; names=$(remote_names)
+    [ -n "$names" ] || return 0
+    if [ "$(id -u)" != 0 ]; then warn "Can root de cap nhat ${W}$(echo $names)${N} → chay lai menu 14 bang root"; return 0; fi
+    remote_install_files && for n in $names; do systemctl restart "$SERVICE@$n"; done
+    ok "Da chay lai exporter remote: ${W}$(echo $names)${N}"
+}
+
+# =============================================================================
 # 14. Cap nhat tool / 15. Cau hinh da luu / 16. Gioi thieu & ban quyen
 # =============================================================================
 do_update() {
     title "CAP NHAT TOOL"
-    has git || { err "Thieu git (apt install git)"; return 1; }
-    [ -d "$DIR/.git" ] || { err "Thu muc khong phai ban git clone → tai lai tu $REPO_URL"; return 1; }
+    if [ ! -d "$DIR/.git" ]; then
+        if has git; then
+            info "Thu muc tai bang curl → chuyen thanh ban git clone (giu .menu.conf)"
+            git -C "$DIR" init -q && git -C "$DIR" remote add origin "$REPO_URL.git" 2>/dev/null
+            git -C "$DIR" fetch -q origin main && git -C "$DIR" reset -q --hard origin/main \
+                && git -C "$DIR" checkout -q -B main --track origin/main 2>/dev/null \
+                || { err "Chuyen sang git loi"; return 1; }
+            ok "Da chuyen sang git, ban $(git -C "$DIR" rev-parse --short HEAD)"
+            remote_refresh_after_update
+            [ "${NONINTERACTIVE:-0}" = 0 ] && { info "Mo lai menu voi ban moi..."; sleep 1; exec bash "$DIR/menu.sh"; }
+            return 0
+        fi
+        has curl || { err "Can git hoac curl de cap nhat"; return 1; }
+        info "Khong co git → tai ban moi bang curl"
+        curl -sfL "$REPO_URL/archive/refs/heads/main.tar.gz" | tar xz --strip-components=1 -C "$DIR" \
+            || { err "Tai ban moi loi"; return 1; }
+        ok "Da tai ban moi nhat"
+        remote_refresh_after_update
+        [ "${NONINTERACTIVE:-0}" = 0 ] && { info "Mo lai menu voi ban moi..."; sleep 1; exec bash "$DIR/menu.sh"; }
+        return 0
+    fi
     local before after
     before=$(git -C "$DIR" rev-parse --short HEAD)
     git -C "$DIR" pull --ff-only 2>&1 | sub
@@ -663,6 +868,7 @@ do_update() {
         warn "Exporter co thay doi"
         confirm "Cai lai exporter ban moi (giu port $(current_port))?" && do_install "$(current_port)"
     fi
+    git -C "$DIR" diff --quiet "$before" "$after" -- exporter/ || remote_refresh_after_update
     if [ "${NONINTERACTIVE:-0}" = 0 ]; then
         info "Mo lai menu voi ban moi..."; sleep 1
         exec bash "$DIR/menu.sh"
@@ -697,7 +903,8 @@ do_about() {
     box_row "$(kv "Phat trien" "${W}FIX NHANH${N}")"
     box_row "$(kv "Repo" "${REPO_URL#https://}")"
     box_row "$(kv "Thanh phan" "menu.sh · make_dashboard.py · pve_ceph_extra_exporter")"
-    box_row "$(kv "Yeu cau" "bash, python3 >= 3.5, curl; node Ceph cho exporter")"
+    box_row "$(kv "Yeu cau" "bash, python3 >= 3.5, curl")"
+    box_row "$(kv "Che do" "local (tren node Ceph) · remote (API token)")"
     box_row "$(kv "Giay phep" "xem file LICENSE")"
     box_sep
     box_center "${Y}Ban quyen © 2026 FIX NHANH. Bao luu moi quyen.${N}"
@@ -725,13 +932,20 @@ do_setup() {
     echo "${IND}     ${C}1${N}  Node Ceph: cai exporter + sinh/import dashboard (day du)"
     echo "${IND}     ${C}2${N}  Chi cai exporter (node Ceph)"
     echo "${IND}     ${C}3${N}  Chi sinh / import dashboard (may Grafana / may quan tri)"
+    echo "${IND}     ${C}4${N}  May monitor: theo doi cluster TU XA qua API (khong cai gi len node) + dashboard"
     if [ "$ENV_CEPH" = 1 ]; then info "May nay co Ceph → goi y ${W}1${N}"
-    else info "May nay khong co Ceph → goi y ${W}3${N} (exporter cai tren node Ceph)"; fi
+    else info "May nay khong co Ceph → goi y ${W}4${N} (theo doi tu xa) hoac ${W}3${N} (chi dashboard)"; fi
     role=$(ask "Chon" "${SETUP_ROLE:-$ENV_ROLE}")
     case "$role" in
         1) do_ex=1; do_dash=1 ;;
         2) do_ex=1 ;;
         3) do_dash=1 ;;
+        4) do_dash=1
+           echo; echo "${IND}  ${W}${M}[2/5] Cluster theo doi tu xa${N}"
+           while true; do
+               do_remote_add || warn "Cluster vua roi chua them duoc"
+               confirm "Them cluster khac?" || break
+           done ;;
         *) err "Lua chon khong hop le: $role"; return 1 ;;
     esac
     if [ $do_ex = 1 ] && [ "$ENV_CEPH" != 1 ]; then
@@ -788,6 +1002,7 @@ do_setup() {
         if [ $do_imp = 1 ]; then box_row "$(kv "Grafana" "import → $gurl · folder ${gfolder:-General}")"
         else box_row "$(kv "Grafana" "khong import (import tay file JSON)")"; fi
     fi
+    [ "$role" = 4 ] && box_row "$(kv "Tu xa" "$(remote_names | paste -sd' ' | cut -c1-60)")"
     if [ $do_chk = 1 ]; then box_row "$(kv "Kiem tra" "$prom")"; else box_row "$(kv "Kiem tra" "bo qua")"; fi
     box_bottom; echo
     confirm "Bat dau thuc hien?" || { info "Huy - chua thay doi gi"; return 1; }
@@ -841,7 +1056,7 @@ do_setup() {
 # Menu
 # =============================================================================
 show_help() {
-    sed -n '2,14p' "$0" | grep '^#' | sed 's/^# \{0,1\}//'
+    sed -n '2,15p' "$0" | grep '^#' | sed 's/^# \{0,1\}//'
 }
 
 banner() {
@@ -884,6 +1099,8 @@ header() {
     box_row2 "$(kv "Exporter" "$ex")" "$(kv "OS" "$(echo "$ENV_OS" | cut -c1-24)")"
     box_row "$(kv "Grafana" "$grafana")"
     box_row "$(kv "Prometheus" "$prom")"
+    local rn; rn=$(remote_names | wc -l)
+    [ "$rn" -gt 0 ] && box_row "$(kv "Tu xa" "${W}$rn${N} cluster: $(remote_names | paste -sd' ' | cut -c1-55)")"
 }
 
 menu_body() {
@@ -898,6 +1115,9 @@ menu_body() {
     box_row2 "$(mi 9 "Sinh dashboard JSON" "$O")"   "$(mi 11 "Import len Grafana" "$O")"
     box_row2 "$(mi 10 "Mau prometheus.yml" "$O")"   "$(mi 12 "Kiem tra Prometheus" "$O")"
     box_row  "$(mi 13 "Kiem tra tong the (moi truong + exporter + Prometheus)" "$O")"
+    box_title "THEO DOI TU XA  ${D}(qua API, khong cai len node)${N}" "$G"
+    box_row2 "$(mi 17 "Them / sua cluster" "$G")"    "$(mi 19 "Kiem tra ket noi" "$G")"
+    box_row2 "$(mi 18 "Danh sach cluster" "$G")"     "$(mi 20 "Xoa cluster" "$G")"
     box_title "TIEN ICH" "$B"
     box_row2 "$(mi 14 "Cap nhat tool (git pull)" "$B")" "$(mi 16 "Gioi thieu & ban quyen" "$B")"
     box_row2 "$(mi 15 "Cau hinh da luu" "$B")"         "$(mi 0 "Thoat" "$R")"
@@ -919,6 +1139,7 @@ menu() {
             10) do_prom ;;      11) do_import ;;   12) do_prom_check ;;
             13) do_doctor ;;    14) do_update ;;   15) do_config ;;
             16) do_about ;;
+            17) do_remote_add ;; 18) do_remote_list ;; 19) do_remote_test ;; 20) do_remote_remove ;;
             s|S) do_setup ;;
             0|q|Q) echo; echo "${IND}  ${D}Tam biet! $COPYRIGHT${N}"; echo; exit 0 ;;
             "") continue ;;
@@ -944,6 +1165,10 @@ if [ $# -gt 0 ]; then
         prom-check) NONINTERACTIVE=0; detect_env; do_prom_check ;;
         doctor) do_doctor ;;         update) do_update ;;
         about) do_about ;;
+        remote-add) NONINTERACTIVE=0; do_remote_add "${1:-}" ;;
+        remote-list) do_remote_list ;;
+        remote-test) NONINTERACTIVE=0; do_remote_test ;;
+        remote-remove) NONINTERACTIVE=0; do_remote_remove ;;
         help|-h|--help) show_help ;;
         *) err "Lenh khong ro: $cmd"; show_help; exit 1 ;;
     esac
