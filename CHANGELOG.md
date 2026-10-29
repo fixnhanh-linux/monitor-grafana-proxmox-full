@@ -4,6 +4,7 @@ Mới nhất ở trên. Mã commit đang chạy hiện ở đầu menu (`phien b
 
 ## Chưa phát hành
 
+- **Menu 11**: không gọi được Grafana thì nói rõ lý do (cert tự ký, nhầm http/https, bị từ chối, hết giờ chờ, DNS) kèm cách sửa, và tự thử dạng URL còn lại.
 - **Menu 9** ghi dashboard ra `dashboard-local.json` (không nằm trong git) thay vì ghi đè `proxmox_ceph_dashboard.json` — trước đây làm `git pull` ở menu 14 bị chặn.
 - **Menu 14**: tự giữ dashboard đã sinh bằng bản cũ sang `dashboard-local.json` rồi mới pull; pull lỗi thì báo lỗi và file bị sửa, không còn báo nhầm "Đang là bản mới nhất".
 - **Dashboard**: ô **Cluster Proxmox** đầu hàng *Proxmox Resource* hiện tên cluster thật, số node, quorate của job đang chọn — 2 job cùng tên cluster thì bảng node giống nhau là đúng; 1 job ra nhiều ô là job đang trộn nhiều cluster.

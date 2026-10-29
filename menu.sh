@@ -444,6 +444,27 @@ gen_dashboard() {  # sinh $DASH_JSON tu cac bien DASH_*
     ok "Da tao ${W}$DASH_JSON${N}"
 }
 
+# Noi ro vi sao khong goi duoc URL (cert, sai http/https, firewall, port dong) va cach sua.
+explain_curl_fail() {  # explain_curl_fail URL PATH GREP
+    local url="$1" rc w host
+    curl -s --max-time 8 -o /dev/null "$url$2" 2>/dev/null; rc=$?
+    host=$(echo "$url" | sed -E 's|^https?://||; s|/.*||')
+    err "Khong ket noi duoc $url (curl loi $rc)"
+    case "$rc" in
+        60|51|58|77) warn "Cert TLS cua $host khong duoc may nay tin (tu ky / CA noi bo)"
+           info "Cach 1: dung http:// neu Grafana khong bat TLS"
+           info "Cach 2: cai CA vao may nay: openssl s_client -connect $host -showcerts </dev/null | openssl x509 > /usr/local/share/ca-certificates/grafana.crt && update-ca-certificates" ;;
+        35) warn "Bat tay TLS loi → port nay co the chay http, khong phai https" ;;
+        7)  warn "Bi tu choi (connection refused) → sai port, hoac Grafana khong nghe tren IP nay" ;;
+        28) warn "Het thoi gian cho → firewall chan, hoac IP public khong vao duoc tu trong mang (thu IP noi bo cua Grafana)" ;;
+        6)  warn "Khong phan giai duoc ten $host" ;;
+        22) warn "Grafana tra loi loi HTTP (sai duong dan / reverse proxy?)" ;;
+    esac
+    if w=$(url_probe "$url" "$2" "$3" 2>/dev/null) && [ "$w" != "$url" ]; then
+        ok "Nhung ${W}$w${N} thi duoc → dung URL nay (menu 15 de luu)"
+    fi
+}
+
 # Dashboard chon datasource qua bien Site (loc theo DASH_SITE): Grafana khong co datasource
 # Prometheus nao khop thi moi o deu "No data" -> bao truoc khi import.
 grafana_ds_check() {  # grafana_ds_check URL TOKEN -> 1 neu nguoi dung huy
@@ -492,7 +513,7 @@ import_dashboard() {  # import_dashboard URL TOKEN FOLDER
     has curl && has python3 || { err "Can curl va python3"; return 1; }
     [ -f "$DASH_JSON" ] || { err "Chua co $DASH_JSON"; return 1; }
     if ! curl -sf --max-time 10 -H "Authorization: Bearer $token" "$url/api/health" >/dev/null; then
-        err "Khong ket noi duoc $url"; return 1
+        explain_curl_fail "$url" "/api/health" '"database"'; return 1
     fi
     grafana_ds_check "$url" "$token" || return 1
     payload=$(mktemp)
