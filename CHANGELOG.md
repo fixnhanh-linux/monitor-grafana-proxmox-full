@@ -4,6 +4,7 @@ Mới nhất ở trên. Mã commit đang chạy hiện ở đầu menu (`phien b
 
 ## Chưa phát hành
 
+- **Dashboard**: cột HA Groups không còn bị cắt chữ — xuống dòng trong ô, rộng 380, căn trái, bấm ô để xem đầy đủ.
 - **Menu 26 / `services`**: bảng mọi dịch vụ (exporter local, `@cluster`, container, Docker, watchdog) — trạng thái, `/health`, port, chạy khi khởi động máy; khởi động lại / dừng / chạy từng cái hoặc tất cả rồi tự kiểm tra active + `/health`, lỗi thì in log; restart Docker thì kiểm tra container chạy lại.
 - **Watchdog** (`w` trong menu 26 / `watchdog`): systemd timer 2 phút / lần, `/health` lỗi 2 lần liên tiếp thì khởi động lại đúng exporter đó; log `journalctl -t pve-ceph-watchdog`.
 - **Menu 25 / `docker-net`**: đổi dải IP Docker (`bip`, `default-address-pools`) — cảnh báo dải public (vd `192.20.0.0`) và dải trùng route đang có, sao lưu `daemon.json`, restart Docker; exporter chạy systemd không bị ảnh hưởng, container tắt vài giây rồi tool kiểm tra / khởi động lại cái nào chưa lên; Docker không lên với cấu hình mới thì trả file cũ.

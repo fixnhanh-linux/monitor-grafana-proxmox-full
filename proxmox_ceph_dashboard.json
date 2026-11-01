@@ -1431,13 +1431,22 @@
             "properties": [
               {
                 "id": "custom.width",
-                "value": 300
+                "value": 380
+              },
+              {
+                "id": "custom.align",
+                "value": "left"
               },
               {
                 "id": "custom.cellOptions",
                 "value": {
-                  "type": "color-text"
+                  "type": "color-text",
+                  "wrapText": true
                 }
+              },
+              {
+                "id": "custom.inspect",
+                "value": true
               },
               {
                 "id": "mappings",
