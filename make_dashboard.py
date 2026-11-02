@@ -21,6 +21,7 @@ Vi du:
 import argparse
 import json
 import re
+import sys
 
 DS = {"type": "prometheus", "uid": "${Site}"}
 J = 'job=~"$job"'
@@ -556,12 +557,31 @@ def main():
     ap.add_argument("--customer-job", default="", metavar="JOB",
                     help="dashboard KHACH HANG: khoa cung job nay, an Site/Job, bo Detailed Alarms, "
                          "HA Groups, hang Exporter; can --site-regex chi dung datasource cua khach")
-    args = ap.parse_args()
+    ap.add_argument("--regen", metavar="FILE",
+                    help="sinh lai FILE bang dung tham so da luu trong chinh no (fixnhanhArgs)")
+    argv = sys.argv[1:]
+    if "--regen" in argv:
+        f = argv[argv.index("--regen") + 1]
+        saved = json.load(open(f, encoding="utf-8")).get("fixnhanhArgs")
+        if saved is None:
+            ap.error("%s khong co fixnhanhArgs (sinh tu ban cu) -> sinh lai bang tham so day du 1 lan" % f)
+        argv = saved + ["-o", f]
+    args = ap.parse_args(argv)
+    # Tham so de sinh lai sau nay (bo -o / --out): refresh doc lai de cap nhat moi dashboard
+    keep, skip = [], False
+    for a in argv:
+        if skip:
+            skip = False
+        elif a in ("-o", "--out"):
+            skip = True
+        elif not a.startswith(("--out=", "-o=")):
+            keep.append(a)
     if args.customer_job and not args.site_regex:
         ap.error("--customer-job can --site-regex (vd \"/^Prometheus FPT HCM$/\") de khach khong "
                  "thay datasource khac")
 
     dash = build(args)
+    dash["fixnhanhArgs"] = keep
     with open(args.out, "w", encoding="utf-8") as f:
         json.dump(dash, f, ensure_ascii=False, indent=2)
     print("Da ghi %s (%d panel)" % (args.out, len(dash["panels"])))

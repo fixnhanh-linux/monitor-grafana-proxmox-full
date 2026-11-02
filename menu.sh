@@ -566,6 +566,14 @@ import_dashboard() {  # import_dashboard URL TOKEN FOLDER
         esac
     fi
     grafana_ds_check "$url" "$token" || return 1
+    # Khong chi folder -> giu folder hien tai cua dashboard tren Grafana (import de khong
+    # tu chuyen dashboard ve General)
+    if [ -z "$folder" ]; then
+        local duid; duid=$(python3 -c 'import json,sys,re; u=str(json.load(open(sys.argv[1],encoding="utf-8")).get("uid") or ""); print(re.sub(r"[^A-Za-z0-9_]*[^A-Za-z0-9_-][^A-Za-z0-9_]*|-{2,}","-",u).strip("-")[:40])' "$DASH_JSON" 2>/dev/null)
+        [ -n "$duid" ] && folder=$(gcurl -s --max-time 10 -H "Authorization: Bearer $token" "$(gurl "$url")/api/dashboards/uid/$duid" 2>/dev/null \
+            | python3 -c 'import json,sys; print((json.load(sys.stdin).get("meta") or {}).get("folderUid") or "")' 2>/dev/null)
+        [ -n "$folder" ] && info "Giu folder hien tai cua dashboard (uid folder ${W}$folder${N})"
+    fi
     payload=$(mktemp)
     python3 - "$DASH_JSON" "$folder" > "$payload" <<'PY'
 import json, re, sys
@@ -810,7 +818,7 @@ do_import() {
     title "IMPORT DASHBOARD LEN GRAFANA"
     local url folder f files=() i=1 pick
     # Co dashboard khach hang (dashboard-kh-*.json) -> cho chon file nao
-    for f in "$DIR/dashboard-local.json" "$DIR"/dashboard-kh-*.json; do [ -f "$f" ] && files+=("$f"); done
+    for f in "$DIR"/dashboard-*.json; do [ -f "$f" ] && files+=("$f"); done
     if [ "${#files[@]}" -gt 1 ]; then
         for f in "${files[@]}"; do info "${W}$i${N} $(basename "$f")"; i=$((i + 1)); done
         pick=$(ask "Import file nao" "1")
@@ -1609,10 +1617,24 @@ do_refresh() {
         else
             warn "Chua co Grafana URL / token da luu → import tay: menu 11 (luu token 1 lan)"
         fi
-        local f; for f in "$DIR"/dashboard-kh-*.json; do
-            [ -f "$f" ] && info "Dashboard khach hang $(basename "$f"): sinh lai o menu 9 → 2 (can ten khach / datasource)"
-        done
     else fail+=("sinh dashboard"); fi
+    # Cac dashboard khac (dashboard-*.json: khach hang, ban rieng CMC / FPT ...): sinh lai bang
+    # tham so luu trong chinh file (fixnhanhArgs), import giu nguyen folder tren Grafana
+    local f main=$DASH_JSON
+    for f in "$DIR"/dashboard-*.json; do
+        [ -f "$f" ] && [ "$f" != "$main" ] || continue
+        if ! grep -q '"fixnhanhArgs"' "$f"; then
+            warn "$(basename "$f"): sinh tu ban cu (chua luu tham so) → tao lai 1 lan bang make_dashboard.py (README: Nhieu dashboard)"
+            continue
+        fi
+        if python3 "$MAKE_DASH" --regen "$f" >/dev/null; then
+            ok "Sinh lai $(basename "$f")"
+            if [ -n "${GRAFANA_URL:-}" ] && [ -s "$GRAFANA_TOKEN_FILE" ]; then
+                DASH_JSON=$f import_dashboard "$GRAFANA_URL" "$(cat "$GRAFANA_TOKEN_FILE")" "" </dev/null || fail+=("import $(basename "$f")")
+            fi
+        else fail+=("sinh $(basename "$f")"); fi
+    done
+    DASH_JSON=$main
 
     echo; echo "${IND}  ${W}[3/4] Dich vu${N}"
     svc_table || true

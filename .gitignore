@@ -8,3 +8,4 @@ dashboard-local.json
 .grafana-cert.pem
 .grafana-token
 dashboard-kh-*.json
+dashboard-*.json

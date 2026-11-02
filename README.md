@@ -352,6 +352,18 @@ Grafana → Dashboards → New → Import → chon file JSON.
 
 Menu **26** → `w` (hoac `bash menu.sh watchdog`) cai systemd timer `pve-ceph-exporter-watchdog` chay **2 phut / lan**: goi `/health` cua tung exporter **dang chay** (local, `@cluster`, container `fixnhanh-pve-*`); treo (`503`) hoac khong tra loi **2 lan lien tiep** thi khoi dong lai dung cai do. Dich vu ban chu dong dung khong bi bat lai. Xem lich su: `journalctl -t pve-ceph-watchdog`. Chay lai `w` de tat va go.
 
+## Nhieu dashboard (ban rieng tung nhom Site)
+
+Moi file `dashboard-<ten>.json` trong thu muc tool tu luu tham so da dung de sinh ra no (`fixnhanhArgs`). `proxmox-menu refresh` sinh lai va import **tat ca** cac file nay, giu nguyen folder hien tai cua tung dashboard tren Grafana. Menu 11 cho chon file nao de import.
+
+Tao 1 lan (UID lay tu URL dashboard dang co: `/d/<uid>/...`, trung UID thi ghi de dung dashboard do):
+
+```bash
+cd /root/monitor-grafana-proxmox-full && python3 make_dashboard.py -o dashboard-cmc.json --title "Proxmox - Ceph Prometheus CMC Q7 - FPT HCM - VIETTEL HCM - CMC HN" --uid fix --time-from now-5m --site-regex "/^(Prometheus FPT HCM|Prometheus FPT HN|Prometheus CMC-Q7|Prometheus VIETTEL HCM|Prometheus CMC HN)$/" --job-regex "/^(?!.*Proxmox-Cluster-DMS|.*Test|.*Deco).*Proxmox-/"
+```
+
+Sinh lai 1 file bang tham so da luu: `python3 make_dashboard.py --regen dashboard-cmc.json`.
+
 ## Dashboard khach hang
 
 Menu **9** → `2` sinh `dashboard-kh-<job>.json` cho **1 khach**:
