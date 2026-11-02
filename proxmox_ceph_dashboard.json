@@ -1284,7 +1284,7 @@
             "type": "prometheus",
             "uid": "${Site}"
           },
-          "expr": "max by (host) (label_replace(pve_ha_state{state=\"online\", id=~\"node/.*\", job=~\"$job\"}, \"host\", \"$1\", \"id\", \"node/(.*)\"))\nand on() count(pve_ha_groups_custom_info{job=~\"$job\"})",
+          "expr": "max by (host) (label_replace(pve_ha_state{state=\"online\", id=~\"node/.*\", job=~\"$job\"}, \"host\", \"$1\", \"id\", \"node/(.*)\"))",
           "refId": "HA",
           "range": false,
           "instant": true,
@@ -1295,7 +1295,7 @@
             "type": "prometheus",
             "uid": "${Site}"
           },
-          "expr": "max by (host, groups) (pve_ha_groups_custom_info{job=~\"$job\"})",
+          "expr": "max by (host, groups) (pve_ha_groups_custom_info{job=~\"$job\"})\nor on(host) max by (host, groups) (label_replace(label_replace(pve_up{id=~\"node/.*\", job=~\"$job\"}, \"host\", \"$1\", \"id\", \"node/(.*)\"), \"groups\", \"-\", \"\", \"\"))",
           "refId": "Group",
           "range": false,
           "instant": true,
@@ -1453,15 +1453,21 @@
                 "value": [
                   {
                     "type": "value",
-                    "options": {}
+                    "options": {
+                      "-": {
+                        "text": "-",
+                        "color": "text",
+                        "index": 99
+                      }
+                    }
                   },
                   {
                     "type": "special",
                     "options": {
                       "match": "null",
                       "result": {
-                        "text": "No Group",
-                        "color": "gray"
+                        "text": "-",
+                        "color": "text"
                       }
                     }
                   }
@@ -1595,7 +1601,7 @@
           "countRows": false
         }
       },
-      "description": "Cột HA và HA Groups chỉ hiện khi cluster đang chọn có HA group / node-affinity rule (pve_ceph_extra_exporter đọc groups.cfg / rules.cfg).",
+      "description": "HA Groups: HA group (PVE 8) / node-affinity rule (PVE 9) của node; node không thuộc nhóm nào hiện \"-\". Rule chứa mọi node hoặc đang tắt không tính là nhóm.",
       "id": 18,
       "gridPos": {
         "h": 20,

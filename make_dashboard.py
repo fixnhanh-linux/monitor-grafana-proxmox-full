@@ -285,10 +285,12 @@ def build(args):
              tgt(node_q('pve_memory_size_bytes{%s}' % nj), "RAM_Total", fmt="table"),
              tgt(node_q('pve_uptime_seconds{%s}' % nj), "Uptime", fmt="table")]
     if not cust:
-        # Cot HA / HA Groups chi co khi cluster co HA group: query rong -> cot tu an
-        res_t += [tgt('%s\nand on() count(pve_ha_groups_custom_info{%s})'
-                      % (node_q('pve_ha_state{state="online", %s}' % nj), J), "HA", fmt="table"),
-                  tgt('max by (host, groups) (pve_ha_groups_custom_info{%s})' % J, "Group", fmt="table")]
+        # Cot HA / HA Groups luon hien; node khong co nhom (hoac cluster khong co nhom nao)
+        # -> groups="-" lay tu danh sach node (pve_up), "or on(host)" de khong trung dong
+        res_t += [tgt(node_q('pve_ha_state{state="online", %s}' % nj), "HA", fmt="table"),
+                  tgt('max by (host, groups) (pve_ha_groups_custom_info{%s})\nor on(host) max by (host, groups) '
+                      '(label_replace(label_replace(pve_up{%s}, "host", "$1", "id", "node/(.*)"), '
+                      '"groups", "-", "", ""))' % (J, nj), "Group", fmt="table")]
     ha = table("Resource Cluster" if cust else "Resource Cluster with HA Groups", res_t,
                [{"id": "joinByField", "options": {"byField": "host", "mode": "outer"}},
                 drop_extra_fields(HIDE),
@@ -299,7 +301,7 @@ def build(args):
                                 "Value #RAM_Pct": 4, "Value #RAM_Total": 5, "Value #Uptime": 6}),
                 {"id": "sortBy", "options": {"sort": [{"field": "Node Proxmox"}]}}],
                cell="auto", filterable=True,
-               desc="CPU, RAM, uptime từng node Proxmox." if cust else "Cột HA và HA Groups chỉ hiện khi cluster đang chọn có HA group / node-affinity rule (pve_ceph_extra_exporter đọc groups.cfg / rules.cfg).",
+               desc="CPU, RAM, uptime từng node Proxmox." if cust else "HA Groups: HA group (PVE 8) / node-affinity rule (PVE 9) của node; node không thuộc nhóm nào hiện \"-\". Rule chứa mọi node hoặc đang tắt không tính là nhóm.",
                overrides=[
                    override("HA", ("mappings", [
                        {"type": "value", "options": {
@@ -314,10 +316,10 @@ def build(args):
                             ("custom.cellOptions", {"type": "color-text", "wrapText": True}),
                             ("custom.inspect", True),
                             ("mappings", [
-                                {"type": "value", "options": parse_ha_alias(args.ha_alias)},
+                                {"type": "value", "options": dict(parse_ha_alias(args.ha_alias), **{
+                                    "-": {"text": "-", "color": "text", "index": 99}})},
                                 {"type": "special", "options": {"match": "null",
-                                                                "result": {"text": "No Group",
-                                                                           "color": "gray"}}}])),
+                                                                "result": {"text": "-", "color": "text"}}}])),
                    override("CPU (%)", ("unit", "percent"), ("decimals", 1),
                             ("thresholds", steps("green", 75, "orange", 90, "red")),
                             ("custom.cellOptions", {"type": "color-text"})),
