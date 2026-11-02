@@ -981,6 +981,53 @@ ask_prom_cfg() {  # file prometheus.yml tren may Prometheus (khong phai thu muc 
     done
 }
 
+# Script Python chay TREN may Prometheus (qua ssh stdin): tim / go block "- job_name: X" trong
+# cac file scrape. Block bi go khi trung ten job hoac chua target cua exporter.
+#   python3 - plan|apply DIR FILE_CUA_TOOL,... JOB1,JOB2 IP:PORT,...
+prom_jobs_py() {
+    cat <<'PY'
+import glob, os, re, sys
+mode, d, mine, jobs, tgs = sys.argv[1:6]
+mine = set(x for x in mine.split(",") if x)
+jobs = set(x for x in jobs.split(",") if x)
+tgs = [x for x in tgs.split(",") if x]
+start = re.compile(r"^(\s*)-\s*job_name:\s*[\"']?([^\"'\s#]+)")
+for path in sorted(glob.glob(os.path.join(d, "*.yml")) + glob.glob(os.path.join(d, "*.yaml"))):
+    if os.path.basename(path) in mine:
+        continue
+    lines = open(path, encoding="utf-8", errors="replace").read().split("\n")
+    keep, i, hit = [], 0, []
+    while i < len(lines):
+        m = start.match(lines[i])
+        if not m:
+            keep.append(lines[i]); i += 1; continue
+        ind, name, j = len(m.group(1)), m.group(2), i + 1
+        while j < len(lines):
+            s = lines[j]
+            if s.strip() and not s.lstrip().startswith("#") and len(s) - len(s.lstrip()) <= ind:
+                break
+            j += 1
+        block = "\n".join(lines[i:j])
+        why = "trung ten" if name in jobs else ("trung target " + ",".join(t for t in tgs if t in block)
+                                               if any(t in block for t in tgs) else "")
+        if why:
+            hit.append((name, i + 1, j, why))
+        else:
+            keep.extend(lines[i:j])
+        i = j
+    if not hit:
+        continue
+    for name, a, b, why in hit:
+        print("%s|%s|dong %d-%d|%s" % (os.path.basename(path), name, a, b, why))
+    if mode == "apply":
+        text = "\n".join(keep)
+        if "job_name" in text:
+            open(path, "w", encoding="utf-8").write(text)
+        else:  # file khong con job nao -> bo (da co ban sao luu)
+            os.remove(path); print("%s|(khong con job -> bo file)" % os.path.basename(path))
+PY
+}
+
 prom_host_slug() { (hostname -s 2>/dev/null || hostname) | tr 'A-Z' 'a-z'; }
 prom_file_name() { echo "proxmox-ceph-$(prom_host_slug).yml"; }      # ten file tren may Prometheus
 prom_file_old() { echo "proxmox-fixnhanh-$(hostname -s 2>/dev/null || hostname).yml"; }  # ten cu (ban 9f7a591)
@@ -1008,13 +1055,25 @@ prom_push() {
     save_conf PROM_SSH "$host"; save_conf PROM_DIR "$dir"; save_conf PROM_CFG "$cfg"
 
     jobs=$(sed -n 's/^  - job_name: //p' "$f" | paste -sd'|' -)
-    pat="^[[:space:]]*-[[:space:]]*job_name:[[:space:]]*.?($jobs).?[[:space:]]*\$"
     local mine="^($(prom_file_name)|$(prom_file_old)):" old="$dir/$(prom_file_old)"
-    out=$(rssh "$host" "cd '$dir' && grep -HnE '$pat' *.yml *.yaml 2>/dev/null | grep -vE '$mine'")
+    # Job cu o file khac: trung job_name (Prometheus khong khoi dong) hoac cung target exporter
+    # (trung du lieu) -> de nghi THAY THE: sao luu ca thu muc, go dung cac block job do.
+    local tg bak=""
+    tg=$(grep -oE "[0-9.]+:[0-9]+" "$f" | sort -u | paste -sd, -)
+    out=$(rssh "$host" "PYTHONIOENCODING=utf-8 python3 - plan '$dir' '$(prom_file_name),$(prom_file_old)' '${jobs//|/,}' '$tg'" < <(prom_jobs_py) 2>&1)
     if [ -n "$out" ]; then
-        err "Job da co o file khac (trung job_name → Prometheus khong khoi dong):"; echo "$out" | sub
-        info "Xoa / doi ten job cu tren may Prometheus, hoac doi JOB o menu 17, roi chay lai"
-        return 1
+        warn "Job cu tren Prometheus trung ten / trung target voi exporter:"
+        echo "$out" | sed 's/|/  ·  /g' | sub
+        info "Thay the = sao luu toan bo $dir, go cac job tren khoi file cu, dua job exporter vao; promtool loi thi tra lai het"
+        confirm "Thay the cac job cu bang exporter?" || { info "Giu nguyen. Doi JOB o menu 17 neu muon chay song song"; return 1; }
+        bak="${PROM_BAK_BASE:-/root}/prom-bak-$(date +%Y%m%d-%H%M%S)"
+        out=$(rssh "$host" "cp -a '$dir' '$bak' && PYTHONIOENCODING=utf-8 python3 - apply '$dir' '$(prom_file_name),$(prom_file_old)' '${jobs//|/,}' '$tg'" < <(prom_jobs_py) 2>&1) || {
+            err "Go job cu loi:"; echo "$out" | sub
+            rssh "$host" "[ -d '$bak' ] && find '$dir' -maxdepth 1 -type f \\( -name '*.yml' -o -name '*.yaml' \\) -delete && cp -a '$bak/.' '$dir/'" \
+                && warn "Da tra lai $dir tu $bak"
+            return 1; }
+        echo "$out" | sub
+        ok "Sao luu: ${W}$host:$bak${N}"
     fi
     out=$(rssh "$host" "cd '$dir' && grep -HnE ':(9283|9221)\\b' *.yml *.yaml 2>/dev/null | grep -vE '$mine'")
     if [ -n "$out" ]; then
@@ -1022,14 +1081,19 @@ prom_push() {
         echo "$out" | sub
     fi
 
-    confirm "Chep file → ${W}$host:$dst${N} roi reload Prometheus?" || { info "Huy"; return 0; }
-    rscp -q "$f" "$host:$dst.new" || { err "scp loi"; return 1; }
+    restore_bak() {  # tra lai thu muc da sao luu (khi da go job cu ma buoc sau loi)
+        [ -n "$bak" ] && rssh "$host" "find '$dir' -maxdepth 1 -type f \\( -name '*.yml' -o -name '*.yaml' \\) -delete; cp -a '$bak/.' '$dir/'" \
+            && warn "Da tra lai $dir tu $bak"
+    }
+    confirm "Chep file → ${W}$host:$dst${N} roi reload Prometheus?" || { restore_bak; info "Huy"; return 0; }
+    rscp -q "$f" "$host:$dst.new" || { err "scp loi"; restore_bak; return 1; }
     # File ten cu (proxmox-fixnhanh-*) cung chua cac job nay -> cat di, loi thi tra lai
     out=$(rssh "$host" "cp -p '$dst' '$dst.bak' 2>/dev/null; mv '$dst.new' '$dst'
         [ -f '$old' ] && mv '$old' '$old.old'
         if command -v promtool >/dev/null && ! promtool check config '$cfg' >/tmp/.promcheck 2>&1; then
             if [ -f '$dst.bak' ]; then mv '$dst.bak' '$dst'; else rm -f '$dst'; fi
             [ -f '$old.old' ] && mv '$old.old' '$old'
+            if [ -n '$bak' ]; then find '$dir' -maxdepth 1 -type f \\( -name '*.yml' -o -name '*.yaml' \\) -delete; cp -a '$bak/.' '$dir/'; fi
             cat /tmp/.promcheck; echo CHECK_FAIL; exit 1
         fi
         rm -f '$old.old'

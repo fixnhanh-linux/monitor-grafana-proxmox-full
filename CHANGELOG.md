@@ -4,6 +4,7 @@ Mới nhất ở trên. Mã commit đang chạy hiện ở đầu menu (`phien b
 
 ## Chưa phát hành
 
+- **Menu 10 chuyển job cũ sang exporter**: job trên Prometheus trùng tên hoặc trùng target với exporter thì đề nghị **thay thế** — sao lưu cả thư mục scrape (`/root/prom-bak-<giờ>`), gỡ đúng các block job đó (file không còn job thì bỏ), đẩy job exporter, `promtool` lỗi thì trả lại toàn bộ.
 - **`refresh`** giờ cập nhật luôn cluster chạy Docker: build image theo phiên bản exporter (có rồi thì bỏ qua), tạo lại container cùng port, kiểm tra trả metric; container đã đúng phiên bản thì để nguyên.
 - **`bash menu.sh refresh`**: cập nhật toàn bộ không hỏi — cài lại exporter, sinh + import dashboard bằng cấu hình / token đã lưu, bảng dịch vụ, kiểm tra Prometheus.
 - Payload import Grafana gửi dạng ASCII, không hỏng khi máy chạy locale không phải UTF-8.

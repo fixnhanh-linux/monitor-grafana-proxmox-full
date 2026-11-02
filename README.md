@@ -256,6 +256,8 @@ Với kiểu tách file, trả lời `y` ở câu *Đẩy file lên máy Prometh
 
 Máy SSH, file cấu hình, thư mục được nhớ trong `.menu.conf` cho lần sau.
 
+**Chuyển job cũ sang exporter:** nếu Prometheus đã có job cùng tên (vd `Proxmox-P1-XD` đang scrape thẳng `:9283` / pve exporter) hoặc job khác trỏ cùng target exporter, tool liệt kê từng block (file, job, dòng, lý do) và hỏi **thay thế**: sao lưu toàn bộ thư mục vào `/root/prom-bak-<giờ>` trên máy Prometheus, gỡ đúng các block đó, đẩy job exporter cùng tên (dashboard giữ nguyên tên job), `promtool` lỗi thì trả lại tất cả.
+
 Sau khi đẩy file scrape, tool hỏi đẩy luôn **alert rules** (hoặc `bash menu.sh prom-rules`): chép `alerts/pve-ceph-alerts.yml` vào thư mục `rule_files` đang dùng (mặc định lấy từ `prometheus.yml`, vd `/etc/prometheus/rules/`). Nếu `prometheus.yml` chưa nạp thư mục đó, tool thêm dòng vào `rule_files` (giữ bản sao `.bak`). `promtool check rules` + `check config` lỗi thì trả lại cả 2 file.
 
 Đầu menu hiện mã commit đang chạy (vd `2026.10.30 · de76e86`); GitHub có bản mới hơn thì hiện dòng **Có bản mới → chọn 14**.
