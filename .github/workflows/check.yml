@@ -18,20 +18,46 @@ jobs:
         run: shellcheck -S error menu.sh exporter/install_exporter.sh
 
       - name: Python compile
-        run: python3 -m py_compile exporter/pve_ceph_extra_exporter.py grafana/make_dashboard.py
+        run: python3 -m py_compile exporter/pve_ceph_extra_exporter.py dashboard-grafana/make_dashboard.py
 
       - name: Unit tests
         run: python3 -m unittest discover -s tests -v
 
       - name: Regenerate dashboard, compare with repo file
         run: |
-          python3 grafana/make_dashboard.py -o /tmp/dash.json
-          python3 -c "import json,sys; a=json.load(open('/tmp/dash.json')); b=json.load(open('grafana/proxmox_ceph_dashboard.json')); sys.exit(0 if a==b else 'grafana/proxmox_ceph_dashboard.json was not regenerated after changing grafana/make_dashboard.py')"
+          python3 dashboard-grafana/make_dashboard.py -o /tmp/dash.json
+          python3 -c "import json,sys; a=json.load(open('/tmp/dash.json')); b=json.load(open('dashboard-grafana/proxmox_ceph_dashboard.json')); sys.exit(0 if a==b else 'dashboard-grafana/proxmox_ceph_dashboard.json was not regenerated after changing dashboard-grafana/make_dashboard.py')"
 
       - name: promtool check rules
         run: docker run --rm -v "$PWD/prometheus:/a:ro" --entrypoint promtool prom/prometheus:v2.53.0 check rules /a/pve-ceph-alerts.yml
 
       - name: promtool check dashboard queries
         run: |
-          mkdir -p /tmp/dq && python3 tests/dashboard_rules.py grafana/proxmox_ceph_dashboard.json > /tmp/dq/dash-rules.yml
+          mkdir -p /tmp/dq && python3 tests/dashboard_rules.py dashboard-grafana/proxmox_ceph_dashboard.json > /tmp/dq/dash-rules.yml
           docker run --rm -v /tmp/dq:/a:ro --entrypoint promtool prom/prometheus:v2.53.0 check rules /a/dash-rules.yml
+
+  # Import template Zabbix vao Zabbix that (6.0 LTS va 7.0 LTS) roi gan vao 1 host
+  zabbix-import:
+    runs-on: ubuntu-24.04
+    strategy:
+      fail-fast: false
+      matrix:
+        zabbix: ["6.0", "7.0"]
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Start Zabbix ${{ matrix.zabbix }} (postgres + server + web)
+        run: |
+          docker network create zbx
+          E="-e POSTGRES_USER=zabbix -e POSTGRES_PASSWORD=zabbix -e POSTGRES_DB=zabbix"
+          docker run -d --name db --network zbx $E postgres:16-alpine
+          docker run -d --name server --network zbx $E -e DB_SERVER_HOST=db zabbix/zabbix-server-pgsql:alpine-${{ matrix.zabbix }}-latest
+          docker run -d --name web --network zbx -p 8080:8080 $E -e DB_SERVER_HOST=db -e ZBX_SERVER_HOST=server -e PHP_TZ=UTC \
+            zabbix/zabbix-web-nginx-pgsql:alpine-${{ matrix.zabbix }}-latest
+
+      - name: Import templates
+        run: python3 tests/zabbix_import.py http://127.0.0.1:8080 template-zabbix/*.yaml
+
+      - name: Zabbix logs on failure
+        if: failure()
+        run: docker logs --tail 50 server; docker logs --tail 50 web

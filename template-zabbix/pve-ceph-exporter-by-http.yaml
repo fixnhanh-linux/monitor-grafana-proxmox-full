@@ -1,0 +1,1102 @@
+# FIX NHANH - template Zabbix doc thang /metrics cua pve_ceph_extra_exporter (HTTP agent, khong can
+# zabbix-agent). Cung du lieu voi dashboard Grafana + alert Prometheus: Ceph health / recovery / OSD / pool,
+# node Proxmox (up, CPU, RAM, HA state, HA Groups), quorum, collector cua exporter.
+# Import: Zabbix web -> Data collection -> Templates -> Import (Zabbix 6.0+).
+# Host: interface = IP may chay exporter; macro {$PVE.EXPORTER.PORT} = port exporter (mac dinh 9830).
+# Che do remote (nhieu cluster tren 1 may monitor): moi cluster 1 host Zabbix, cung IP, khac port.
+zabbix_export:
+  version: '6.0'
+  date: '2026-11-02T00:00:00Z'
+  groups:
+    - uuid: 20bee2ac2d434e9b81be9def70b8d82b
+      name: Templates/Applications
+  templates:
+    - uuid: 83b520c76f284826aae3b288b126cbd0
+      template: 'Proxmox Ceph by FIX NHANH exporter'
+      name: 'Proxmox Ceph by FIX NHANH exporter'
+      description: |
+        Reads http://{HOST.CONN}:{$PVE.EXPORTER.PORT}/metrics of pve_ceph_extra_exporter (one request per minute, every other item is dependent).
+        Ceph health / recovery / OSD / pool items need the ceph mgr metrics merged on the same port (default; not with --no-ceph-mgr).
+        Proxmox node items need the pve collector (default; not with --no-pve).
+        https://github.com/fixnhanh-linux/monitor-grafana-proxmox-full - FIX NHANH.
+      groups:
+        - name: Templates/Applications
+      items:
+        - uuid: 63ae1253893e4c7bb8114b8aee7dcaf9
+          name: 'Exporter: get metrics'
+          type: HTTP_AGENT
+          key: pve.ceph.exporter.get
+          delay: 1m
+          history: '0'
+          trends: '0'
+          value_type: TEXT
+          timeout: 15s
+          url: 'http://{HOST.CONN}:{$PVE.EXPORTER.PORT}/metrics'
+          description: 'Raw /metrics text; every other item is computed from it.'
+          tags:
+            - tag: component
+              value: exporter
+          triggers:
+            - uuid: fbfbc15d4aee47e48961221568cc1f70
+              expression: 'nodata(/Proxmox Ceph by FIX NHANH exporter/pve.ceph.exporter.get,5m)=1'
+              name: 'Exporter: no answer from {HOST.CONN}:{$PVE.EXPORTER.PORT} for 5 minutes'
+              priority: HIGH
+              description: 'Check on the exporter host: proxmox-menu services (or systemctl status pve-ceph-extra-exporter / docker ps).'
+        - uuid: e5edecb0a107443ba9d3ff5fc1110a06
+          name: 'Exporter: version'
+          type: DEPENDENT
+          key: pve.ceph.exporter.version
+          delay: '0'
+          history: 7d
+          trends: '0'
+          value_type: CHAR
+          preprocessing:
+            - type: PROMETHEUS_PATTERN
+              parameters:
+                - pve_ceph_extra_exporter_build_info
+                - label
+                - version
+            - type: DISCARD_UNCHANGED_HEARTBEAT
+              parameters:
+                - 1d
+          master_item:
+            key: pve.ceph.exporter.get
+          tags:
+            - tag: component
+              value: exporter
+        - uuid: 1a330f5ddf41480e91db849fc507a3de
+          name: 'Exporter: mode'
+          type: DEPENDENT
+          key: pve.ceph.exporter.mode
+          delay: '0'
+          history: 7d
+          trends: '0'
+          value_type: CHAR
+          preprocessing:
+            - type: PROMETHEUS_PATTERN
+              parameters:
+                - pve_ceph_extra_exporter_mode
+                - label
+                - mode
+            - type: DISCARD_UNCHANGED_HEARTBEAT
+              parameters:
+                - 1d
+          master_item:
+            key: pve.ceph.exporter.get
+          tags:
+            - tag: component
+              value: exporter
+        - uuid: 029dae1f7b2f46558673ce20260de15a
+          name: 'Exporter: last collect'
+          type: DEPENDENT
+          key: pve.ceph.exporter.last_collect
+          delay: '0'
+          history: 7d
+          units: unixtime
+          preprocessing:
+            - type: PROMETHEUS_PATTERN
+              parameters:
+                - pve_ceph_extra_exporter_last_collect_timestamp
+                - value
+                - ''
+          master_item:
+            key: pve.ceph.exporter.get
+          tags:
+            - tag: component
+              value: exporter
+          triggers:
+            - uuid: 6fbb1c849a074d71ae8c7e663eefba33
+              expression: 'now()-last(/Proxmox Ceph by FIX NHANH exporter/pve.ceph.exporter.last_collect)>180'
+              name: 'Exporter: data older than 3 minutes (collector stuck)'
+              priority: WARNING
+              description: 'The exporter answers but has not collected for more than 3 minutes. Restart it: proxmox-menu services.'
+        - uuid: d95f1ceb8dcc4cc596e6b63a9702b2a9
+          name: 'Ceph: health'
+          type: DEPENDENT
+          key: ceph.health.status
+          delay: '0'
+          history: 30d
+          value_type: UNSIGNED
+          valuemap:
+            name: 'Ceph health'
+          preprocessing:
+            - type: PROMETHEUS_PATTERN
+              parameters:
+                - ceph_health_status
+                - value
+                - ''
+          master_item:
+            key: pve.ceph.exporter.get
+          tags:
+            - tag: component
+              value: ceph
+          triggers:
+            - uuid: 97ed8e892d1449158ab142b103309a2f
+              expression: 'last(/Proxmox Ceph by FIX NHANH exporter/ceph.health.status)=2'
+              name: 'Ceph: HEALTH_ERR'
+              priority: HIGH
+              description: 'Run "ceph health detail" on a node.'
+            - uuid: 5697cc3e1d5241e9b73df98a4afc3f91
+              expression: 'min(/Proxmox Ceph by FIX NHANH exporter/ceph.health.status,15m)=1'
+              name: 'Ceph: HEALTH_WARN for 15 minutes'
+              priority: WARNING
+              description: 'Run "ceph health detail" on a node.'
+        - uuid: bab7d89acdd549c69d41dc49720f3430
+          name: 'Ceph: recovery state'
+          type: DEPENDENT
+          key: ceph.recovery.state
+          delay: '0'
+          history: 30d
+          value_type: UNSIGNED
+          valuemap:
+            name: 'Ceph recovery state'
+          preprocessing:
+            - type: PROMETHEUS_PATTERN
+              parameters:
+                - ceph_custom_recovery_info
+                - value
+                - ''
+          master_item:
+            key: pve.ceph.exporter.get
+          tags:
+            - tag: component
+              value: ceph
+        - uuid: c7b1c58eccd84302af03cb1d6edcacc9
+          name: 'Ceph: recovery status line'
+          type: DEPENDENT
+          key: ceph.recovery.content
+          delay: '0'
+          history: 7d
+          trends: '0'
+          value_type: TEXT
+          preprocessing:
+            - type: PROMETHEUS_PATTERN
+              parameters:
+                - ceph_custom_recovery_info
+                - label
+                - content
+            - type: DISCARD_UNCHANGED_HEARTBEAT
+              parameters:
+                - 1h
+          master_item:
+            key: pve.ceph.exporter.get
+          tags:
+            - tag: component
+              value: ceph
+        - uuid: c8d3202ce0e54719b7501f4c83e801fe
+          name: 'Ceph: total health (data stable)'
+          type: DEPENDENT
+          key: ceph.recovery.percent
+          delay: '0'
+          history: 30d
+          value_type: FLOAT
+          units: '%'
+          preprocessing:
+            - type: PROMETHEUS_PATTERN
+              parameters:
+                - ceph_custom_recovery_percent
+                - value
+                - ''
+          master_item:
+            key: pve.ceph.exporter.get
+          tags:
+            - tag: component
+              value: ceph
+          triggers:
+            - uuid: 9be836cb2ee44dbdb50fc48e8962fc0a
+              expression: 'max(/Proxmox Ceph by FIX NHANH exporter/ceph.recovery.percent,{$CEPH.RECOVERY.MAX.TIME})<100'
+              name: 'Ceph: recovery / rebalance running longer than {$CEPH.RECOVERY.MAX.TIME}'
+              priority: WARNING
+              description: 'Check "ceph -s": recovery may be throttled or stuck.'
+        - uuid: d9870000f76a4b3f9899a839992b800b
+          name: 'Ceph: recovery speed'
+          type: DEPENDENT
+          key: ceph.recovery.speed
+          delay: '0'
+          history: 30d
+          value_type: FLOAT
+          units: Bps
+          preprocessing:
+            - type: PROMETHEUS_PATTERN
+              parameters:
+                - ceph_custom_recovery_speed_bytes
+                - value
+                - ''
+          master_item:
+            key: pve.ceph.exporter.get
+          tags:
+            - tag: component
+              value: ceph
+        - uuid: 015f38375f0448f68a3b9f552c7bce9b
+          name: 'Ceph: recovery objects per second'
+          type: DEPENDENT
+          key: ceph.recovery.objects_per_sec
+          delay: '0'
+          history: 30d
+          value_type: FLOAT
+          units: objects/s
+          preprocessing:
+            - type: PROMETHEUS_PATTERN
+              parameters:
+                - ceph_custom_recovery_objects_per_sec
+                - value
+                - ''
+          master_item:
+            key: pve.ceph.exporter.get
+          tags:
+            - tag: component
+              value: ceph
+        - uuid: 9302d2fcfcab41b4b117b616f7f2aa4b
+          name: 'Ceph: degraded objects'
+          type: DEPENDENT
+          key: ceph.objects.degraded
+          delay: '0'
+          history: 30d
+          value_type: UNSIGNED
+          preprocessing:
+            - type: PROMETHEUS_PATTERN
+              parameters:
+                - ceph_custom_degraded_objects
+                - value
+                - ''
+          master_item:
+            key: pve.ceph.exporter.get
+          tags:
+            - tag: component
+              value: ceph
+        - uuid: 17945417a59c43c79b664fbf90766c6e
+          name: 'Ceph: misplaced objects'
+          type: DEPENDENT
+          key: ceph.objects.misplaced
+          delay: '0'
+          history: 30d
+          value_type: UNSIGNED
+          preprocessing:
+            - type: PROMETHEUS_PATTERN
+              parameters:
+                - ceph_custom_misplaced_objects
+                - value
+                - ''
+          master_item:
+            key: pve.ceph.exporter.get
+          tags:
+            - tag: component
+              value: ceph
+        - uuid: afead4e0820e4d31a770592e843be500
+          name: 'Ceph: unfound objects'
+          type: DEPENDENT
+          key: ceph.objects.unfound
+          delay: '0'
+          history: 30d
+          value_type: UNSIGNED
+          preprocessing:
+            - type: PROMETHEUS_PATTERN
+              parameters:
+                - ceph_custom_unfound_objects
+                - value
+                - ''
+          master_item:
+            key: pve.ceph.exporter.get
+          tags:
+            - tag: component
+              value: ceph
+          triggers:
+            - uuid: c54fe3cd59494b39842c9c18767800ff
+              expression: 'last(/Proxmox Ceph by FIX NHANH exporter/ceph.objects.unfound)>0'
+              name: 'Ceph: {ITEM.LASTVALUE1} unfound objects (possible data loss)'
+              priority: HIGH
+              description: 'Run "ceph health detail" and "ceph pg <pgid> list_unfound".'
+        - uuid: 83b57742e0d744ecabbc7bf3879d6d2f
+          name: 'Ceph: PGs not active+clean'
+          type: DEPENDENT
+          key: ceph.pgs.not_clean
+          delay: '0'
+          history: 30d
+          value_type: UNSIGNED
+          preprocessing:
+            - type: PROMETHEUS_PATTERN
+              parameters:
+                - ceph_custom_pgs_not_clean
+                - value
+                - ''
+          master_item:
+            key: pve.ceph.exporter.get
+          tags:
+            - tag: component
+              value: ceph
+        - uuid: e36db44927eb4611b59d66600db3b326
+          name: 'Ceph: inconsistent PGs'
+          type: DEPENDENT
+          key: ceph.pgs.inconsistent
+          delay: '0'
+          history: 30d
+          value_type: UNSIGNED
+          preprocessing:
+            - type: PROMETHEUS_PATTERN
+              parameters:
+                - ceph_pg_inconsistent
+                - function
+                - sum
+              error_handler: CUSTOM_VALUE
+              error_handler_params: '0'
+          master_item:
+            key: pve.ceph.exporter.get
+          tags:
+            - tag: component
+              value: ceph
+          triggers:
+            - uuid: 6d972b612a164628ba2812a9730ad5e3
+              expression: 'min(/Proxmox Ceph by FIX NHANH exporter/ceph.pgs.inconsistent,5m)>0'
+              name: 'Ceph: {ITEM.LASTVALUE1} inconsistent PGs'
+              priority: HIGH
+              description: 'Run "ceph health detail", then "ceph pg repair <pgid>".'
+        - uuid: c40cc6b1a7204dae872b4a0b3b542582
+          name: 'Ceph: OSDs total'
+          type: DEPENDENT
+          key: ceph.osd.total
+          delay: '0'
+          history: 30d
+          value_type: UNSIGNED
+          preprocessing:
+            - type: PROMETHEUS_PATTERN
+              parameters:
+                - ceph_osd_up
+                - function
+                - count
+          master_item:
+            key: pve.ceph.exporter.get
+          tags:
+            - tag: component
+              value: ceph
+        - uuid: e940d36cfec24917b28787dcaf2d1dbf
+          name: 'Ceph: OSDs up'
+          type: DEPENDENT
+          key: ceph.osd.up
+          delay: '0'
+          history: 30d
+          value_type: UNSIGNED
+          preprocessing:
+            - type: PROMETHEUS_PATTERN
+              parameters:
+                - 'ceph_osd_up == 1'
+                - function
+                - count
+              error_handler: CUSTOM_VALUE
+              error_handler_params: '0'
+          master_item:
+            key: pve.ceph.exporter.get
+          tags:
+            - tag: component
+              value: ceph
+        - uuid: eba28063c5d94588bcbb4d0abd3cdcdd
+          name: 'Ceph: OSDs in'
+          type: DEPENDENT
+          key: ceph.osd.in
+          delay: '0'
+          history: 30d
+          value_type: UNSIGNED
+          preprocessing:
+            - type: PROMETHEUS_PATTERN
+              parameters:
+                - 'ceph_osd_in == 1'
+                - function
+                - count
+              error_handler: CUSTOM_VALUE
+              error_handler_params: '0'
+          master_item:
+            key: pve.ceph.exporter.get
+          tags:
+            - tag: component
+              value: ceph
+        - uuid: 5f960abf61ec460fb94e367d75eea9d8
+          name: 'Proxmox: cluster quorate'
+          type: DEPENDENT
+          key: pve.cluster.quorate
+          delay: '0'
+          history: 30d
+          value_type: UNSIGNED
+          valuemap:
+            name: 'Proxmox yes/no'
+          preprocessing:
+            - type: PROMETHEUS_PATTERN
+              parameters:
+                - pve_cluster_info
+                - label
+                - quorate
+          master_item:
+            key: pve.ceph.exporter.get
+          tags:
+            - tag: component
+              value: proxmox
+          triggers:
+            - uuid: 9c09478f067c42f4b05d828624e89304
+              expression: 'last(/Proxmox Ceph by FIX NHANH exporter/pve.cluster.quorate)<>1'
+              name: 'Proxmox: cluster lost quorum'
+              priority: DISASTER
+              description: 'Run "pvecm status" on a node. Without quorum /etc/pve is read-only and HA cannot move VMs.'
+        - uuid: 795613f0b4c145f7bc7773901c9f534d
+          name: 'Proxmox: cluster name'
+          type: DEPENDENT
+          key: pve.cluster.name
+          delay: '0'
+          history: 7d
+          trends: '0'
+          value_type: CHAR
+          preprocessing:
+            - type: PROMETHEUS_PATTERN
+              parameters:
+                - pve_cluster_info
+                - label
+                - id
+            - type: REGEX
+              parameters:
+                - '^cluster/(.*)$'
+                - \1
+            - type: DISCARD_UNCHANGED_HEARTBEAT
+              parameters:
+                - 1d
+          master_item:
+            key: pve.ceph.exporter.get
+          tags:
+            - tag: component
+              value: proxmox
+        - uuid: b327f1218abd42c38d3eac2565213824
+          name: 'Proxmox: nodes online'
+          type: DEPENDENT
+          key: pve.nodes.online
+          delay: '0'
+          history: 30d
+          value_type: UNSIGNED
+          preprocessing:
+            - type: PROMETHEUS_PATTERN
+              parameters:
+                - 'pve_up == 1'
+                - function
+                - count
+              error_handler: CUSTOM_VALUE
+              error_handler_params: '0'
+          master_item:
+            key: pve.ceph.exporter.get
+          tags:
+            - tag: component
+              value: proxmox
+        - uuid: f4f0b805ad4b4ed9bf2587420f3c16e8
+          name: 'Proxmox: nodes total'
+          type: DEPENDENT
+          key: pve.nodes.total
+          delay: '0'
+          history: 30d
+          value_type: UNSIGNED
+          preprocessing:
+            - type: PROMETHEUS_PATTERN
+              parameters:
+                - pve_up
+                - function
+                - count
+          master_item:
+            key: pve.ceph.exporter.get
+          tags:
+            - tag: component
+              value: proxmox
+      discovery_rules:
+        - uuid: 034c8a69ee7f4d6ab02bc5ca6f2e72ae
+          name: 'Exporter: collectors discovery'
+          type: DEPENDENT
+          key: pve.ceph.exporter.collector.discovery
+          delay: '0'
+          lifetime: 7d
+          item_prototypes:
+            - uuid: a2324c8ca2384cdcb144134d6c600624
+              name: 'Exporter: collector {#COLLECTOR} up'
+              type: DEPENDENT
+              key: 'pve.ceph.exporter.collector.up[{#COLLECTOR}]'
+              delay: '0'
+              history: 30d
+              value_type: UNSIGNED
+              valuemap:
+                name: 'Proxmox yes/no'
+              preprocessing:
+                - type: PROMETHEUS_PATTERN
+                  parameters:
+                    - 'pve_ceph_extra_exporter_up{collector="{#COLLECTOR}"}'
+                    - value
+                    - ''
+              master_item:
+                key: pve.ceph.exporter.get
+              tags:
+                - tag: component
+                  value: exporter
+              trigger_prototypes:
+                - uuid: 5a922a6160b04d78a60bce8c1e6afaf6
+                  expression: 'max(/Proxmox Ceph by FIX NHANH exporter/pve.ceph.exporter.collector.up[{#COLLECTOR}],5m)=0'
+                  name: 'Exporter: collector {#COLLECTOR} failing for 5 minutes'
+                  priority: WARNING
+                  description: 'See the error item of this collector, or: proxmox-menu logs.'
+            - uuid: c3602059f1b74b83b2473af6b02c9db7
+              name: 'Exporter: collector {#COLLECTOR} last error'
+              type: DEPENDENT
+              key: 'pve.ceph.exporter.collector.error[{#COLLECTOR}]'
+              delay: '0'
+              history: 7d
+              trends: '0'
+              value_type: TEXT
+              preprocessing:
+                - type: PROMETHEUS_PATTERN
+                  parameters:
+                    - 'pve_ceph_extra_exporter_last_error{collector="{#COLLECTOR}"}'
+                    - label
+                    - error
+                  error_handler: CUSTOM_VALUE
+                  error_handler_params: none
+                - type: DISCARD_UNCHANGED_HEARTBEAT
+                  parameters:
+                    - 1h
+              master_item:
+                key: pve.ceph.exporter.get
+              tags:
+                - tag: component
+                  value: exporter
+          master_item:
+            key: pve.ceph.exporter.get
+          lld_macro_paths:
+            - lld_macro: '{#COLLECTOR}'
+              path: $.labels.collector
+          preprocessing:
+            - type: PROMETHEUS_TO_JSON
+              parameters:
+                - pve_ceph_extra_exporter_up
+        - uuid: cf6ba03c44ff4d5baecf4cbc28e6eeea
+          name: 'Proxmox: nodes discovery'
+          type: DEPENDENT
+          key: pve.node.discovery
+          delay: '0'
+          lifetime: 7d
+          item_prototypes:
+            - uuid: 6f5870a2518b4df48804e4ffc160ea7e
+              name: 'Proxmox: node {#NODE} up'
+              type: DEPENDENT
+              key: 'pve.node.up[{#NODE}]'
+              delay: '0'
+              history: 30d
+              value_type: UNSIGNED
+              valuemap:
+                name: 'Proxmox node status'
+              preprocessing:
+                - type: PROMETHEUS_PATTERN
+                  parameters:
+                    - 'pve_up{id="{#ID}"}'
+                    - value
+                    - ''
+              master_item:
+                key: pve.ceph.exporter.get
+              tags:
+                - tag: component
+                  value: proxmox
+                - tag: node
+                  value: '{#NODE}'
+              trigger_prototypes:
+                - uuid: 7f2a864c21f14911ac1171caedd4ff75
+                  expression: 'max(/Proxmox Ceph by FIX NHANH exporter/pve.node.up[{#NODE}],2m)=0'
+                  name: 'Proxmox: node {#NODE} is offline'
+                  priority: HIGH
+                  description: 'Node does not answer in the cluster. HA moves its VMs after fencing.'
+            - uuid: 7f7c3b533724461986338255c0a3636e
+              name: 'Proxmox: node {#NODE} CPU usage'
+              type: DEPENDENT
+              key: 'pve.node.cpu[{#NODE}]'
+              delay: '0'
+              history: 30d
+              value_type: FLOAT
+              units: '%'
+              preprocessing:
+                - type: PROMETHEUS_PATTERN
+                  parameters:
+                    - 'pve_cpu_usage_ratio{id="{#ID}"}'
+                    - value
+                    - ''
+                - type: MULTIPLIER
+                  parameters:
+                    - '100'
+              master_item:
+                key: pve.ceph.exporter.get
+              tags:
+                - tag: component
+                  value: proxmox
+                - tag: node
+                  value: '{#NODE}'
+              trigger_prototypes:
+                - uuid: ca52ca88cfc84e7fb2afab9806ce4e61
+                  expression: 'min(/Proxmox Ceph by FIX NHANH exporter/pve.node.cpu[{#NODE}],15m)>{$PVE.NODE.CPU.MAX}'
+                  name: 'Proxmox: node {#NODE} CPU above {$PVE.NODE.CPU.MAX}% for 15 minutes'
+                  priority: WARNING
+            - uuid: 74352df387d94c5185a4b7f1ecec64c3
+              name: 'Proxmox: node {#NODE} memory used'
+              type: DEPENDENT
+              key: 'pve.node.mem.used[{#NODE}]'
+              delay: '0'
+              history: 30d
+              units: B
+              preprocessing:
+                - type: PROMETHEUS_PATTERN
+                  parameters:
+                    - 'pve_memory_usage_bytes{id="{#ID}"}'
+                    - value
+                    - ''
+              master_item:
+                key: pve.ceph.exporter.get
+              tags:
+                - tag: component
+                  value: proxmox
+                - tag: node
+                  value: '{#NODE}'
+            - uuid: 4b49776dc68d43cd92afc4580cd01345
+              name: 'Proxmox: node {#NODE} memory total'
+              type: DEPENDENT
+              key: 'pve.node.mem.size[{#NODE}]'
+              delay: '0'
+              history: 30d
+              units: B
+              preprocessing:
+                - type: PROMETHEUS_PATTERN
+                  parameters:
+                    - 'pve_memory_size_bytes{id="{#ID}"}'
+                    - value
+                    - ''
+              master_item:
+                key: pve.ceph.exporter.get
+              tags:
+                - tag: component
+                  value: proxmox
+                - tag: node
+                  value: '{#NODE}'
+            - uuid: f594ab13ac50428ebea800e88f8e15d7
+              name: 'Proxmox: node {#NODE} memory usage'
+              type: CALCULATED
+              key: 'pve.node.mem.pused[{#NODE}]'
+              history: 30d
+              value_type: FLOAT
+              units: '%'
+              params: 'last(//pve.node.mem.used[{#NODE}])/last(//pve.node.mem.size[{#NODE}])*100'
+              tags:
+                - tag: component
+                  value: proxmox
+                - tag: node
+                  value: '{#NODE}'
+              trigger_prototypes:
+                - uuid: 57b9925ca52547ed93d8a1d17d2f5442
+                  expression: 'min(/Proxmox Ceph by FIX NHANH exporter/pve.node.mem.pused[{#NODE}],15m)>{$PVE.NODE.MEM.MAX}'
+                  name: 'Proxmox: node {#NODE} memory above {$PVE.NODE.MEM.MAX}% for 15 minutes'
+                  priority: WARNING
+            - uuid: ded8f3d89c7c4e269588bf677a03f009
+              name: 'Proxmox: node {#NODE} uptime'
+              type: DEPENDENT
+              key: 'pve.node.uptime[{#NODE}]'
+              delay: '0'
+              history: 7d
+              units: uptime
+              preprocessing:
+                - type: PROMETHEUS_PATTERN
+                  parameters:
+                    - 'pve_uptime_seconds{id="{#ID}"}'
+                    - value
+                    - ''
+              master_item:
+                key: pve.ceph.exporter.get
+              tags:
+                - tag: component
+                  value: proxmox
+                - tag: node
+                  value: '{#NODE}'
+            - uuid: e7d98aa5d8e14bc6ac369752dda6d96e
+              name: 'Proxmox: node {#NODE} HA state'
+              type: DEPENDENT
+              key: 'pve.node.ha.state[{#NODE}]'
+              delay: '0'
+              history: 30d
+              trends: '0'
+              value_type: CHAR
+              preprocessing:
+                - type: PROMETHEUS_TO_JSON
+                  parameters:
+                    - 'pve_ha_state{id="{#ID}"}'
+                - type: JSONPATH
+                  parameters:
+                    - '$[?(@.value == "1")].labels.state.first()'
+                  error_handler: CUSTOM_VALUE
+                  error_handler_params: none
+              master_item:
+                key: pve.ceph.exporter.get
+              tags:
+                - tag: component
+                  value: proxmox
+                - tag: node
+                  value: '{#NODE}'
+              trigger_prototypes:
+                - uuid: e0d479e79a5542a7982aae1654276585
+                  expression: 'count(/Proxmox Ceph by FIX NHANH exporter/pve.node.ha.state[{#NODE}],2m,"regexp","^(fence|lost|gone|unknown)$")>=2'
+                  name: 'Proxmox: node {#NODE} HA state is {ITEM.LASTVALUE1}'
+                  priority: HIGH
+                  description: 'fence / lost / gone / unknown: the node is being fenced or HA lost it. Run "ha-manager status".'
+                - uuid: 3b1cc74db262489090c45043fd316ad4
+                  expression: 'last(/Proxmox Ceph by FIX NHANH exporter/pve.node.ha.state[{#NODE}])="maintenance"'
+                  name: 'Proxmox: node {#NODE} is in HA maintenance mode'
+                  priority: INFO
+            - uuid: 77e5ab0a9e57457ca332115d1878f529
+              name: 'Proxmox: node {#NODE} HA groups'
+              type: DEPENDENT
+              key: 'pve.node.ha.groups[{#NODE}]'
+              delay: '0'
+              history: 30d
+              trends: '0'
+              value_type: CHAR
+              preprocessing:
+                - type: PROMETHEUS_PATTERN
+                  parameters:
+                    - 'pve_ha_groups_custom_info{host="{#NODE}"}'
+                    - label
+                    - groups
+                  error_handler: CUSTOM_VALUE
+                  error_handler_params: '-'
+                - type: DISCARD_UNCHANGED_HEARTBEAT
+                  parameters:
+                    - 1d
+              master_item:
+                key: pve.ceph.exporter.get
+              tags:
+                - tag: component
+                  value: proxmox
+                - tag: node
+                  value: '{#NODE}'
+          master_item:
+            key: pve.ceph.exporter.get
+          lld_macro_paths:
+            - lld_macro: '{#ID}'
+              path: $.labels.id
+            - lld_macro: '{#NODE}'
+              path: $.node
+          preprocessing:
+            - type: PROMETHEUS_TO_JSON
+              parameters:
+                - pve_up
+            - type: JAVASCRIPT
+              parameters:
+                - |
+                  var a = JSON.parse(value);
+                  a.forEach(function (x) { x.node = x.labels.id.replace(/^node\//, ''); });
+                  return JSON.stringify(a);
+        - uuid: ec7a428f45b84b26b1390f1a115f0eff
+          name: 'Ceph: OSD discovery'
+          type: DEPENDENT
+          key: ceph.osd.discovery
+          delay: '0'
+          lifetime: 7d
+          item_prototypes:
+            - uuid: 0787bf4422bc4c899cf0b9a611f33c5e
+              name: 'Ceph: {#OSD} up'
+              type: DEPENDENT
+              key: 'ceph.osd.up[{#OSD}]'
+              delay: '0'
+              history: 30d
+              value_type: UNSIGNED
+              valuemap:
+                name: 'Proxmox node status'
+              preprocessing:
+                - type: PROMETHEUS_PATTERN
+                  parameters:
+                    - 'ceph_osd_up{ceph_daemon="{#OSD}"}'
+                    - value
+                    - ''
+              master_item:
+                key: pve.ceph.exporter.get
+              tags:
+                - tag: component
+                  value: ceph
+                - tag: osd
+                  value: '{#OSD}'
+              trigger_prototypes:
+                - uuid: b6dc6de482fa41d4a9f61033b18e15bb
+                  expression: 'max(/Proxmox Ceph by FIX NHANH exporter/ceph.osd.up[{#OSD}],5m)=0'
+                  name: 'Ceph: {#OSD} is down'
+                  priority: HIGH
+                  description: 'Check the OSD service on its node: systemctl status ceph-osd@<id>.'
+            - uuid: 3972816aee2e4121843a6436d3f23203
+              name: 'Ceph: {#OSD} in'
+              type: DEPENDENT
+              key: 'ceph.osd.in[{#OSD}]'
+              delay: '0'
+              history: 30d
+              value_type: UNSIGNED
+              valuemap:
+                name: 'Proxmox yes/no'
+              preprocessing:
+                - type: PROMETHEUS_PATTERN
+                  parameters:
+                    - 'ceph_osd_in{ceph_daemon="{#OSD}"}'
+                    - value
+                    - ''
+              master_item:
+                key: pve.ceph.exporter.get
+              tags:
+                - tag: component
+                  value: ceph
+                - tag: osd
+                  value: '{#OSD}'
+              trigger_prototypes:
+                - uuid: bbe08d94ffc2442697fcaa39e97ba5ae
+                  expression: 'max(/Proxmox Ceph by FIX NHANH exporter/ceph.osd.in[{#OSD}],15m)=0'
+                  name: 'Ceph: {#OSD} is out for 15 minutes'
+                  priority: WARNING
+            - uuid: 45d2f5ce4ba240ca85a3301f01eb36e5
+              name: 'Ceph: {#OSD} apply latency'
+              type: DEPENDENT
+              key: 'ceph.osd.latency.apply[{#OSD}]'
+              delay: '0'
+              history: 30d
+              value_type: FLOAT
+              units: ms
+              preprocessing:
+                - type: PROMETHEUS_PATTERN
+                  parameters:
+                    - 'ceph_osd_apply_latency_ms{ceph_daemon="{#OSD}"}'
+                    - value
+                    - ''
+              master_item:
+                key: pve.ceph.exporter.get
+              tags:
+                - tag: component
+                  value: ceph
+                - tag: osd
+                  value: '{#OSD}'
+              trigger_prototypes:
+                - uuid: 41d2954d7dda4fb3a67111170f74df9e
+                  expression: 'min(/Proxmox Ceph by FIX NHANH exporter/ceph.osd.latency.apply[{#OSD}],10m)>{$CEPH.OSD.LATENCY.MAX}'
+                  name: 'Ceph: {#OSD} apply latency above {$CEPH.OSD.LATENCY.MAX} ms for 10 minutes'
+                  priority: WARNING
+                  description: 'Slow or failing disk. Check smartctl and "ceph osd perf".'
+            - uuid: 81203bc7290643279f974a09654747e2
+              name: 'Ceph: {#OSD} bytes used'
+              type: DEPENDENT
+              key: 'ceph.osd.bytes.used[{#OSD}]'
+              delay: '0'
+              history: 30d
+              units: B
+              preprocessing:
+                - type: PROMETHEUS_PATTERN
+                  parameters:
+                    - 'ceph_osd_stat_bytes_used{ceph_daemon="{#OSD}"}'
+                    - value
+                    - ''
+              master_item:
+                key: pve.ceph.exporter.get
+              tags:
+                - tag: component
+                  value: ceph
+                - tag: osd
+                  value: '{#OSD}'
+            - uuid: b18b07f8ec9346ae87ec57c7665478bf
+              name: 'Ceph: {#OSD} bytes total'
+              type: DEPENDENT
+              key: 'ceph.osd.bytes.total[{#OSD}]'
+              delay: '0'
+              history: 30d
+              units: B
+              preprocessing:
+                - type: PROMETHEUS_PATTERN
+                  parameters:
+                    - 'ceph_osd_stat_bytes{ceph_daemon="{#OSD}"}'
+                    - value
+                    - ''
+              master_item:
+                key: pve.ceph.exporter.get
+              tags:
+                - tag: component
+                  value: ceph
+                - tag: osd
+                  value: '{#OSD}'
+            - uuid: 91eaf2beccf848d89d8a60121e9dd0fe
+              name: 'Ceph: {#OSD} used'
+              type: CALCULATED
+              key: 'ceph.osd.pused[{#OSD}]'
+              history: 30d
+              value_type: FLOAT
+              units: '%'
+              params: 'last(//ceph.osd.bytes.used[{#OSD}])/last(//ceph.osd.bytes.total[{#OSD}])*100'
+              tags:
+                - tag: component
+                  value: ceph
+                - tag: osd
+                  value: '{#OSD}'
+              trigger_prototypes:
+                - uuid: df63cf9ed46b494188d414c9f3fac9ed
+                  expression: 'min(/Proxmox Ceph by FIX NHANH exporter/ceph.osd.pused[{#OSD}],5m)>{$CEPH.OSD.USED.CRIT}'
+                  name: 'Ceph: {#OSD} above {$CEPH.OSD.USED.CRIT}% full'
+                  priority: HIGH
+                  description: 'Writes stop at the full ratio. Add disks or rebalance (ceph osd reweight-by-utilization).'
+                - uuid: 1d0c5b8e3a6f4c2d9e7b8a1f4c3d2e10
+                  expression: 'min(/Proxmox Ceph by FIX NHANH exporter/ceph.osd.pused[{#OSD}],10m)>{$CEPH.OSD.USED.WARN}'
+                  name: 'Ceph: {#OSD} above {$CEPH.OSD.USED.WARN}% full'
+                  priority: WARNING
+                  dependencies:
+                    - name: 'Ceph: {#OSD} above {$CEPH.OSD.USED.CRIT}% full'
+                      expression: 'min(/Proxmox Ceph by FIX NHANH exporter/ceph.osd.pused[{#OSD}],5m)>{$CEPH.OSD.USED.CRIT}'
+          master_item:
+            key: pve.ceph.exporter.get
+          lld_macro_paths:
+            - lld_macro: '{#OSD}'
+              path: $.labels.ceph_daemon
+          preprocessing:
+            - type: PROMETHEUS_TO_JSON
+              parameters:
+                - ceph_osd_up
+        - uuid: 2f8e6a4c1b9d4e7f8a3c5b2d6e9f1a04
+          name: 'Ceph: pool discovery'
+          type: DEPENDENT
+          key: ceph.pool.discovery
+          delay: '0'
+          lifetime: 7d
+          item_prototypes:
+            - uuid: 3a9f7b5d2c0e4f8a9b4d6c3e7f0a2b15
+              name: 'Ceph: pool {#POOL} used'
+              type: DEPENDENT
+              key: 'ceph.pool.pused[{#POOLID}]'
+              delay: '0'
+              history: 30d
+              value_type: FLOAT
+              units: '%'
+              preprocessing:
+                - type: PROMETHEUS_PATTERN
+                  parameters:
+                    - 'ceph_pool_percent_used{pool_id="{#POOLID}"}'
+                    - value
+                    - ''
+                - type: MULTIPLIER
+                  parameters:
+                    - '100'
+              master_item:
+                key: pve.ceph.exporter.get
+              tags:
+                - tag: component
+                  value: ceph
+                - tag: pool
+                  value: '{#POOL}'
+              trigger_prototypes:
+                - uuid: 4b0a8c6e3d1f4a9b0c5e7d4f8a1b3c26
+                  expression: 'min(/Proxmox Ceph by FIX NHANH exporter/ceph.pool.pused[{#POOLID}],15m)>{$CEPH.POOL.USED.MAX}'
+                  name: 'Ceph: pool {#POOL} above {$CEPH.POOL.USED.MAX}% full'
+                  priority: WARNING
+            - uuid: 5c1b9d7f4e2a4b0c1d6f8e5a9b2c4d37
+              name: 'Ceph: pool {#POOL} stored'
+              type: DEPENDENT
+              key: 'ceph.pool.stored[{#POOLID}]'
+              delay: '0'
+              history: 30d
+              units: B
+              preprocessing:
+                - type: PROMETHEUS_PATTERN
+                  parameters:
+                    - 'ceph_pool_stored{pool_id="{#POOLID}"}'
+                    - value
+                    - ''
+              master_item:
+                key: pve.ceph.exporter.get
+              tags:
+                - tag: component
+                  value: ceph
+                - tag: pool
+                  value: '{#POOL}'
+            - uuid: 6d2c0e8a5f3b4c1d2e7a9f6b0c3d5e48
+              name: 'Ceph: pool {#POOL} max available'
+              type: DEPENDENT
+              key: 'ceph.pool.avail[{#POOLID}]'
+              delay: '0'
+              history: 30d
+              units: B
+              preprocessing:
+                - type: PROMETHEUS_PATTERN
+                  parameters:
+                    - 'ceph_pool_max_avail{pool_id="{#POOLID}"}'
+                    - value
+                    - ''
+              master_item:
+                key: pve.ceph.exporter.get
+              tags:
+                - tag: component
+                  value: ceph
+                - tag: pool
+                  value: '{#POOL}'
+          master_item:
+            key: pve.ceph.exporter.get
+          lld_macro_paths:
+            - lld_macro: '{#POOLID}'
+              path: $.labels.pool_id
+            - lld_macro: '{#POOL}'
+              path: $.labels.name
+          preprocessing:
+            - type: PROMETHEUS_TO_JSON
+              parameters:
+                - ceph_pool_metadata
+      tags:
+        - tag: class
+          value: software
+        - tag: target
+          value: proxmox
+        - tag: target
+          value: ceph
+      macros:
+        - macro: '{$CEPH.OSD.LATENCY.MAX}'
+          value: '200'
+          description: 'OSD apply latency (ms) for 10 minutes -> warning'
+        - macro: '{$CEPH.OSD.USED.CRIT}'
+          value: '90'
+          description: 'OSD used (%) -> high'
+        - macro: '{$CEPH.OSD.USED.WARN}'
+          value: '85'
+          description: 'OSD used (%) -> warning'
+        - macro: '{$CEPH.POOL.USED.MAX}'
+          value: '80'
+          description: 'Pool used (%) for 15 minutes -> warning'
+        - macro: '{$CEPH.RECOVERY.MAX.TIME}'
+          value: 6h
+          description: 'Recovery / rebalance longer than this -> warning'
+        - macro: '{$PVE.EXPORTER.PORT}'
+          value: '9830'
+          description: 'Port of pve_ceph_extra_exporter on {HOST.CONN} (remote mode: the port of that cluster)'
+        - macro: '{$PVE.NODE.CPU.MAX}'
+          value: '90'
+          description: 'Node CPU (%) for 15 minutes -> warning'
+        - macro: '{$PVE.NODE.MEM.MAX}'
+          value: '90'
+          description: 'Node memory (%) for 15 minutes -> warning'
+      valuemaps:
+        - uuid: 7e3d1f9b6a4c4d2e3f8b0a7c1d4e6f59
+          name: 'Ceph health'
+          mappings:
+            - value: '0'
+              newvalue: HEALTH_OK
+            - value: '1'
+              newvalue: HEALTH_WARN
+            - value: '2'
+              newvalue: HEALTH_ERR
+        - uuid: 8f4e2a0c7b5d4e3f4a9c1b8d2e5f7a60
+          name: 'Ceph recovery state'
+          mappings:
+            - value: '0'
+              newvalue: OK
+            - value: '1'
+              newvalue: 'Recovery / rebalance'
+            - value: '2'
+              newvalue: Error
+        - uuid: 9a5f3b1d8c6e4f4a5b0d2c9e3f6a8b71
+          name: 'Proxmox node status'
+          mappings:
+            - value: '0'
+              newvalue: Down
+            - value: '1'
+              newvalue: Up
+        - uuid: 0b6a4c2e9d7f4a5b6c1e3d0f4a7b9c82
+          name: 'Proxmox yes/no'
+          mappings:
+            - value: '0'
+              newvalue: 'No'
+            - value: '1'
+              newvalue: 'Yes'

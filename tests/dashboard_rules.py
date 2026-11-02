@@ -3,7 +3,7 @@
 "promtool check rules" -> bat loi cu phap query truoc khi import vao Grafana.
 Ban quyen (c) 2026 FIX NHANH. Bao luu moi quyen.
 
-    python3 tests/dashboard_rules.py grafana/proxmox_ceph_dashboard.json > /tmp/dash-rules.yml
+    python3 tests/dashboard_rules.py dashboard-grafana/proxmox_ceph_dashboard.json > /tmp/dash-rules.yml
 """
 
 import json

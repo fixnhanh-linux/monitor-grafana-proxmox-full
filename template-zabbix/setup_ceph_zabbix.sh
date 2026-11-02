@@ -4,7 +4,7 @@
 #  Copyright (c) 2026 FIX NHANH. All rights reserved.
 #
 #  Chay tren 1 may bat ky SSH duoc vao cac node Proxmox (vd may monitor):
-#    bash zabbix/setup_ceph_zabbix.sh [ZABBIX_IP] [NODE1 NODE2 ...]
+#    bash template-zabbix/setup_ceph_zabbix.sh [ZABBIX_IP] [NODE1 NODE2 ...]
 #  hoac menu.sh muc 27 (zabbix-ceph).
 #
 #  Tren tung node:
@@ -15,7 +15,7 @@
 #    - in 3 macro de dien vao template "Ceph by Zabbix agent 2" tren Zabbix web
 #
 #  Khong con dung system.run[*] / docfile.sh: template du phong
-#  zabbix/templates/ceph-health-fallback.yaml doc file bang vfs.file.contents.
+#  template-zabbix/ceph-health-fallback.yaml doc file bang vfs.file.contents.
 # =============================================================================
 set -uo pipefail
 
@@ -133,6 +133,6 @@ EOF
 echo
 echo "Templates to link on each host in Zabbix:"
 echo "  - Ceph by Zabbix agent 2 (built into Zabbix) + the 3 macros above"
-echo "  - zabbix/templates/ceph-health-fallback.yaml (import once: Data collection → Templates → Import)"
+echo "  - template-zabbix/ceph-health-fallback.yaml (import once: Data collection → Templates → Import)"
 if [ -n "$FAILED" ]; then echo; warn "Failed on:$FAILED"; exit 1; fi
 echo; ok "Done"

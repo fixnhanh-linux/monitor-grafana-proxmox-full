@@ -1,5 +1,5 @@
 # FIX NHANH - template du phong cho Ceph: doc /etc/zabbix/cephstatus.txt do
-# zabbix/setup_ceph_zabbix.sh ghi moi phut (ceph health). Dung vfs.file.contents,
+# template-zabbix/setup_ceph_zabbix.sh ghi moi phut (ceph health). Dung vfs.file.contents,
 # khong can AllowKey=system.run[*]. Gan cung host voi "Ceph by Zabbix agent 2".
 # Import: Zabbix web -> Data collection -> Templates -> Import (Zabbix 6.0+).
 zabbix_export:
@@ -12,7 +12,7 @@ zabbix_export:
     - uuid: 55b8623a48b54743ade436050fc6bfae
       template: 'Ceph health fallback by Zabbix agent 2'
       name: 'Ceph health fallback by Zabbix agent 2'
-      description: 'Reads /etc/zabbix/cephstatus.txt written every minute by zabbix/setup_ceph_zabbix.sh (ceph health). Works even when the Ceph RESTful API is down. FIX NHANH.'
+      description: 'Reads /etc/zabbix/cephstatus.txt written every minute by template-zabbix/setup_ceph_zabbix.sh (ceph health). Works even when the Ceph RESTful API is down. FIX NHANH.'
       groups:
         - name: Templates/Applications
       items:

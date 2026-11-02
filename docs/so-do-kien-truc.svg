@@ -80,7 +80,7 @@
   <text x="560" y="368" text-anchor="middle" class="s">/health failing twice → restart that exporter</text>
 
   <rect x="415" y="390" width="290" height="62" rx="8" fill="#ffffff" stroke="#64748b"/>
-  <text x="560" y="410" text-anchor="middle" class="t">grafana/make_dashboard.py</text>
+  <text x="560" y="410" text-anchor="middle" class="t">dashboard-grafana/make_dashboard.py</text>
   <text x="560" y="427" text-anchor="middle" class="s">dashboard-local.json · dashboard-&lt;name&gt;.json</text>
   <text x="560" y="443" text-anchor="middle" class="s">internal / customer · saved args (fixnhanhArgs)</text>
 
@@ -89,10 +89,10 @@
   <text x="560" y="500" text-anchor="middle" class="s">19 alert rules: exporter · Ceph · Proxmox</text>
 
   <rect x="415" y="522" width="290" height="102" rx="8" fill="#fef2f2" stroke="#dc2626"/>
-  <text x="560" y="542" text-anchor="middle" class="t">zabbix/</text>
+  <text x="560" y="542" text-anchor="middle" class="t">template-zabbix/</text>
   <text x="560" y="560" text-anchor="middle" class="m">setup_ceph_zabbix.sh</text>
   <text x="560" y="576" text-anchor="middle" class="s">SSH to nodes: agent2, cron, restful API key</text>
-  <text x="560" y="594" text-anchor="middle" class="m">templates/ceph-health-fallback.yaml</text>
+  <text x="560" y="594" text-anchor="middle" class="m">pve-ceph-exporter-by-http · ceph-health-fallback</text>
   <text x="560" y="610" text-anchor="middle" class="s">menu 27 · prints the 3 Zabbix macros</text>
 
   <!-- ===================== PROMETHEUS ===================== -->
@@ -129,8 +129,8 @@
   <text x="935" y="621" text-anchor="middle" class="m">{$CEPH.API.KEY} {$CEPH.USER}</text>
   <text x="935" y="636" text-anchor="middle" class="m">{$CEPH.API.URL} = https://mgr:8003</text>
   <rect x="790" y="652" width="290" height="52" rx="8" fill="#ffffff" stroke="#dc2626"/>
-  <text x="935" y="671" text-anchor="middle" class="t">Template: Ceph health fallback</text>
-  <text x="935" y="688" text-anchor="middle" class="m">vfs.file.contents / vfs.file.time</text>
+  <text x="935" y="671" text-anchor="middle" class="t">Templates: exporter by HTTP · fallback</text>
+  <text x="935" y="688" text-anchor="middle" class="m">HTTP monitor:9830/metrics · vfs.file.*</text>
 
   <!-- ===================== FLOWS ===================== -->
   <!-- exporter keo du lieu tu mgr + API -->
@@ -167,6 +167,6 @@
   <rect x="560" y="776" width="16" height="12" fill="#fffbeb" stroke="#d97706"/><text x="582" y="786" class="s">Grafana</text>
   <rect x="660" y="776" width="16" height="12" fill="#fef2f2" stroke="#dc2626"/><text x="682" y="786" class="s">Zabbix</text>
   <rect x="760" y="776" width="16" height="12" fill="#ffffff" stroke="#64748b"/><text x="782" y="786" class="s">tool / install</text>
-  <text x="40" y="812" class="s">Repo layout: menu.sh · exporter/ · grafana/ · prometheus/ · zabbix/ (+ templates/) · docs/ · tests/</text>
+  <text x="40" y="812" class="s">Repo layout: menu.sh · exporter/ · dashboard-grafana/ · prometheus/ · template-zabbix/ · docs/ · tests/</text>
   <text x="40" y="829" class="s">Update everything: proxmox-menu refresh  ·  Zabbix setup: proxmox-menu zabbix-ceph</text>
 </svg>
