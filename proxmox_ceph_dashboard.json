@@ -221,7 +221,7 @@
             "type": "prometheus",
             "uid": "${Site}"
           },
-          "expr": "max by (severity, name, message) (ceph_health_detail{job=~\"$job\"} > 0)\nor on() label_replace(label_replace(label_replace(vector(0),\n  \"severity\", \"OK\", \"\", \"\"), \"name\", \"HEALTH_OK\", \"\", \"\"),\n  \"message\", \"Không có cảnh báo\", \"\", \"\")",
+          "expr": "max by (severity, name, message) (ceph_health_detail{job=~\"$job\"} > 0)\nor on() label_replace(label_replace(label_replace(vector(0),\n  \"severity\", \"OK\", \"\", \"\"), \"name\", \"HEALTH_OK\", \"\", \"\"),\n  \"message\", \"Khong co canh bao\", \"\", \"\")",
           "refId": "A",
           "range": false,
           "instant": true,
@@ -1133,7 +1133,7 @@
           "countRows": false
         }
       },
-      "description": "Lặp theo biến OSD Class: OSD dùng nhiều nhất / ít nhất của từng device class.",
+      "description": "Lap theo bien OSD Class: OSD dung nhieu nhat / it nhat cua tung device class.",
       "repeat": "class",
       "repeatDirection": "h",
       "maxPerRow": 2,
@@ -1328,7 +1328,7 @@
               "Value #HA": "HA",
               "Value #CPU": "CPU (%)",
               "Value #RAM_Pct": "RAM (%)",
-              "Value #RAM_Total": "Tổng RAM",
+              "Value #RAM_Total": "Tong RAM",
               "Value #Uptime": "UPTIME"
             },
             "indexByName": {
@@ -1562,7 +1562,7 @@
           {
             "matcher": {
               "id": "byName",
-              "options": "Tổng RAM"
+              "options": "Tong RAM"
             },
             "properties": [
               {
@@ -1601,7 +1601,7 @@
           "countRows": false
         }
       },
-      "description": "HA Groups: HA group (PVE 8) / node-affinity rule (PVE 9) của node; node không thuộc nhóm nào hiện \"-\". Rule chứa mọi node hoặc đang tắt không tính là nhóm.",
+      "description": "HA Groups: HA group (PVE 8) / node-affinity rule (PVE 9) cua node; node khong thuoc nhom nao hien \"-\". Rule chua moi node hoac dang tat khong tinh la nhom.",
       "id": 18,
       "gridPos": {
         "h": 20,
@@ -2311,7 +2311,7 @@
           "countRows": false
         }
       },
-      "description": "Tất cả OSD của class, sắp xếp latency cao → thấp. Ngưỡng theo class: nvme 15/25, ssd 50/100; class khác 100/200 ms.",
+      "description": "Tat ca OSD cua class, sap xep latency cao → thap. Nguong theo class: nvme 15/25, ssd 50/100; class khac 100/200 ms.",
       "repeat": "class",
       "repeatDirection": "h",
       "maxPerRow": 2,
@@ -2380,7 +2380,7 @@
           "color": {
             "mode": "thresholds"
           },
-          "noValue": "Chưa có dữ liệu - kiểm tra pve_ceph_extra_exporter",
+          "noValue": "Chua co du lieu - kiem tra pve_ceph_extra_exporter",
           "displayName": "${__field.labels.content}"
         },
         "overrides": []
@@ -2402,7 +2402,7 @@
           "limit": 1
         }
       },
-      "description": "Dòng trạng thái giống giao diện Proxmox (pve_ceph_extra_exporter).",
+      "description": "Dong trang thai giong giao dien Proxmox (pve_ceph_extra_exporter).",
       "id": 25,
       "gridPos": {
         "h": 3,
@@ -2481,7 +2481,7 @@
     },
     {
       "type": "timeseries",
-      "title": "Recovery Speed (Tốc độ phục hồi)",
+      "title": "Recovery Speed (Toc do phuc hoi)",
       "datasource": {
         "type": "prometheus",
         "uid": "${Site}"
@@ -2655,9 +2655,9 @@
             "excludeByName": {},
             "renameByName": {
               "collector": "COLLECTOR",
-              "Value #U": "TRẠNG THÁI",
-              "Value #S": "THỜI GIAN",
-              "error": "LỖI GẦN NHẤT"
+              "Value #U": "TRANG THAI",
+              "Value #S": "THOI GIAN",
+              "error": "LOI GAN NHAT"
             },
             "indexByName": {
               "collector": 0,
@@ -2702,13 +2702,13 @@
             "inspect": false,
             "filterable": false
           },
-          "noValue": "Không có metric exporter trong job này"
+          "noValue": "Khong co metric exporter trong job nay"
         },
         "overrides": [
           {
             "matcher": {
               "id": "byName",
-              "options": "TRẠNG THÁI"
+              "options": "TRANG THAI"
             },
             "properties": [
               {
@@ -2734,7 +2734,7 @@
                         "index": 0
                       },
                       "0": {
-                        "text": "LỖI",
+                        "text": "LOI",
                         "color": "red",
                         "index": 1
                       }
@@ -2747,7 +2747,7 @@
           {
             "matcher": {
               "id": "byName",
-              "options": "THỜI GIAN"
+              "options": "THOI GIAN"
             },
             "properties": [
               {
@@ -2793,7 +2793,7 @@
           {
             "matcher": {
               "id": "byName",
-              "options": "LỖI GẦN NHẤT"
+              "options": "LOI GAN NHAT"
             },
             "properties": [
               {
@@ -2829,7 +2829,7 @@
           "countRows": false
         }
       },
-      "description": "ceph_mgr: phát lại /metrics của ceph mgr · pve: node Proxmox · ceph: Ceph Status / Recovery · ha: HA Groups. Collector lỗi thì các ô dùng dữ liệu đó sẽ No data.",
+      "description": "ceph_mgr: phat lai /metrics cua ceph mgr · pve: node Proxmox · ceph: Ceph Status / Recovery · ha: HA Groups. Collector loi thi cac o dung du lieu do se No data.",
       "id": 29,
       "gridPos": {
         "h": 6,
@@ -2840,7 +2840,7 @@
     },
     {
       "type": "stat",
-      "title": "Dữ liệu cũ",
+      "title": "Du lieu cu",
       "datasource": {
         "type": "prometheus",
         "uid": "${Site}"
@@ -2882,7 +2882,7 @@
             "mode": "thresholds"
           },
           "decimals": 0,
-          "noValue": "Exporter không chạy"
+          "noValue": "Exporter khong chay"
         },
         "overrides": []
       },
@@ -2902,7 +2902,7 @@
           "values": false
         }
       },
-      "description": "Bao lâu từ lần thu thập gần nhất. Bình thường < INTERVAL (30s) + scrape_interval.",
+      "description": "Bao lau tu lan thu thap gan nhat. Binh thuong < INTERVAL (30s) + scrape_interval.",
       "id": 30,
       "gridPos": {
         "h": 6,
@@ -2913,7 +2913,7 @@
     },
     {
       "type": "stat",
-      "title": "Chế độ",
+      "title": "Che do",
       "datasource": {
         "type": "prometheus",
         "uid": "${Site}"
@@ -2979,7 +2979,7 @@
     },
     {
       "type": "stat",
-      "title": "Phiên bản",
+      "title": "Phien ban",
       "datasource": {
         "type": "prometheus",
         "uid": "${Site}"

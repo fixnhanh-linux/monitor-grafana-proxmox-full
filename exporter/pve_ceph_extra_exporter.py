@@ -51,7 +51,7 @@ from socketserver import ThreadingMixIn
 from urllib.error import HTTPError
 from urllib.request import Request, urlopen
 
-VERSION = "2026.10.30-7"
+VERSION = "2026.10.30-8"
 
 HA_GROUPS_CFG = "/etc/pve/ha/groups.cfg"
 HA_RULES_CFG = "/etc/pve/ha/rules.cfg"  # PVE 9: HA group -> node-affinity rule
@@ -121,7 +121,7 @@ def parse_ceph_status(st):
         if unfound:
             parts.append("unfound %d" % unfound)
         content = "%s - Recovery/Rebalance: %.2f%% (%s)" % (
-            health, percent, ", ".join(parts) or "đang xử lý")
+            health, percent, ", ".join(parts) or "dang xu ly")
         if speed > 0:
             content += " - %s/s" % fmt_bytes(speed)
         if unfound:
@@ -134,7 +134,7 @@ def parse_ceph_status(st):
         if not_clean:
             content = "%s - %d/%d PG active+clean" % (health, clean, num_pgs)
         else:
-            content = "%s - Tất cả %d PG active+clean, không có recovery" % (
+            content = "%s - Tat ca %d PG active+clean, khong co recovery" % (
                 health, num_pgs)
 
     return {

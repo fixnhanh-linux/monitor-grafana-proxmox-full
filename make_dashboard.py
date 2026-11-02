@@ -184,7 +184,7 @@ def node_q(expr):
 NO_ALARM = ('max by (severity, name, message) (ceph_health_detail{%s} > 0)\n'
             'or on() label_replace(label_replace(label_replace(vector(0),\n'
             '  "severity", "OK", "", ""), "name", "HEALTH_OK", "", ""),\n'
-            '  "message", "Không có cảnh báo", "", "")' % J)
+            '  "message", "Khong co canh bao", "", "")' % J)
 
 HIDE = "^(Time.*|__name__.*|instance.*|job.*|job_type.*|id( \\d+)?|state( \\d+)?|group( \\d+)?|Value #Group)$"
 
@@ -259,7 +259,7 @@ def build(args):
                   organize(rename={"ceph_daemon": "OSD", "Value #High": "High", "Value #Low": "Low"},
                            order={"ceph_daemon": 0, "Value #High": 1, "Value #Low": 2})],
                  unit="percent", decimals=2, th=used_th,
-                 desc="Lặp theo biến OSD Class: OSD dùng nhiều nhất / ít nhất của từng device class.")
+                 desc="Lap theo bien OSD Class: OSD dung nhieu nhat / it nhat cua tung device class.")
     b.add(repeat(used), 0, 12, 5)
     b.y += 5
 
@@ -296,12 +296,12 @@ def build(args):
                 drop_extra_fields(HIDE),
                 organize(rename={"host": "Node Proxmox", "groups": "HA Groups", "Value #HA": "HA",
                                  "Value #CPU": "CPU (%)", "Value #RAM_Pct": "RAM (%)",
-                                 "Value #RAM_Total": "Tổng RAM", "Value #Uptime": "UPTIME"},
+                                 "Value #RAM_Total": "Tong RAM", "Value #Uptime": "UPTIME"},
                          order={"host": 0, "groups": 1, "Value #HA": 2, "Value #CPU": 3,
                                 "Value #RAM_Pct": 4, "Value #RAM_Total": 5, "Value #Uptime": 6}),
                 {"id": "sortBy", "options": {"sort": [{"field": "Node Proxmox"}]}}],
                cell="auto", filterable=True,
-               desc="CPU, RAM, uptime từng node Proxmox." if cust else "HA Groups: HA group (PVE 8) / node-affinity rule (PVE 9) của node; node không thuộc nhóm nào hiện \"-\". Rule chứa mọi node hoặc đang tắt không tính là nhóm.",
+               desc="CPU, RAM, uptime tung node Proxmox." if cust else "HA Groups: HA group (PVE 8) / node-affinity rule (PVE 9) cua node; node khong thuoc nhom nao hien \"-\". Rule chua moi node hoac dang tat khong tinh la nhom.",
                overrides=[
                    override("HA", ("mappings", [
                        {"type": "value", "options": {
@@ -326,7 +326,7 @@ def build(args):
                    override("RAM (%)", ("unit", "percent"), ("decimals", 1),
                             ("thresholds", steps("green", 80, "orange", 90, "red")),
                             ("custom.cellOptions", {"type": "color-text"})),
-                   override("Tổng RAM", ("unit", "bytes"), ("decimals", 0)),
+                   override("Tong RAM", ("unit", "bytes"), ("decimals", 0)),
                    override("UPTIME", ("unit", "dtdhms"))])
     b.line(4 + 2 * args.nodes, (ha, 24))
 
@@ -403,7 +403,7 @@ def build(args):
                           order={"hostname": 0, "ceph_daemon": 1, "Value": 2}),
                  {"id": "sortBy", "options": {"sort": [{"field": col, "desc": True}]}}],
                 unit="ms", decimals=0, th=steps("green", dw, "orange", dc, "red"), filterable=True,
-                desc="Tất cả OSD của class, sắp xếp latency cao → thấp. Ngưỡng theo class: %s; class khác %g/%g ms."
+                desc="Tat ca OSD cua class, sap xep latency cao → thap. Nguong theo class: %s; class khac %g/%g ms."
                      % (", ".join("%s %g/%g" % (k, w, c) for k, (w, c) in sorted(lat_th.items())), dw, dc),
                 overrides=[override("%s (ms)" % k, ("thresholds", steps("green", w, "orange", c, "red")))
                            for k, (w, c) in sorted(lat_th.items())])
@@ -415,8 +415,8 @@ def build(args):
     status = stat("Ceph Status", [tgt('max by (content) (ceph_custom_recovery_info{%s})' % J,
                                       legend="{{content}}")],
                   th=steps("green", 1, "orange", 2, "red"), text_mode="name",
-                  no_value="Chưa có dữ liệu - kiểm tra pve_ceph_extra_exporter",
-                  desc="Dòng trạng thái giống giao diện Proxmox (pve_ceph_extra_exporter).")
+                  no_value="Chua co du lieu - kiem tra pve_ceph_extra_exporter",
+                  desc="Dong trang thai giong giao dien Proxmox (pve_ceph_extra_exporter).")
     status["fieldConfig"]["defaults"]["displayName"] = "${__field.labels.content}"
     status["options"]["reduceOptions"]["limit"] = 1
     b.line(3, (status, 24))
@@ -429,7 +429,7 @@ def build(args):
                              "overrides": []},
              "options": {"reduceOptions": {"calcs": ["lastNotNull"], "fields": "", "values": False},
                          "showThresholdLabels": False, "showThresholdMarkers": True}}
-    speed = {"type": "timeseries", "title": "Recovery Speed (Tốc độ phục hồi)", "datasource": DS,
+    speed = {"type": "timeseries", "title": "Recovery Speed (Toc do phuc hoi)", "datasource": DS,
              "targets": [tgt('max(ceph_custom_recovery_speed_bytes{%s})' % J, "A",
                              legend="Recovery Speed", instant=False),
                          tgt('sum(ceph_custom_degraded_objects{%s})' % J, "B",
@@ -465,33 +465,33 @@ def exporter_row(b):
                       fmt="table")],
                  [{"id": "joinByField", "options": {"byField": "collector", "mode": "outer"}},
                   drop_extra_fields("^(Time.*|Value #E)$"),
-                  organize(rename={"collector": "COLLECTOR", "Value #U": "TRẠNG THÁI",
-                                   "Value #S": "THỜI GIAN", "error": "LỖI GẦN NHẤT"},
+                  organize(rename={"collector": "COLLECTOR", "Value #U": "TRANG THAI",
+                                   "Value #S": "THOI GIAN", "error": "LOI GAN NHAT"},
                            order={"collector": 0, "Value #U": 1, "Value #S": 2, "error": 3}),
                   {"id": "sortBy", "options": {"sort": [{"field": "COLLECTOR"}]}}],
-                 cell="auto", no_value="Không có metric exporter trong job này",
-                 desc="ceph_mgr: phát lại /metrics của ceph mgr · pve: node Proxmox · ceph: Ceph Status / "
-                      "Recovery · ha: HA Groups. Collector lỗi thì các ô dùng dữ liệu đó sẽ No data.",
+                 cell="auto", no_value="Khong co metric exporter trong job nay",
+                 desc="ceph_mgr: phat lai /metrics cua ceph mgr · pve: node Proxmox · ceph: Ceph Status / "
+                      "Recovery · ha: HA Groups. Collector loi thi cac o dung du lieu do se No data.",
                  overrides=[
-                     override("TRẠNG THÁI", ("custom.width", 120),
+                     override("TRANG THAI", ("custom.width", 120),
                               ("custom.cellOptions", {"type": "color-background", "mode": "basic"}),
                               ("mappings", [{"type": "value", "options": {
                                   "1": {"text": "OK", "color": "green", "index": 0},
-                                  "0": {"text": "LỖI", "color": "red", "index": 1}}}])),
-                     override("THỜI GIAN", ("unit", "s"), ("decimals", 2), ("custom.width", 110),
+                                  "0": {"text": "LOI", "color": "red", "index": 1}}}])),
+                     override("THOI GIAN", ("unit", "s"), ("decimals", 2), ("custom.width", 110),
                               ("thresholds", steps("green", 5, "orange", 15, "red")),
                               ("custom.cellOptions", {"type": "color-text"})),
-                     override("LỖI GẦN NHẤT", ("custom.align", "left"),
+                     override("LOI GAN NHAT", ("custom.align", "left"),
                               ("custom.cellOptions", {"type": "color-text"}),
                               ("color", {"mode": "fixed", "fixedColor": "red"}))])
-    age = stat("Dữ liệu cũ", [tgt('time() - max(pve_ceph_extra_exporter_last_collect_timestamp{%s})' % J)],
+    age = stat("Du lieu cu", [tgt('time() - max(pve_ceph_extra_exporter_last_collect_timestamp{%s})' % J)],
                unit="s", decimals=0, th=steps("green", 90, "orange", 180, "red"),
-               no_value="Exporter không chạy",
-               desc="Bao lâu từ lần thu thập gần nhất. Bình thường < INTERVAL (30s) + scrape_interval.")
-    mode = stat("Chế độ", [tgt('max by (mode) (pve_ceph_extra_exporter_mode{%s})' % J,
+               no_value="Exporter khong chay",
+               desc="Bao lau tu lan thu thap gan nhat. Binh thuong < INTERVAL (30s) + scrape_interval.")
+    mode = stat("Che do", [tgt('max by (mode) (pve_ceph_extra_exporter_mode{%s})' % J,
                                legend="{{mode}}")],
                 text_mode="name", color_mode="none", no_value="-")
-    ver = stat("Phiên bản", [tgt('max by (version) (pve_ceph_extra_exporter_build_info{%s})' % J,
+    ver = stat("Phien ban", [tgt('max by (version) (pve_ceph_extra_exporter_build_info{%s})' % J,
                                  legend="{{version}}")],
                text_mode="name", color_mode="none", no_value="-")
     for p, label in ((mode, "mode"), (ver, "version")):

@@ -4,6 +4,7 @@ Mới nhất ở trên. Mã commit đang chạy hiện ở đầu menu (`phien b
 
 ## Chưa phát hành
 
+- **Toàn bộ chữ hiển thị không dấu**: dashboard (tiêu đề cột, mô tả, chữ khi chưa có dữ liệu), exporter 2026.10.30-8 (dòng trạng thái Ceph) — đồng bộ với menu.sh; đọc được trên mọi terminal / font.
 - **Dashboard**: cột HA / HA Groups luôn hiện; node không thuộc nhóm nào ghi `-` (thay cho ẩn cả cột / "No Group").
 - **Exporter 2026.10.30-7 — HA rule PVE 9**: bỏ rule node-affinity bao trùm **mọi node** (vd `ha-rule-7fa207ce-7b43` — không phải nhóm) và rule đang tắt; rule có `comment` thì hiện comment thay cho mã `ha-rule-…`. Cluster không còn rule có ý nghĩa thì cột HA / HA Groups trên dashboard tự ẩn.
 - **Alert `PveCephExporterDown`** chỉ báo target của exporter này (đã từng xuất `pve_ceph_extra_exporter_build_info` trong 1 ngày) — không còn báo sai mgr standby / pve exporter cũ của các job scrape thẳng.
