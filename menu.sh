@@ -1708,14 +1708,14 @@ svc_do() {  # svc_do ACTION KIND UNIT PORT ; ACTION = restart / stop / start / b
 svc_table() {  # in bang, luu danh sach vao SVC_ROWS
     mapfile -t SVC_ROWS < <(svc_list)
     if [ "${#SVC_ROWS[@]}" = 0 ]; then warn "May nay chua co dich vu nao (menu 2 / 17)"; return 1; fi
-    printf '%s  %s%-3s %-18s %-8s %-10s %-16s %-6s %s%s\n' "$IND" "$W" "#" "TEN" "LOAI" "TRANG THAI" "/HEALTH" "PORT" "KHOI DONG CUNG MAY" "$N"
+    printf '%s  %s%-3s %-26s %-8s %-10s %-14s %-6s %s%s\n' "$IND" "$W" "#" "TEN" "LOAI" "TRANG THAI" "/HEALTH" "PORT" "KHOI DONG CUNG MAY" "$N"
     local i=1 r k nm u p st h bt c
     for r in "${SVC_ROWS[@]}"; do
         IFS='|' read -r k nm u p <<< "$r"
         st=$(svc_state_of "$k" "$u"); bt=$(svc_boot_of "$k" "$u")
         h="-"; [ "$st" = active ] && h=$(svc_health_of "$p")
         case "$st" in active) c=$G ;; inactive|exited) c=$D ;; *) c=$R ;; esac
-        printf '%s  %-3s %-18s %-8s %s%-10s%s %s%-16s%s %-6s %s\n' "$IND" "$i" "$nm" "$k" "$c" "${st:-?}" "$N" \
+        printf '%s  %-3s %-26s %-8s %s%-10s%s %s%-14s%s %-6s %s\n' "$IND" "$i" "$nm" "$k" "$c" "${st:-?}" "$N" \
             "$([ "$h" = ok ] && echo "$G" || { [ "$h" = - ] && echo "$D" || echo "$R"; })" "$h" "$N" "${p:--}" "${bt:--}"
         i=$((i + 1))
     done
@@ -2255,6 +2255,15 @@ header() {
     port=$(current_port)
     if [ -f "$UNIT" ]; then st=$(svc_state); else st="chua cai"; fi
     case "$st" in active) ex="${G}${W}● dang chay${N} :$port" ;; "chua cai") ex="${D}○ chua cai${N}" ;; *) ex="${R}● $st${N}" ;; esac
+    # May monitor: khong cai local nhung co exporter tu xa -> dem so dang chay (systemd + docker)
+    if [ "$st" = "chua cai" ] && [ -n "$(remote_names)" ]; then
+        local n run=0 tot=0
+        for n in $(remote_names); do
+            tot=$((tot + 1))
+            { systemctl is-active -q "$SERVICE@$n" 2>/dev/null || { has docker && [ "$(container_state "$n")" = running ]; }; } && run=$((run + 1))
+        done
+        ex="$([ "$run" = "$tot" ] && echo "$G" || echo "$Y")${W}● $run/$tot tu xa dang chay${N}"
+    fi
     pve="${ENV_PVE:+${G}PVE $ENV_PVE${N}}"; pve="${pve:-${D}khong phai node PVE${N}}"
     grafana="${GRAFANA_URL:-${ENV_GRAFANA:-}}"; grafana="${grafana:-${D}chua cau hinh (menu 15)${N}}"
     prom="${PROM_URL:-${ENV_PROM:-}}"; prom="${prom:-${D}chua cau hinh (menu 15)${N}}"
