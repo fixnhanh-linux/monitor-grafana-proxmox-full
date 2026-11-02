@@ -85,7 +85,7 @@ class ZabbixTemplates(unittest.TestCase):
                     for m in re.findall(r"\{\$[A-Z0-9_.]+\}", tr["expression"] + tr["name"]):
                         self.assertIn(m, macros, tr["name"])
         for u in uuids:
-            self.assertRegex(u, r"^[0-9a-f]{32}$")
+            self.assertRegex(u, r"^[0-9a-f]{12}4[0-9a-f]{3}[89ab][0-9a-f]{15}$")  # Zabbix doi UUIDv4
         self.assertEqual(len(uuids), len(set(uuids)), "duplicate uuid")
 
     def test_metrics_exist(self):

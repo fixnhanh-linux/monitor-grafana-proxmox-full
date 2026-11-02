@@ -980,11 +980,11 @@ zabbix_export:
                 - tag: pool
                   value: '{#POOL}'
               trigger_prototypes:
-                - uuid: 4b0a8c6e3d1f4a9b0c5e7d4f8a1b3c26
+                - uuid: 51890d187bc346f78f20de75495bbb4d
                   expression: 'min(/Proxmox Ceph by FIX NHANH exporter/ceph.pool.pused[{#POOLID}],15m)>{$CEPH.POOL.USED.MAX}'
                   name: 'Ceph: pool {#POOL} above {$CEPH.POOL.USED.MAX}% full'
                   priority: WARNING
-            - uuid: 5c1b9d7f4e2a4b0c1d6f8e5a9b2c4d37
+            - uuid: 8fc596938faf4caba7f49d5f8f559ac3
               name: 'Ceph: pool {#POOL} stored'
               type: DEPENDENT
               key: 'ceph.pool.stored[{#POOLID}]'
@@ -1004,7 +1004,7 @@ zabbix_export:
                   value: ceph
                 - tag: pool
                   value: '{#POOL}'
-            - uuid: 6d2c0e8a5f3b4c1d2e7a9f6b0c3d5e48
+            - uuid: 21f3c815326647d380568343e2242503
               name: 'Ceph: pool {#POOL} max available'
               type: DEPENDENT
               key: 'ceph.pool.avail[{#POOLID}]'
@@ -1068,7 +1068,7 @@ zabbix_export:
           value: '90'
           description: 'Node memory (%) for 15 minutes -> warning'
       valuemaps:
-        - uuid: 7e3d1f9b6a4c4d2e3f8b0a7c1d4e6f59
+        - uuid: 21b033b3c4bf4da2949b6002d52d3ed7
           name: 'Ceph health'
           mappings:
             - value: '0'
@@ -1077,7 +1077,7 @@ zabbix_export:
               newvalue: HEALTH_WARN
             - value: '2'
               newvalue: HEALTH_ERR
-        - uuid: 8f4e2a0c7b5d4e3f4a9c1b8d2e5f7a60
+        - uuid: a4522fbe2be54163aece0e3fc1b7d945
           name: 'Ceph recovery state'
           mappings:
             - value: '0'
@@ -1086,14 +1086,14 @@ zabbix_export:
               newvalue: 'Recovery / rebalance'
             - value: '2'
               newvalue: Error
-        - uuid: 9a5f3b1d8c6e4f4a5b0d2c9e3f6a8b71
+        - uuid: 43db1fd6c0af419b9c53a81c8c51a04d
           name: 'Proxmox node status'
           mappings:
             - value: '0'
               newvalue: Down
             - value: '1'
               newvalue: Up
-        - uuid: 0b6a4c2e9d7f4a5b6c1e3d0f4a7b9c82
+        - uuid: 655ea1e7786d4591bc63ff14c9b2f207
           name: 'Proxmox yes/no'
           mappings:
             - value: '0'
