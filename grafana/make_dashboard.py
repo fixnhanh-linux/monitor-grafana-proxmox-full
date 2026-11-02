@@ -195,7 +195,9 @@ def cpu_key(groups):
 
 # Mau tu gan cho nhom chua dat alias: khong dung do / cam (danh cho su co)
 AUTO_COLORS = ["green", "blue", "purple", "yellow", "super-light-blue", "light-purple",
-               "light-green", "semi-dark-yellow", "dark-blue", "super-light-purple"]
+               "light-green", "semi-dark-yellow", "dark-blue", "super-light-purple",
+               "dark-green", "light-blue", "dark-purple", "super-light-yellow", "semi-dark-green",
+               "dark-yellow", "super-light-green", "semi-dark-purple"]
 
 
 def prom_ha_groups(url):

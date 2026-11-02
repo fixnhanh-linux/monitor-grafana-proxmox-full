@@ -442,13 +442,42 @@ gen_dashboard() {  # sinh $DASH_JSON tu cac bien DASH_*
     while IFS= read -r a; do
         [ -n "$a" ] && args+=(--ha-alias "$a")
     done <<< "${DASH_ALIASES//;;/$'\n'}"
-    # Nhom chua dat ten ngan van co mau rieng: danh sach nhom tai cho + doc tu Prometheus
+    # Nhom chua dat ten ngan van co mau rieng (theo loai CPU): nhom tai cho + moi datasource
+    # Prometheus tren Grafana (dashboard nhieu Site) + Prometheus da luu
+    local groups n
+    groups=$({ detect_ha_groups; grafana_ha_groups; } | sort -u)
     while IFS= read -r a; do
         [ -n "$a" ] && args+=(--ha-group "$a")
-    done <<< "$(detect_ha_groups)"
+    done <<< "$groups"
     [ -n "${PROM_URL:-}" ] && args+=(--prom-url "$PROM_URL")
     python3 "$MAKE_DASH" "${args[@]}" >/dev/null || { err "Dashboard generation failed"; return 1; }
-    ok "Created ${W}$DASH_JSON${N}"
+    n=$(grep -c . <<< "$groups")
+    ok "Created ${W}$DASH_JSON${N} (HA Groups colors: $n group strings found)"
+}
+
+grafana_ha_groups() {  # chuoi HA Groups cua moi datasource Prometheus (khop Site) qua Grafana proxy
+    [ -n "${GRAFANA_URL:-}" ] && [ -s "$GRAFANA_TOKEN_FILE" ] && has curl && has python3 || return 0
+    local base tok ds uid
+    base=$(gurl "${GRAFANA_URL%/}"); tok=$(cat "$GRAFANA_TOKEN_FILE")
+    ds=$(gcurl -sf --max-time 10 -H "Authorization: Bearer $tok" "$base/api/datasources" 2>/dev/null | python3 -c '
+import json, re, sys
+site = sys.argv[1]
+rx = site[1:-1] if len(site) > 1 and site.startswith("/") and site.endswith("/") else site
+for d in json.load(sys.stdin):
+    if d.get("type") == "prometheus" and (not rx or re.search(rx, d.get("name", ""))):
+        print(d["uid"])
+' "${DASH_SITE:-}" 2>/dev/null) || return 0
+    while IFS= read -r uid; do
+        [ -n "$uid" ] || continue
+        gcurl -sfG --max-time 10 -H "Authorization: Bearer $tok" \
+            "$base/api/datasources/proxy/uid/$uid/api/v1/query" \
+            --data-urlencode "query=count by (groups) (pve_ha_groups_custom_info)" 2>/dev/null | python3 -c '
+import json, sys
+for s in json.load(sys.stdin)["data"]["result"]:
+    print(s["metric"].get("groups", ""))
+' 2>/dev/null
+    done <<< "$ds"
+    return 0
 }
 
 # Grafana cert tu ky: GHIM dung cert do (curl --cacert), KHONG tat kiem tra TLS.
