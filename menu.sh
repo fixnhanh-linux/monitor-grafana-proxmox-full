@@ -4,13 +4,13 @@
 #    - pve_ceph_extra_exporter (Ceph recovery + HA groups)
 #    - Dashboard Grafana (make_dashboard.py)
 #
-#  Chay menu:        bash menu.sh
-#  Cai tron goi:     bash menu.sh setup   (hoi 1 lan, tu lam het)
-#  Chay 1 lenh:      bash menu.sh <lenh>
+#  Chay menu:        proxmox-menu        (hoac bash menu.sh; lenh tat tu cai khi chay bang root)
+#  Cap nhat het:     proxmox-menu refresh   (git pull + cai lai exporter + dashboard + kiem tra)
+#  Chay 1 lenh:      proxmox-menu <lenh>
 #      setup | check | install | status | metrics | logs | restart | port <so> |
-#      uninstall | dashboard | import | prom | prom-check | doctor | update | about | help |
-#      remote-add [ten] | remote-list | remote-test | remote-remove |
-#      deps | firewall | docker-run | docker-manage
+#      uninstall | dashboard | import | prom | prom-check | doctor | update | refresh | about | help |
+#      remote-add [ten] | remote-list | remote-test | remote-remove | services | watchdog |
+#      prom-all | prom-push | prom-rules | urls | deps | firewall | docker-run | docker-manage | docker-net
 #
 #  Ban quyen © 2026 FIX NHANH. Bao luu moi quyen.
 # =============================================================================
@@ -2327,6 +2327,18 @@ menu() {
     done
 }
 
+# Lenh ngan "proxmox-menu" (go o bat ky dau): file goi lai menu.sh cua thu muc nay.
+# Tu cai / sua khi chay bang root; thu muc doi cho thi lan chay sau tu tro lai dung.
+CMD_BIN=${CMD_BIN:-/usr/local/bin/proxmox-menu}
+install_cmd() {
+    [ "$(id -u)" = 0 ] && [ -d "$(dirname "$CMD_BIN")" ] || return 0
+    grep -qF "\"$DIR/menu.sh\"" "$CMD_BIN" 2>/dev/null && return 0
+    printf '#!/bin/bash\n# FIX NHANH - lenh tat cho menu Monitor Proxmox + Ceph\nexec bash "%s/menu.sh" "$@"\n' "$DIR" > "$CMD_BIN" \
+        && chmod 755 "$CMD_BIN" && [ -t 1 ] && ok "Tu gio go ${W}proxmox-menu${N} o bat ky dau de mo menu"
+    return 0
+}
+install_cmd
+
 # ----------------------------------------------------------------- dong lenh
 if [ $# -gt 0 ]; then
     NONINTERACTIVE=1
@@ -2357,7 +2369,12 @@ if [ $# -gt 0 ]; then
         docker-manage) NONINTERACTIVE=0; do_docker_manage ;;
         docker-net) NONINTERACTIVE=0; do_docker_net ;;
         services) NONINTERACTIVE=0; do_services ;;
-        refresh) NONINTERACTIVE=1; detect_env; do_refresh ;;
+        refresh)  # tu git pull truoc, roi chay refresh bang code MOI vua keo ve
+            if [ -z "${REFRESH_PULLED:-}" ] && [ -d "$DIR/.git" ]; then
+                NONINTERACTIVE=1; do_update </dev/null || exit 1
+                REFRESH_PULLED=1 exec bash "$DIR/menu.sh" refresh
+            fi
+            NONINTERACTIVE=1; detect_env; do_refresh ;;
         watchdog) NONINTERACTIVE=0; title "WATCHDOG EXPORTER"; need_root && do_watchdog ;;
         help|-h|--help) show_help ;;
         *) err "Lenh khong ro: $cmd"; show_help; exit 1 ;;

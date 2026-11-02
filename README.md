@@ -82,10 +82,23 @@ Token Grafana: gõ 1 lần ở menu 11, chọn lưu thì nằm riêng trong `.gr
 ## Cập nhật toàn bộ: 1 lệnh, không hỏi
 
 ```bash
-cd /root/monitor-grafana-proxmox-full && git pull && bash menu.sh refresh
+proxmox-menu refresh
 ```
 
-Dùng cấu hình đã lưu: cài lại exporter (local + mọi cluster từ xa) và khởi động lại, sinh lại dashboard từ `.menu.conf` rồi import lên Grafana (cần Grafana URL + token đã lưu ở menu 11), in bảng dịch vụ, kiểm tra Prometheus. Cuối cùng báo `Xong, khong co loi` hoặc liệt kê bước cần xem lại.
+Tự `git pull` rồi chạy bằng code mới, dùng cấu hình đã lưu: cài lại exporter (local + mọi cluster từ xa) và khởi động lại, sinh lại dashboard từ `.menu.conf` rồi import lên Grafana (cần Grafana URL + token đã lưu ở menu 11), in bảng dịch vụ, kiểm tra Prometheus. Cuối cùng báo `Xong, khong co loi` hoặc liệt kê bước cần xem lại.
+
+## Lệnh tắt `proxmox-menu`
+
+Lần đầu chạy `bash /root/monitor-grafana-proxmox-full/menu.sh` bằng root, tool tự tạo lệnh `/usr/local/bin/proxmox-menu`. Từ đó gõ ở bất kỳ thư mục nào:
+
+| Lệnh | Việc |
+|---|---|
+| `proxmox-menu` | Mở menu |
+| `proxmox-menu refresh` | Cập nhật toàn bộ (git pull + exporter + dashboard + kiểm tra) |
+| `proxmox-menu services` | Bảng dịch vụ, khởi động lại / dừng / log |
+| `proxmox-menu <lệnh>` | Mọi lệnh bên dưới (`remote-list`, `prom-push`, `docker-net` ...) |
+
+Chuyển thư mục tool đi chỗ khác thì chạy `bash <thư-mục-mới>/menu.sh` một lần, lệnh tắt tự trỏ lại.
 
 ## Menu từng mục
 
@@ -120,7 +133,7 @@ bash /root/monitor-grafana-proxmox-full/menu.sh
 | 25 | Đổi dải IP Docker (`docker0` + dải cho mạng mới): kiểm tra dải nội bộ / trùng route, sao lưu `daemon.json`, restart Docker, kiểm tra container chạy lại; Docker không lên thì trả file cũ |
 | 26 | **Dịch vụ & sức khoẻ**: bảng mọi exporter (local, `@cluster`, container) + Docker + watchdog với trạng thái, `/health`, port, chạy khi khởi động máy; `r`/`s`/`t` khởi động lại / dừng / chạy (1 cái hoặc `a` = tất cả) rồi **tự kiểm tra** active + `/health` trong 40 s, lỗi thì in log; `l` log; `b`/`B` bật / tắt chạy khi khởi động máy; `w` watchdog |
 
-Chạy 1 lệnh không qua menu: `bash menu.sh setup | check | install [port] | status | metrics | logs | restart | port <số> | uninstall | dashboard | import | prom | prom-check | doctor | update | about | remote-add [tên] | remote-list | prom-all | prom-push | prom-rules | urls | refresh | remote-test | remote-remove | deps | firewall | docker-run | docker-manage | docker-net | services | watchdog`.
+Chạy 1 lệnh không qua menu: `proxmox-menu setup | check | install [port] | status | metrics | logs | restart | port <số> | uninstall | dashboard | import | prom | prom-check | doctor | update | about | remote-add [tên] | remote-list | prom-all | prom-push | prom-rules | urls | refresh | remote-test | remote-remove | deps | firewall | docker-run | docker-manage | docker-net | services | watchdog`.
 
 Menu nhớ Grafana URL, Prometheus URL, tiêu đề/UID dashboard trong `.menu.conf`; token Grafana (nếu chọn lưu) nằm riêng ở `.grafana-token`.
 
