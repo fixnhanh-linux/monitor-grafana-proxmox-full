@@ -161,16 +161,55 @@ def parse_lat_th(text):
     return out
 
 
-def parse_ha_alias(items):
+def parse_ha_alias(items, auto=None):
     """['A,B=Text:purple', ...] -> mapping options cho cot HA Groups.
     Node binh thuong -> mau rieng cua nhom; node co su co da co tien to (HA_STATUS)
-    nen khong khop mapping nay -> do / cam."""
+    nen khong khop mapping nay -> do / cam.
+    auto: chuoi HA Groups dang co (--ha-group / --prom-url) -> nhom chua co alias tu lay mau."""
     opts = {}
     for i, item in enumerate(items or []):
         raw, _, rest = item.rpartition("=")
         text, _, color = rest.partition(":")
         opts[raw] = {"text": text, "color": color or "blue", "index": 10 + i}
+    rest = sorted(g for g in set(auto or []) if g and g != "-" and g not in opts)
+    # Cung loai CPU -> cung mau (vd Gold-8260,HIGH-MEMORY,...,Platinum-8260 = Gold-8260,...,Platinum-8260)
+    keys = sorted(set(cpu_key(g) for g in rest))
+    for i, g in enumerate(rest):
+        opts[g] = {"color": AUTO_COLORS[keys.index(cpu_key(g)) % len(AUTO_COLORS)], "index": 50 + i}
     return opts
+
+
+# Tu nhan dien ten model phan cung trong ten nhom: chu + so model >= 3 chu so
+# (Gold-8260, Platinum-8260, EPYC-7543, Xeon-6338 ...) -> khong can danh sach CPU co dinh,
+# P1-XD / HIGH-MEMORY khong khop.
+CPU_RX = re.compile(r"^[A-Za-z][A-Za-z ]*[-_ ]?\d{3,}[A-Za-z0-9-]*$")
+
+
+def cpu_key(groups):
+    """Loai CPU cua 1 chuoi HA Groups: cac nhom co ten model (Gold-8260, Platinum-8260 ...)
+    -> "Gold-8260+Platinum-8260"; khong co ten model -> nhom dau tien (vd BASIC-COMPUTING)."""
+    names = [n.strip() for n in groups.split(",") if n.strip()]
+    cpus = sorted({n for n in names if CPU_RX.match(n)}, key=str.lower)
+    return "+".join(cpus) if cpus else (names[0] if names else groups)
+
+
+# Mau tu gan cho nhom chua dat alias: khong dung do / cam (danh cho su co)
+AUTO_COLORS = ["green", "blue", "purple", "yellow", "super-light-blue", "light-purple",
+               "light-green", "semi-dark-yellow", "dark-blue", "super-light-purple"]
+
+
+def prom_ha_groups(url):
+    """Lay cac chuoi HA Groups dang co tu Prometheus; loi -> [] (chi canh bao)."""
+    import urllib.parse
+    import urllib.request
+    q = urllib.parse.urlencode({"query": "count by (groups) (pve_ha_groups_custom_info)"})
+    try:
+        with urllib.request.urlopen("%s/api/v1/query?%s" % (url.rstrip("/"), q), timeout=10) as r:
+            res = json.load(r)["data"]["result"]
+        return [s["metric"].get("groups", "") for s in res]
+    except Exception as e:  # noqa: BLE001 - Prometheus khong toi duoc thi van sinh dashboard
+        print("warning: cannot read HA groups from %s (%s) -> no auto colors" % (url, e), file=sys.stderr)
+        return []
 
 
 # Trang thai node trong cot HA Groups: (tien to, mau, dieu kien PromQL).
@@ -342,7 +381,7 @@ def build(args):
                             ("custom.cellOptions", {"type": "color-text", "wrapText": True}),
                             ("custom.inspect", True),
                             ("mappings", ha_status_mappings() + [
-                                {"type": "value", "options": dict(parse_ha_alias(args.ha_alias), **{
+                                {"type": "value", "options": dict(parse_ha_alias(args.ha_alias, getattr(args, "ha_auto", [])), **{
                                     "-": {"text": "-", "color": "text", "index": 99}})},
                                 {"type": "special", "options": {"match": "null",
                                                                 "result": {"text": "-", "color": "text"}}}])),
@@ -579,7 +618,11 @@ def main():
     ap.add_argument("--ha-alias", action="append", default=[], metavar="GROUPS=TEXT[:color]",
                     help='short name for an HA Groups string, e.g. "Gold-6146,HIGH-FREQUENCY,P1-XD=Gold+HIGH+P1-XD" '
                          'add :color for the group color, e.g. "...=Gold+HIGH+P1-XD:purple"; nodes with a problem turn red / orange')
-    ap.add_argument("--time-from", default="now-15m", help="default time range")
+    ap.add_argument("--ha-group", action="append", default=[], metavar="GROUPS",
+                    help="an HA Groups string that exists; groups without --ha-alias get an automatic color")
+    ap.add_argument("--prom-url", default="", metavar="URL",
+                    help="read the HA Groups strings from this Prometheus at generation time (automatic colors)")
+    ap.add_argument("--time-from",default="now-15m", help="default time range")
     ap.add_argument("--customer-job", default="", metavar="JOB",
                     help="CUSTOMER dashboard: locked to this job, hides Site/Job, drops Detailed Alarms, "
                          "HA Groups, Exporter row; needs --site-regex matching only the customer datasource")
@@ -606,6 +649,8 @@ def main():
         ap.error("--customer-job needs --site-regex (e.g. \"/^Prometheus FPT HCM$/\") so the customer does not "
                  "see other datasources")
 
+    # Nhom chua co alias tu lay mau: danh sach truyen vao + doc tu Prometheus (moi lan sinh lai)
+    args.ha_auto = list(args.ha_group) + (prom_ha_groups(args.prom_url) if args.prom_url else [])
     dash = build(args)
     dash["fixnhanhArgs"] = keep
     with open(args.out, "w", encoding="utf-8") as f:

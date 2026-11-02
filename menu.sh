@@ -442,6 +442,11 @@ gen_dashboard() {  # sinh $DASH_JSON tu cac bien DASH_*
     while IFS= read -r a; do
         [ -n "$a" ] && args+=(--ha-alias "$a")
     done <<< "${DASH_ALIASES//;;/$'\n'}"
+    # Nhom chua dat ten ngan van co mau rieng: danh sach nhom tai cho + doc tu Prometheus
+    while IFS= read -r a; do
+        [ -n "$a" ] && args+=(--ha-group "$a")
+    done <<< "$(detect_ha_groups)"
+    [ -n "${PROM_URL:-}" ] && args+=(--prom-url "$PROM_URL")
     python3 "$MAKE_DASH" "${args[@]}" >/dev/null || { err "Dashboard generation failed"; return 1; }
     ok "Created ${W}$DASH_JSON${N}"
 }

@@ -334,6 +334,7 @@ python3 grafana/make_dashboard.py --title "Proxmox - Ceph DECO" --uid pve-ceph-d
 - `--nodes / --pools / --classes`: table heights
 - `--lat-th`: latency thresholds (ms) warning:critical per class, default `nvme=15:25,ssd=50:100,default=100:200`
 - `--ha-alias "GROUPS=TEXT[:color]"` (repeatable): short name and color for an HA Groups string, e.g. `--ha-alias "Gold-6146,HIGH-FREQUENCY,P1-XD=Gold+HIGH+P1-XD:purple"`; nodes with a problem turn red / orange whatever the group color
+- `--prom-url URL` / `--ha-group GROUPS`: groups without `--ha-alias` get an automatic color (never red / orange), **one color per CPU type**: model names inside the group string (a word + a 3+ digit model, e.g. `Gold-8260`, `Platinum-8260`, `EPYC-7543`) are detected, so `Gold-8260,HIGH-MEMORY,...,Platinum-8260` and `Gold-8260,...,Platinum-8260` share a color; groups without a model name are grouped by their first group (e.g. `BASIC-COMPUTING`); with `--prom-url` the group list is read from Prometheus each time the dashboard is generated. Menu 9 / `refresh` pass the saved Prometheus URL automatically
 - `--time-from`: default time range, e.g. `now-5m`
 - `--customer-job JOB`: customer dashboard (see below)
 - `--regen FILE`: regenerate FILE with the arguments saved inside it
@@ -426,7 +427,7 @@ The **HA Groups** column of *Resource Cluster* is always shown; nodes in no grou
 
 | Color | Cell | When |
 |---|---|---|
-| Group color (`--ha-alias ...:color`, default green / blue) | group name (or short name) | node up, HA online |
+| Group color: `--ha-alias ...:color`, otherwise an automatic color per group | group name (or short name) | node up, HA online |
 | Orange | `MAINTENANCE: ...`, `HA UNKNOWN: ...` | HA maintenance mode / HA state unknown |
 | Red | `OFFLINE: ...`, `FENCE: ...` | node down (`pve_up = 0`) / HA fence, lost, gone |
 | Grey | `-` | node in no group |

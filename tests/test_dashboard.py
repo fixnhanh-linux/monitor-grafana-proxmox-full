@@ -48,6 +48,24 @@ class Dashboard(unittest.TestCase):
         # node binh thuong giu mau rieng cua nhom
         self.assertEqual(maps[len(md.HA_STATUS)]["options"]["A,B"], {"text": "AB", "color": "orange", "index": 10})
 
+    def test_ha_groups_auto_colors(self):
+        o = md.parse_ha_alias(["A=AB:orange"], ["C,D", "A", "B", "-", "B"])
+        self.assertEqual(o["A"]["color"], "orange")  # alias giu mau rieng
+        self.assertEqual((o["B"]["color"], o["C,D"]["color"]), ("green", "blue"))  # theo thu tu ten
+        self.assertNotIn("-", o)
+        self.assertFalse({"red", "orange"} & set(md.AUTO_COLORS))
+
+    def test_ha_groups_color_by_cpu(self):
+        g = ["BASIC-COMPUTING,P1-XD", "BASIC-COMPUTING,HIGH-MEMORY,P1-XD",
+             "Gold-8260,HIGH-MEMORY,INTEL-HIGH-CPU,P1-XD,Platinum-8260",
+             "Gold-8260,INTEL-HIGH-CPU,Platinum-8260", "Gold-6146,HIGH-FREQUENCY,P1-XD"]
+        self.assertEqual(md.cpu_key(g[2]), "Gold-8260+Platinum-8260")
+        self.assertEqual(md.cpu_key(g[0]), "BASIC-COMPUTING")
+        c = {k: v["color"] for k, v in md.parse_ha_alias([], g).items()}
+        self.assertEqual(c[g[0]], c[g[1]])
+        self.assertEqual(c[g[2]], c[g[3]])
+        self.assertEqual(len({c[g[0]], c[g[2]], c[g[4]]}), 3)
+
     def test_customer_locked(self):
         d = md.build(args(customer_job="Proxmox-P1-XD", site_regex="/^Prometheus FPT HCM$/"))
         self.assertFalse(d["editable"])
