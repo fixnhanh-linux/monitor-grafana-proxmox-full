@@ -2503,7 +2503,18 @@
                 "value": 99.9
               }
             ]
-          }
+          },
+          "mappings": [
+            {
+              "type": "value",
+              "options": {
+                "100": {
+                  "text": "100%",
+                  "index": 0
+                }
+              }
+            }
+          ]
         },
         "overrides": []
       },

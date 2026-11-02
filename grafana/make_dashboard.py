@@ -491,7 +491,10 @@ def build(args):
              "targets": [tgt('min(ceph_custom_recovery_percent{%s})' % J, legend="Health")],
              "fieldConfig": {"defaults": {"unit": "percent", "min": 90, "max": 100, "decimals": 2,
                                           "color": {"mode": "thresholds"},
-                                          "thresholds": steps("red", 95, "#EAB839", 99.9, "green")},
+                                          "thresholds": steps("red", 95, "#EAB839", 99.9, "green"),
+                                          # Du 100 -> "100%" gon; dang rebuild giu 2 so le (99.87%)
+                                          "mappings": [{"type": "value", "options": {
+                                              "100": {"text": "100%", "index": 0}}}]},
                              "overrides": []},
              "options": {"reduceOptions": {"calcs": ["lastNotNull"], "fields": "", "values": False},
                          "showThresholdLabels": False, "showThresholdMarkers": True}}
