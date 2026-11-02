@@ -1,59 +1,59 @@
-# Nhật ký thay đổi
+# Nhat ky thay doi
 
-Mới nhất ở trên. Mã commit đang chạy hiện ở đầu menu (`phien ban 2026.10.30 · <commit>`); cập nhật bằng menu **14**.
+Moi nhat o tren. Ma commit dang chay hien o dau menu (`phien ban 2026.10.30 · <commit>`); cap nhat bang menu **14**.
 
-## Chưa phát hành
+## Chua phat hanh
 
-- **Toàn bộ chữ hiển thị không dấu**: dashboard (tiêu đề cột, mô tả, chữ khi chưa có dữ liệu), exporter 2026.10.30-8 (dòng trạng thái Ceph) — đồng bộ với menu.sh; đọc được trên mọi terminal / font.
-- **Dashboard**: cột HA / HA Groups luôn hiện; node không thuộc nhóm nào ghi `-` (thay cho ẩn cả cột / "No Group").
-- **Exporter 2026.10.30-7 — HA rule PVE 9**: bỏ rule node-affinity bao trùm **mọi node** (vd `ha-rule-7fa207ce-7b43` — không phải nhóm) và rule đang tắt; rule có `comment` thì hiện comment thay cho mã `ha-rule-…`. Cluster không còn rule có ý nghĩa thì cột HA / HA Groups trên dashboard tự ẩn.
-- **Alert `PveCephExporterDown`** chỉ báo target của exporter này (đã từng xuất `pve_ceph_extra_exporter_build_info` trong 1 ngày) — không còn báo sai mgr standby / pve exporter cũ của các job scrape thẳng.
-- **Lệnh tắt `proxmox-menu`**: tự tạo `/usr/local/bin/proxmox-menu` khi chạy bằng root, gõ ở bất kỳ đâu; đổi thư mục tool thì tự trỏ lại.
-- **`proxmox-menu refresh`** tự `git pull` trước rồi chạy bằng code mới — không cần `cd` + `git pull` nữa.
-- **Menu 10 chuyển job cũ sang exporter**: job trên Prometheus trùng tên hoặc trùng target với exporter thì đề nghị **thay thế** — sao lưu cả thư mục scrape (`/root/prom-bak-<giờ>`), gỡ đúng các block job đó (file không còn job thì bỏ), đẩy job exporter, `promtool` lỗi thì trả lại toàn bộ.
-- **`refresh`** giờ cập nhật luôn cluster chạy Docker: build image theo phiên bản exporter (có rồi thì bỏ qua), tạo lại container cùng port, kiểm tra trả metric; container đã đúng phiên bản thì để nguyên.
-- **`bash menu.sh refresh`**: cập nhật toàn bộ không hỏi — cài lại exporter, sinh + import dashboard bằng cấu hình / token đã lưu, bảng dịch vụ, kiểm tra Prometheus.
-- Payload import Grafana gửi dạng ASCII, không hỏng khi máy chạy locale không phải UTF-8.
-- **Dashboard**: cột HA Groups không còn bị cắt chữ — xuống dòng trong ô, rộng 380, căn trái, bấm ô để xem đầy đủ.
-- **Menu 26 / `services`**: bảng mọi dịch vụ (exporter local, `@cluster`, container, Docker, watchdog) — trạng thái, `/health`, port, chạy khi khởi động máy; khởi động lại / dừng / chạy từng cái hoặc tất cả rồi tự kiểm tra active + `/health`, lỗi thì in log; restart Docker thì kiểm tra container chạy lại.
-- **Watchdog** (`w` trong menu 26 / `watchdog`): systemd timer 2 phút / lần, `/health` lỗi 2 lần liên tiếp thì khởi động lại đúng exporter đó; log `journalctl -t pve-ceph-watchdog`.
-- **Menu 25 / `docker-net`**: đổi dải IP Docker (`bip`, `default-address-pools`) — cảnh báo dải public (vd `192.20.0.0`) và dải trùng route đang có, sao lưu `daemon.json`, restart Docker; exporter chạy systemd không bị ảnh hưởng, container tắt vài giây rồi tool kiểm tra / khởi động lại cái nào chưa lên; Docker không lên với cấu hình mới thì trả file cũ.
-- **Dashboard khách hàng** (menu 9 → 2, `make_dashboard.py --customer-job`): khoá 1 job + 1 datasource, ẩn Site / Job, bỏ Detailed Alarms, HA Groups, hàng Exporter, không cho sửa; menu 11 chọn file nào để import (vào folder riêng của khách).
-- UID gộp dấu `-` liên tiếp: `Proxmox - Ceph Prometheus` → `Proxmox-Ceph-Prometheus` (khớp dashboard đã có, không tạo bản trùng).
-- Menu 17: không nhận số port ở câu Ceph mgr; lỗi 403 in sẵn lệnh cấp `PVEAuditor` đúng token (kể cả token privsep).
-- **UID dashboard** tự chuẩn hoá về `[A-Za-z0-9_-]`, tối đa 40 ký tự (menu 9, `make_dashboard.py`, và ngay trước khi import) — hết lỗi Grafana `uid contains illegal characters`.
-- **Token Grafana gõ 1 lần**: chọn lưu thì nằm riêng ở `.grafana-token` (chỉ root đọc, không vào git); token sai / hết hạn tự xoá và hỏi lại; xoá tay ở menu 15.
-- **Menu 11 với Grafana cert tự ký**: tool lấy cert, in SHA-256 để so với trình duyệt, bạn đồng ý thì **ghim** cert đó (`.grafana-cert.pem`, chỉ dùng khi gọi Grafana) — vẫn kiểm tra TLS, không tắt. Cert ghi tên khác IP trong URL thì tool gọi bằng tên trong cert và trỏ về IP thật. Token thiếu quyền (Viewer) thì báo cần role Editor.
-- **Menu 11**: không gọi được Grafana thì nói rõ lý do (cert tự ký, nhầm http/https, bị từ chối, hết giờ chờ, DNS) kèm cách sửa, và tự thử dạng URL còn lại.
-- **Menu 9** ghi dashboard ra `dashboard-local.json` (không nằm trong git) thay vì ghi đè `proxmox_ceph_dashboard.json` — trước đây làm `git pull` ở menu 14 bị chặn.
-- **Menu 14**: tự giữ dashboard đã sinh bằng bản cũ sang `dashboard-local.json` rồi mới pull; pull lỗi thì báo lỗi và file bị sửa, không còn báo nhầm "Đang là bản mới nhất".
-- **Dashboard**: ô **Cluster Proxmox** đầu hàng *Proxmox Resource* hiện tên cluster thật, số node, quorate của job đang chọn — 2 job cùng tên cluster thì bảng node giống nhau là đúng; 1 job ra nhiều ô là job đang trộn nhiều cluster.
-- **Dashboard**: bảng *Resource Cluster with HA Groups* hết các cột thừa `id 1 … id 5` (mỗi truy vấn chỉ giữ nhãn `host`); cột HA Groups rộng hơn.
-- **Menu 10**: cảnh báo khi IP nhập không phải của máy monitor (target sẽ trỏ sai máy); không nhận thư mục / glob làm file cấu hình chính; SSH chỉ hỏi mật khẩu 1 lần, đề nghị tạo key + `ssh-copy-id`.
-- **Menu 12**: target down vì trỏ tới máy khác thì chỉ ra cách sửa.
-- Tên job mặc định không còn bị lặp `Proxmox-Proxmox-…` khi tên cluster đã bắt đầu bằng `Proxmox-`.
-- **Menu 11** kiểm tra datasource Prometheus trên Grafana trước khi import: báo khi Grafana chưa có datasource nào, khi regex Site không khớp datasource nào, và chỉ ra datasource trỏ tới Prometheus đã cấu hình.
-- **Exporter 2026.10.30-6**: thêm `/health` (503 khi vòng thu thập treo quá `3 × INTERVAL`, tối thiểu 120 s); Docker image có `HEALTHCHECK` → `docker ps` hiện `unhealthy`.
-- **Unit test** exporter (`tests/`) và **CI GitHub Actions**: `bash -n`, `shellcheck`, unit test, sinh lại dashboard so với file trong repo, `promtool check rules`.
+- **Toan bo chu hien thi khong dau**: dashboard (tieu de cot, mo ta, chu khi chua co du lieu), exporter 2026.10.30-8 (dong trang thai Ceph) — dong bo voi menu.sh; doc duoc tren moi terminal / font.
+- **Dashboard**: cot HA / HA Groups luon hien; node khong thuoc nhom nao ghi `-` (thay cho an ca cot / "No Group").
+- **Exporter 2026.10.30-7 — HA rule PVE 9**: bo rule node-affinity bao trum **moi node** (vd `ha-rule-7fa207ce-7b43` — khong phai nhom) va rule dang tat; rule co `comment` thi hien comment thay cho ma `ha-rule-…`. Cluster khong con rule co y nghia thi cot HA / HA Groups tren dashboard tu an.
+- **Alert `PveCephExporterDown`** chi bao target cua exporter nay (da tung xuat `pve_ceph_extra_exporter_build_info` trong 1 ngay) — khong con bao sai mgr standby / pve exporter cu cua cac job scrape thang.
+- **Lenh tat `proxmox-menu`**: tu tao `/usr/local/bin/proxmox-menu` khi chay bang root, go o bat ky dau; doi thu muc tool thi tu tro lai.
+- **`proxmox-menu refresh`** tu `git pull` truoc roi chay bang code moi — khong can `cd` + `git pull` nua.
+- **Menu 10 chuyen job cu sang exporter**: job tren Prometheus trung ten hoac trung target voi exporter thi de nghi **thay the** — sao luu ca thu muc scrape (`/root/prom-bak-<gio>`), go dung cac block job do (file khong con job thi bo), day job exporter, `promtool` loi thi tra lai toan bo.
+- **`refresh`** gio cap nhat luon cluster chay Docker: build image theo phien ban exporter (co roi thi bo qua), tao lai container cung port, kiem tra tra metric; container da dung phien ban thi de nguyen.
+- **`bash menu.sh refresh`**: cap nhat toan bo khong hoi — cai lai exporter, sinh + import dashboard bang cau hinh / token da luu, bang dich vu, kiem tra Prometheus.
+- Payload import Grafana gui dang ASCII, khong hong khi may chay locale khong phai UTF-8.
+- **Dashboard**: cot HA Groups khong con bi cat chu — xuong dong trong o, rong 380, can trai, bam o de xem day du.
+- **Menu 26 / `services`**: bang moi dich vu (exporter local, `@cluster`, container, Docker, watchdog) — trang thai, `/health`, port, chay khi khoi dong may; khoi dong lai / dung / chay tung cai hoac tat ca roi tu kiem tra active + `/health`, loi thi in log; restart Docker thi kiem tra container chay lai.
+- **Watchdog** (`w` trong menu 26 / `watchdog`): systemd timer 2 phut / lan, `/health` loi 2 lan lien tiep thi khoi dong lai dung exporter do; log `journalctl -t pve-ceph-watchdog`.
+- **Menu 25 / `docker-net`**: doi dai IP Docker (`bip`, `default-address-pools`) — canh bao dai public (vd `192.20.0.0`) va dai trung route dang co, sao luu `daemon.json`, restart Docker; exporter chay systemd khong bi anh huong, container tat vai giay roi tool kiem tra / khoi dong lai cai nao chua len; Docker khong len voi cau hinh moi thi tra file cu.
+- **Dashboard khach hang** (menu 9 → 2, `make_dashboard.py --customer-job`): khoa 1 job + 1 datasource, an Site / Job, bo Detailed Alarms, HA Groups, hang Exporter, khong cho sua; menu 11 chon file nao de import (vao folder rieng cua khach).
+- UID gop dau `-` lien tiep: `Proxmox - Ceph Prometheus` → `Proxmox-Ceph-Prometheus` (khop dashboard da co, khong tao ban trung).
+- Menu 17: khong nhan so port o cau Ceph mgr; loi 403 in san lenh cap `PVEAuditor` dung token (ke ca token privsep).
+- **UID dashboard** tu chuan hoa ve `[A-Za-z0-9_-]`, toi da 40 ky tu (menu 9, `make_dashboard.py`, va ngay truoc khi import) — het loi Grafana `uid contains illegal characters`.
+- **Token Grafana go 1 lan**: chon luu thi nam rieng o `.grafana-token` (chi root doc, khong vao git); token sai / het han tu xoa va hoi lai; xoa tay o menu 15.
+- **Menu 11 voi Grafana cert tu ky**: tool lay cert, in SHA-256 de so voi trinh duyet, ban dong y thi **ghim** cert do (`.grafana-cert.pem`, chi dung khi goi Grafana) — van kiem tra TLS, khong tat. Cert ghi ten khac IP trong URL thi tool goi bang ten trong cert va tro ve IP that. Token thieu quyen (Viewer) thi bao can role Editor.
+- **Menu 11**: khong goi duoc Grafana thi noi ro ly do (cert tu ky, nham http/https, bi tu choi, het gio cho, DNS) kem cach sua, va tu thu dang URL con lai.
+- **Menu 9** ghi dashboard ra `dashboard-local.json` (khong nam trong git) thay vi ghi de `proxmox_ceph_dashboard.json` — truoc day lam `git pull` o menu 14 bi chan.
+- **Menu 14**: tu giu dashboard da sinh bang ban cu sang `dashboard-local.json` roi moi pull; pull loi thi bao loi va file bi sua, khong con bao nham "Dang la ban moi nhat".
+- **Dashboard**: o **Cluster Proxmox** dau hang *Proxmox Resource* hien ten cluster that, so node, quorate cua job dang chon — 2 job cung ten cluster thi bang node giong nhau la dung; 1 job ra nhieu o la job dang tron nhieu cluster.
+- **Dashboard**: bang *Resource Cluster with HA Groups* het cac cot thua `id 1 … id 5` (moi truy van chi giu nhan `host`); cot HA Groups rong hon.
+- **Menu 10**: canh bao khi IP nhap khong phai cua may monitor (target se tro sai may); khong nhan thu muc / glob lam file cau hinh chinh; SSH chi hoi mat khau 1 lan, de nghi tao key + `ssh-copy-id`.
+- **Menu 12**: target down vi tro toi may khac thi chi ra cach sua.
+- Ten job mac dinh khong con bi lap `Proxmox-Proxmox-…` khi ten cluster da bat dau bang `Proxmox-`.
+- **Menu 11** kiem tra datasource Prometheus tren Grafana truoc khi import: bao khi Grafana chua co datasource nao, khi regex Site khong khop datasource nao, va chi ra datasource tro toi Prometheus da cau hinh.
+- **Exporter 2026.10.30-6**: them `/health` (503 khi vong thu thap treo qua `3 × INTERVAL`, toi thieu 120 s); Docker image co `HEALTHCHECK` → `docker ps` hien `unhealthy`.
+- **Unit test** exporter (`tests/`) va **CI GitHub Actions**: `bash -n`, `shellcheck`, unit test, sinh lai dashboard so voi file trong repo, `promtool check rules`.
 
 ## 2026-10-29
 
 ### Prometheus / Grafana
-- Đầu menu hiện mã commit, báo khi GitHub có bản mới.
-- Menu **10** gộp mọi cluster thành `prometheus-scrape-all.yml`: kiểm tra từng exporter, bỏ job trùng (giữ cái đang OK), báo 2 cấu hình cùng 1 cluster.
-- Đẩy file scrape qua SSH (`prom-push`) vào thư mục `scrape_config_files` dưới tên `proxmox-ceph-<máy>.yml`; dừng khi trùng `job_name`, `promtool` lỗi thì trả lại file cũ.
-- Đẩy alert rules qua SSH (`prom-rules`), tự thêm `rule_files` nếu thiếu.
-- Menu **15** / `urls`: đặt Prometheus, Grafana URL trực tiếp; bắt URL gõ sai, tự thử http / https.
-- Menu **18**: cột cluster thật, tô đỏ cấu hình trùng cluster / trùng job.
-- Dashboard thêm hàng **Exporter** (trạng thái collector, lỗi gần nhất, dữ liệu cũ, phiên bản); file `alerts/pve-ceph-alerts.yml` 19 rule.
+- Dau menu hien ma commit, bao khi GitHub co ban moi.
+- Menu **10** gop moi cluster thanh `prometheus-scrape-all.yml`: kiem tra tung exporter, bo job trung (giu cai dang OK), bao 2 cau hinh cung 1 cluster.
+- Day file scrape qua SSH (`prom-push`) vao thu muc `scrape_config_files` duoi ten `proxmox-ceph-<may>.yml`; dung khi trung `job_name`, `promtool` loi thi tra lai file cu.
+- Day alert rules qua SSH (`prom-rules`), tu them `rule_files` neu thieu.
+- Menu **15** / `urls`: dat Prometheus, Grafana URL truc tiep; bat URL go sai, tu thu http / https.
+- Menu **18**: cot cluster that, to do cau hinh trung cluster / trung job.
+- Dashboard them hang **Exporter** (trang thai collector, loi gan nhat, du lieu cu, phien ban); file `alerts/pve-ceph-alerts.yml` 19 rule.
 
-### Theo dõi từ xa (menu 17)
-- Tự tìm mgr active trên mọi node của cluster (`CEPH_MGR` trống), mgr standby bị bỏ qua.
-- Nhận lỗi cert tự ký và đề nghị tắt kiểm tra TLS rồi chạy thử lại; tách lỗi port đóng khỏi lỗi firewall.
-- Cảnh báo node đã có ở cluster khác, token `root@pam`, port 9283 / 9221; đổi Token ID thì bắt nhập secret mới.
-- Menu 21–24: cài gói theo distro, mở firewall cho Prometheus, chạy cluster bằng Docker.
+### Theo doi tu xa (menu 17)
+- Tu tim mgr active tren moi node cua cluster (`CEPH_MGR` trong), mgr standby bi bo qua.
+- Nhan loi cert tu ky va de nghi tat kiem tra TLS roi chay thu lai; tach loi port dong khoi loi firewall.
+- Canh bao node da co o cluster khac, token `root@pam`, port 9283 / 9221; doi Token ID thi bat nhap secret moi.
+- Menu 21–24: cai goi theo distro, mo firewall cho Prometheus, chay cluster bang Docker.
 
 ### Exporter
-- Chế độ remote qua API Proxmox (token chỉ đọc) + ceph mgr, mỗi cluster 1 service `@<tên>`.
-- Gộp mọi metric ra 1 port (ceph mgr + Proxmox + bổ sung), port mặc định 9830.
-- Thu thập nền 30 s, giới hạn CPU / RAM / IO bằng systemd.
+- Che do remote qua API Proxmox (token chi doc) + ceph mgr, moi cluster 1 service `@<ten>`.
+- Gop moi metric ra 1 port (ceph mgr + Proxmox + bo sung), port mac dinh 9830.
+- Thu thap nen 30 s, gioi han CPU / RAM / IO bang systemd.

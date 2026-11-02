@@ -1,36 +1,36 @@
 # Monitor Proxmox + Ceph (Prometheus / Grafana)
 
-![Sơ đồ giám sát Proxmox + Ceph](docs/so-do-kien-truc.svg)
+![So do giam sat Proxmox + Ceph](docs/so-do-kien-truc.svg)
 
-Bộ tool dựng dashboard **Proxmox - Ceph Prometheus** và lấp các ô đang báo `No data`.
+Bo tool dung dashboard **Proxmox - Ceph Prometheus** va lap cac o dang bao `No data`.
 
-| File | Việc |
+| File | Viec |
 |---|---|
-| `menu.sh` | **Menu quản lý tất cả**: kiểm tra, cài, trạng thái, log, sinh/import dashboard, kiểm tra Prometheus |
-| `make_dashboard.py` | Sinh JSON dashboard Grafana, import thẳng vào Grafana |
-| `exporter/pve_ceph_extra_exporter.py` | Exporter bổ sung: trạng thái recovery/rebalance, Total Health %, Recovery Speed, HA Groups |
-| `exporter/install_exporter.sh` | Cài exporter thành service systemd trên 1 node Proxmox |
+| `menu.sh` | **Menu quan ly tat ca**: kiem tra, cai, trang thai, log, sinh/import dashboard, kiem tra Prometheus |
+| `make_dashboard.py` | Sinh JSON dashboard Grafana, import thang vao Grafana |
+| `exporter/pve_ceph_extra_exporter.py` | Exporter bo sung: trang thai recovery/rebalance, Total Health %, Recovery Speed, HA Groups |
+| `exporter/install_exporter.sh` | Cai exporter thanh service systemd tren 1 node Proxmox |
 | `alerts/pve-ceph-alerts.yml` | Alert rules Prometheus: exporter, Ceph, Proxmox |
-| `tests/` | Unit test exporter (`python3 -m unittest discover -s tests`), chạy tự động trên GitHub Actions |
-| `CHANGELOG.md` | Nhật ký thay đổi |
+| `tests/` | Unit test exporter (`python3 -m unittest discover -s tests`), chay tu dong tren GitHub Actions |
+| `CHANGELOG.md` | Nhat ky thay doi |
 
-## Vì sao dashboard cũ có ô "No data"
+## Vi sao dashboard cu co o "No data"
 
-| Ô | Nguyên nhân | Bản mới |
+| O | Nguyen nhan | Ban moi |
 |---|---|---|
-| OSD Used Class Nvme / HDD / HDD12T, Top 5 NVME/HDD/HDD12T Latency | Cluster không có OSD class đó, panel bị cố định theo tên class | Panel lặp theo biến `$class` (lấy từ `ceph_osd_metadata`), chỉ hiện class có OSD |
-| Detailed Alarms | Cluster HEALTH_OK nên `ceph_health_detail` rỗng | Hiện dòng `OK / HEALTH_OK / Không có cảnh báo` |
-| Ceph Status, Total Health, Recovery Speed | Không có nguồn cho `ceph_custom_recovery_*` | `pve_ceph_extra_exporter` luôn xuất metric (100% / 0 B/s khi không recovery) |
-| Cột HA Groups | Thiếu `pve_ha_groups_custom_info` | Exporter đọc `/etc/pve/ha/groups.cfg` và `rules.cfg` (PVE 9) |
+| OSD Used Class Nvme / HDD / HDD12T, Top 5 NVME/HDD/HDD12T Latency | Cluster khong co OSD class do, panel bi co dinh theo ten class | Panel lap theo bien `$class` (lay tu `ceph_osd_metadata`), chi hien class co OSD |
+| Detailed Alarms | Cluster HEALTH_OK nen `ceph_health_detail` rong | Hien dong `OK / HEALTH_OK / Khong co canh bao` |
+| Ceph Status, Total Health, Recovery Speed | Khong co nguon cho `ceph_custom_recovery_*` | `pve_ceph_extra_exporter` luon xuat metric (100% / 0 B/s khi khong recovery) |
+| Cot HA Groups | Thieu `pve_ha_groups_custom_info` | Exporter doc `/etc/pve/ha/groups.cfg` va `rules.cfg` (PVE 9) |
 
-Sửa thêm các lỗi query của bản cũ:
-- Bảng **Resource Cluster with HA Groups** không lọc `job` → trộn node của mọi cluster trên cùng Prometheus.
-- **OSDs OUT** tính `count(up) - count(in)` luôn ra 0; nay đếm `ceph_osd_in == 0`.
-- **OSD Used Class HDD12T** cột Low lấy nhầm class `hdd`.
+Sua them cac loi query cua ban cu:
+- Bang **Resource Cluster with HA Groups** khong loc `job` → tron node cua moi cluster tren cung Prometheus.
+- **OSDs OUT** tinh `count(up) - count(in)` luon ra 0; nay dem `ceph_osd_in == 0`.
+- **OSD Used Class HDD12T** cot Low lay nham class `hdd`.
 
-## Cài trọn gói: một lệnh, hỏi một lần
+## Cai tron goi: mot lenh, hoi mot lan
 
-Clone repo lên 1 node Ceph của mỗi cluster rồi chạy:
+Clone repo len 1 node Ceph cua moi cluster roi chay:
 
 ```bash
 git clone https://github.com/fixnhanh-linux/monitor-grafana-proxmox-full.git /root/monitor-grafana-proxmox-full
@@ -40,115 +40,115 @@ git clone https://github.com/fixnhanh-linux/monitor-grafana-proxmox-full.git /ro
 bash /root/monitor-grafana-proxmox-full/menu.sh setup
 ```
 
-(hoặc mở `menu.sh` rồi chọn **S**). Tool hỏi hết các câu dưới đây, in **TÓM TẮT**, hỏi `Bắt đầu thực hiện? (y/N)`, rồi tự chạy từng bước `>>> [1/6] ...` và báo **KẾT QUẢ**.
+(hoac mo `menu.sh` roi chon **S**). Tool hoi het cac cau duoi day, in **TOM TAT**, hoi `Bat dau thuc hien? (y/N)`, roi tu chay tung buoc `>>> [1/6] ...` va bao **KET QUA**.
 
-| # | Câu hỏi | Mặc định / tự dò | Dùng để |
+| # | Cau hoi | Mac dinh / tu do | Dung de |
 |---|---|---|---|
-| 1 | Máy này làm gì: `1` node Ceph đầy đủ · `2` chỉ exporter · `3` chỉ dashboard | `1` | Chọn các bước sẽ chạy |
-| 2 | Port exporter | `9830` | Cổng `/metrics` của service |
-| 2 | Gộp tất cả metric ra 1 port? | `Y` | `Y`: Prometheus chỉ cần 1 target; `n`: giữ target ceph mgr / pve exporter riêng |
-| 2 | Tên job Prometheus của cluster | `Proxmox-<cluster_name>` đọc từ `/etc/pve/corosync.conf` | File mẫu `prometheus-target-<job>.yml` |
-| 3 | Tiêu đề, UID dashboard | `Proxmox - Ceph Prometheus`, `pve-ceph-prom` | UID trùng sẽ ghi đè dashboard cũ |
-| 3 | Regex lọc datasource Site, regex lọc job | trống (tất cả), `/.*Proxmox-/` | Biến `$Site`, `$job` |
-| 3 | Số node / pool / device class | đọc từ `ceph osd tree`, `ceph osd pool ls`, `ceph osd crush class ls` | Chiều cao các bảng |
-| 3 | Ngưỡng latency theo class | `nvme=15:25,ssd=50:100,default=100:200` | Màu bảng Latency All OSD |
-| 3 | Khoảng thời gian mặc định | `now-15m` | Time picker |
-| 3 | Đặt tên ngắn + màu cho HA Groups? | đọc các chuỗi group đang có trong `/etc/pve/ha/` | Cột HA Groups, vd `Gold+HIGH:orange` |
-| 4 | Grafana URL, token, folder UID | URL trống = chỉ xuất file JSON | Import qua API |
-| 5 | Prometheus URL | trống = bỏ qua | Kiểm tra target `up` và job khớp ceph mgr |
+| 1 | May nay lam gi: `1` node Ceph day du · `2` chi exporter · `3` chi dashboard | `1` | Chon cac buoc se chay |
+| 2 | Port exporter | `9830` | Cong `/metrics` cua service |
+| 2 | Gop tat ca metric ra 1 port? | `Y` | `Y`: Prometheus chi can 1 target; `n`: giu target ceph mgr / pve exporter rieng |
+| 2 | Ten job Prometheus cua cluster | `Proxmox-<cluster_name>` doc tu `/etc/pve/corosync.conf` | File mau `prometheus-target-<job>.yml` |
+| 3 | Tieu de, UID dashboard | `Proxmox - Ceph Prometheus`, `pve-ceph-prom` | UID trung se ghi de dashboard cu |
+| 3 | Regex loc datasource Site, regex loc job | trong (tat ca), `/.*Proxmox-/` | Bien `$Site`, `$job` |
+| 3 | So node / pool / device class | doc tu `ceph osd tree`, `ceph osd pool ls`, `ceph osd crush class ls` | Chieu cao cac bang |
+| 3 | Nguong latency theo class | `nvme=15:25,ssd=50:100,default=100:200` | Mau bang Latency All OSD |
+| 3 | Khoang thoi gian mac dinh | `now-15m` | Time picker |
+| 3 | Dat ten ngan + mau cho HA Groups? | doc cac chuoi group dang co trong `/etc/pve/ha/` | Cot HA Groups, vd `Gold+HIGH:orange` |
+| 4 | Grafana URL, token, folder UID | URL trong = chi xuat file JSON | Import qua API |
+| 5 | Prometheus URL | trong = bo qua | Kiem tra target `up` va job khop ceph mgr |
 
-Các bước tool tự làm (tuỳ lựa chọn ở câu 1):
+Cac buoc tool tu lam (tuy lua chon o cau 1):
 
-1. Kiểm tra môi trường — có lỗi thì dừng, chưa cài gì
-2. Cài / cập nhật service `pve-ceph-extra-exporter`
-3. In và lưu đoạn `prometheus.yml` mẫu (`prometheus-target-<job>.yml`)
-4. Sinh `dashboard-local.json` (file riêng, không nằm trong git nên menu 14 cập nhật không bị chặn)
-5. Import lên Grafana
-6. Kiểm tra Prometheus
+1. Kiem tra moi truong — co loi thi dung, chua cai gi
+2. Cai / cap nhat service `pve-ceph-extra-exporter`
+3. In va luu doan `prometheus.yml` mau (`prometheus-target-<job>.yml`)
+4. Sinh `dashboard-local.json` (file rieng, khong nam trong git nen menu 14 cap nhat khong bi chan)
+5. Import len Grafana
+6. Kiem tra Prometheus
 
-### Điều chỉnh sau khi cài
+### Dieu chinh sau khi cai
 
-| Muốn đổi | Cách |
+| Muon doi | Cach |
 |---|---|
-| Bất kỳ câu trả lời nào | Chạy lại `menu.sh setup` — giá trị cũ hiện sẵn trong `[ ]`, chỉ sửa câu cần đổi, Enter các câu khác |
-| Sửa nhanh không qua câu hỏi | Sửa `.menu.conf` (dòng `DASH_TITLE=`, `DASH_LAT=`, `DASH_ALIASES=` ...) rồi chạy `menu.sh setup` và Enter liên tục |
-| Chỉ port exporter | `bash menu.sh port 9300`, rồi sửa target trong `prometheus.yml` |
-| Chỉ dashboard | Menu **9** (sinh lại) rồi **11** (import, UID giống nhau sẽ ghi đè) |
-| Tên ngắn HA Groups | Menu **9** → trả lời `y` ở câu HA Groups; `DASH_ALIASES` lưu dạng `chuoi=Ten:mau;;chuoi2=Ten2` |
-| Gỡ exporter | Menu **8** hoặc `bash menu.sh uninstall` |
+| Bat ky cau tra loi nao | Chay lai `menu.sh setup` — gia tri cu hien san trong `[ ]`, chi sua cau can doi, Enter cac cau khac |
+| Sua nhanh khong qua cau hoi | Sua `.menu.conf` (dong `DASH_TITLE=`, `DASH_LAT=`, `DASH_ALIASES=` ...) roi chay `menu.sh setup` va Enter lien tuc |
+| Chi port exporter | `bash menu.sh port 9300`, roi sua target trong `prometheus.yml` |
+| Chi dashboard | Menu **9** (sinh lai) roi **11** (import, UID giong nhau se ghi de) |
+| Ten ngan HA Groups | Menu **9** → tra loi `y` o cau HA Groups; `DASH_ALIASES` luu dang `chuoi=Ten:mau;;chuoi2=Ten2` |
+| Go exporter | Menu **8** hoac `bash menu.sh uninstall` |
 
-Token Grafana: gõ 1 lần ở menu 11, chọn lưu thì nằm riêng trong `.grafana-token` (chỉ root đọc, không vào git, không nằm trong `.menu.conf`). Token sai / hết hạn thì tool tự xoá và hỏi lại; xoá tay ở menu 15.
+Token Grafana: go 1 lan o menu 11, chon luu thi nam rieng trong `.grafana-token` (chi root doc, khong vao git, khong nam trong `.menu.conf`). Token sai / het han thi tool tu xoa va hoi lai; xoa tay o menu 15.
 
-## Cập nhật toàn bộ: 1 lệnh, không hỏi
+## Cap nhat toan bo: 1 lenh, khong hoi
 
 ```bash
 proxmox-menu refresh
 ```
 
-Tự `git pull` rồi chạy bằng code mới, dùng cấu hình đã lưu: cài lại exporter (local + mọi cluster từ xa) và khởi động lại, sinh lại dashboard từ `.menu.conf` rồi import lên Grafana (cần Grafana URL + token đã lưu ở menu 11), in bảng dịch vụ, kiểm tra Prometheus. Cuối cùng báo `Xong, khong co loi` hoặc liệt kê bước cần xem lại.
+Tu `git pull` roi chay bang code moi, dung cau hinh da luu: cai lai exporter (local + moi cluster tu xa) va khoi dong lai, sinh lai dashboard tu `.menu.conf` roi import len Grafana (can Grafana URL + token da luu o menu 11), in bang dich vu, kiem tra Prometheus. Cuoi cung bao `Xong, khong co loi` hoac liet ke buoc can xem lai.
 
-## Lệnh tắt `proxmox-menu`
+## Lenh tat `proxmox-menu`
 
-Lần đầu chạy `bash /root/monitor-grafana-proxmox-full/menu.sh` bằng root, tool tự tạo lệnh `/usr/local/bin/proxmox-menu`. Từ đó gõ ở bất kỳ thư mục nào:
+Lan dau chay `bash /root/monitor-grafana-proxmox-full/menu.sh` bang root, tool tu tao lenh `/usr/local/bin/proxmox-menu`. Tu do go o bat ky thu muc nao:
 
-| Lệnh | Việc |
+| Lenh | Viec |
 |---|---|
-| `proxmox-menu` | Mở menu |
-| `proxmox-menu refresh` | Cập nhật toàn bộ (git pull + exporter + dashboard + kiểm tra) |
-| `proxmox-menu services` | Bảng dịch vụ, khởi động lại / dừng / log |
-| `proxmox-menu <lệnh>` | Mọi lệnh bên dưới (`remote-list`, `prom-push`, `docker-net` ...) |
+| `proxmox-menu` | Mo menu |
+| `proxmox-menu refresh` | Cap nhat toan bo (git pull + exporter + dashboard + kiem tra) |
+| `proxmox-menu services` | Bang dich vu, khoi dong lai / dung / log |
+| `proxmox-menu <lenh>` | Moi lenh ben duoi (`remote-list`, `prom-push`, `docker-net` ...) |
 
-Chuyển thư mục tool đi chỗ khác thì chạy `bash <thư-mục-mới>/menu.sh` một lần, lệnh tắt tự trỏ lại.
+Chuyen thu muc tool di cho khac thi chay `bash <thu-muc-moi>/menu.sh` mot lan, lenh tat tu tro lai.
 
-## Menu từng mục
+## Menu tung muc
 
 ```bash
 bash /root/monitor-grafana-proxmox-full/menu.sh
 ```
 
-| Mục | Việc |
+| Muc | Viec |
 |---|---|
-| S | Cài trọn gói (như trên) |
-| 1 | Kiểm tra python3, lệnh `ceph`, keyring, HA config, port trống, PVE firewall |
-| 2 | Cài / cập nhật exporter (hỏi port, mặc định 9830) |
-| 3 | Trạng thái service, collector OK/lỗi, dòng Ceph Status, Total Health |
-| 4 | Xem metric (nếu chưa cài thì chạy thử 1 lần từ file nguồn) |
-| 5 / 6 / 7 / 8 | Log, restart, đổi port, gỡ cài |
-| 9 | Sinh dashboard JSON — tự đọc số node / pool / device class từ Ceph. Chọn **1 Nội bộ** (mọi cluster) hoặc **2 Khách hàng** (xem dưới) |
-| 10 | In đoạn `prometheus.yml` mẫu cho node này; máy có cluster từ xa thì gộp **tất cả cluster** vào `prometheus-scrape-all.yml` (kiểm tra từng exporter, bỏ job trùng, báo 2 cấu hình cùng 1 cluster), rồi tuỳ chọn đẩy qua SSH lên máy Prometheus, kèm alert rules (xem dưới) |
-| 11 | Import dashboard lên Grafana qua API (service account token, role **Editor**); kiểm tra trước Grafana có datasource Prometheus khớp biến Site; Grafana dùng cert tự ký thì đề nghị **ghim cert** (so SHA-256 với trình duyệt), không tắt kiểm tra TLS |
-| 12 | Hỏi Prometheus: target exporter có `up`, job của exporter có khớp job ceph mgr, device class từng cluster |
-| 13 | Kiểm tra tổng thể (1 + 3 + 12) |
-| 14 | Cập nhật tool (`git pull`), tự hỏi cài lại exporter nếu exporter có thay đổi |
-| 15 | Xem / xoá cấu hình đã lưu (`.menu.conf`), **đặt Prometheus / Grafana URL** (kiểm tra kết nối) |
-| 16 | Giới thiệu & bản quyền FIX NHANH |
-| 17 | Thêm / sửa cluster theo dõi từ xa (API token) |
-| 18 | Danh sách cluster từ xa: port, service, cluster thật đọc được, trạng thái từng phần; tô đỏ khi 2 cấu hình cùng 1 cluster hoặc trùng job |
-| 19 | Kiểm tra kết nối 1 cluster (báo rõ 401 / 403 / firewall) |
-| 20 | Xoá cluster từ xa (dừng service / container, xoá token) |
-| 21 | Cài gói cần thiết — tự nhận `apt` / `dnf` / `yum` / `zypper` / `pacman` / `apk` |
-| 22 | Mở firewall cho IP Prometheus — tự nhận `ufw` / `firewalld` / `pve-firewall` |
-| 23 | Chạy cluster (đã thêm ở 17) bằng Docker: build image, chuyển từ systemd sang container cùng port |
-| 24 | Quản lý container: xem trạng thái, log, khởi động lại, xoá (quay về systemd) |
-| 25 | Đổi dải IP Docker (`docker0` + dải cho mạng mới): kiểm tra dải nội bộ / trùng route, sao lưu `daemon.json`, restart Docker, kiểm tra container chạy lại; Docker không lên thì trả file cũ |
-| 26 | **Dịch vụ & sức khoẻ**: bảng mọi exporter (local, `@cluster`, container) + Docker + watchdog với trạng thái, `/health`, port, chạy khi khởi động máy; `r`/`s`/`t` khởi động lại / dừng / chạy (1 cái hoặc `a` = tất cả) rồi **tự kiểm tra** active + `/health` trong 40 s, lỗi thì in log; `l` log; `b`/`B` bật / tắt chạy khi khởi động máy; `w` watchdog |
+| S | Cai tron goi (nhu tren) |
+| 1 | Kiem tra python3, lenh `ceph`, keyring, HA config, port trong, PVE firewall |
+| 2 | Cai / cap nhat exporter (hoi port, mac dinh 9830) |
+| 3 | Trang thai service, collector OK/loi, dong Ceph Status, Total Health |
+| 4 | Xem metric (neu chua cai thi chay thu 1 lan tu file nguon) |
+| 5 / 6 / 7 / 8 | Log, restart, doi port, go cai |
+| 9 | Sinh dashboard JSON — tu doc so node / pool / device class tu Ceph. Chon **1 Noi bo** (moi cluster) hoac **2 Khach hang** (xem duoi) |
+| 10 | In doan `prometheus.yml` mau cho node nay; may co cluster tu xa thi gop **tat ca cluster** vao `prometheus-scrape-all.yml` (kiem tra tung exporter, bo job trung, bao 2 cau hinh cung 1 cluster), roi tuy chon day qua SSH len may Prometheus, kem alert rules (xem duoi) |
+| 11 | Import dashboard len Grafana qua API (service account token, role **Editor**); kiem tra truoc Grafana co datasource Prometheus khop bien Site; Grafana dung cert tu ky thi de nghi **ghim cert** (so SHA-256 voi trinh duyet), khong tat kiem tra TLS |
+| 12 | Hoi Prometheus: target exporter co `up`, job cua exporter co khop job ceph mgr, device class tung cluster |
+| 13 | Kiem tra tong the (1 + 3 + 12) |
+| 14 | Cap nhat tool (`git pull`), tu hoi cai lai exporter neu exporter co thay doi |
+| 15 | Xem / xoa cau hinh da luu (`.menu.conf`), **dat Prometheus / Grafana URL** (kiem tra ket noi) |
+| 16 | Gioi thieu & ban quyen FIX NHANH |
+| 17 | Them / sua cluster theo doi tu xa (API token) |
+| 18 | Danh sach cluster tu xa: port, service, cluster that doc duoc, trang thai tung phan; to do khi 2 cau hinh cung 1 cluster hoac trung job |
+| 19 | Kiem tra ket noi 1 cluster (bao ro 401 / 403 / firewall) |
+| 20 | Xoa cluster tu xa (dung service / container, xoa token) |
+| 21 | Cai goi can thiet — tu nhan `apt` / `dnf` / `yum` / `zypper` / `pacman` / `apk` |
+| 22 | Mo firewall cho IP Prometheus — tu nhan `ufw` / `firewalld` / `pve-firewall` |
+| 23 | Chay cluster (da them o 17) bang Docker: build image, chuyen tu systemd sang container cung port |
+| 24 | Quan ly container: xem trang thai, log, khoi dong lai, xoa (quay ve systemd) |
+| 25 | Doi dai IP Docker (`docker0` + dai cho mang moi): kiem tra dai noi bo / trung route, sao luu `daemon.json`, restart Docker, kiem tra container chay lai; Docker khong len thi tra file cu |
+| 26 | **Dich vu & suc khoe**: bang moi exporter (local, `@cluster`, container) + Docker + watchdog voi trang thai, `/health`, port, chay khi khoi dong may; `r`/`s`/`t` khoi dong lai / dung / chay (1 cai hoac `a` = tat ca) roi **tu kiem tra** active + `/health` trong 40 s, loi thi in log; `l` log; `b`/`B` bat / tat chay khi khoi dong may; `w` watchdog |
 
-Chạy 1 lệnh không qua menu: `proxmox-menu setup | check | install [port] | status | metrics | logs | restart | port <số> | uninstall | dashboard | import | prom | prom-check | doctor | update | about | remote-add [tên] | remote-list | prom-all | prom-push | prom-rules | urls | refresh | remote-test | remote-remove | deps | firewall | docker-run | docker-manage | docker-net | services | watchdog`.
+Chay 1 lenh khong qua menu: `proxmox-menu setup | check | install [port] | status | metrics | logs | restart | port <so> | uninstall | dashboard | import | prom | prom-check | doctor | update | about | remote-add [ten] | remote-list | prom-all | prom-push | prom-rules | urls | refresh | remote-test | remote-remove | deps | firewall | docker-run | docker-manage | docker-net | services | watchdog`.
 
-Menu nhớ Grafana URL, Prometheus URL, tiêu đề/UID dashboard trong `.menu.conf`; token Grafana (nếu chọn lưu) nằm riêng ở `.grafana-token`.
+Menu nho Grafana URL, Prometheus URL, tieu de/UID dashboard trong `.menu.conf`; token Grafana (neu chon luu) nam rieng o `.grafana-token`.
 
-## Theo dõi từ xa: không cài gì lên node Proxmox
+## Theo doi tu xa: khong cai gi len node Proxmox
 
-Exporter chạy trên **máy monitor** (ví dụ 10.16.16.38, Ubuntu), lấy dữ liệu qua **API Proxmox** bằng token chỉ đọc và `/metrics` của ceph mgr. Một máy monitor theo dõi được nhiều cluster, mỗi cluster là 1 service `pve-ceph-extra-exporter@<tên>` với 1 port riêng (9830, 9831, ...). Tên metric giống hệt chế độ local nên **dashboard không cần sửa**.
+Exporter chay tren **may monitor** (vi du 10.16.16.38, Ubuntu), lay du lieu qua **API Proxmox** bang token chi doc va `/metrics` cua ceph mgr. Mot may monitor theo doi duoc nhieu cluster, moi cluster la 1 service `pve-ceph-extra-exporter@<ten>` voi 1 port rieng (9830, 9831, ...). Ten metric giong het che do local nen **dashboard khong can sua**.
 
-| Dữ liệu | Chế độ local (trên node) | Chế độ remote (máy monitor) |
+| Du lieu | Che do local (tren node) | Che do remote (may monitor) |
 |---|---|---|
-| Metric Ceph (OSD, pool, latency) | `ceph mgr services` → mgr:9283 | Thử lần lượt `CEPH_MGR`; để trống thì tự lấy IP mọi node từ `/cluster/status` (mgr standby trả rỗng → bỏ qua, tìm tới mgr active) |
+| Metric Ceph (OSD, pool, latency) | `ceph mgr services` → mgr:9283 | Thu lan luot `CEPH_MGR`; de trong thi tu lay IP moi node tu `/cluster/status` (mgr standby tra rong → bo qua, tim toi mgr active) |
 | Node, CPU, RAM, uptime, HA | `pvesh`, `/etc/pve` | API `/cluster/status`, `/cluster/resources`, `/cluster/ha/status/manager_status` |
 | Ceph Status / Recovery | `ceph status` | API `/cluster/ceph/status` |
 | HA Groups | `/etc/pve/ha/*.cfg` | API `/cluster/ha/groups`, `/cluster/ha/rules` (PVE 9) |
 
-### Bước 1: trên 1 node bất kỳ của mỗi cluster (1 lần)
+### Buoc 1: tren 1 node bat ky cua moi cluster (1 lan)
 
 ```bash
 pveum user add monitor@pve --comment "FIX NHANH monitor"
@@ -166,51 +166,51 @@ pveum user token add monitor@pve exporter --privsep 0
 ceph mgr module enable prometheus
 ```
 
-`PVEAuditor` chỉ có quyền **xem**. Lệnh tạo token in ra `value` (secret) **chỉ một lần** — lưu lại.
+`PVEAuditor` chi co quyen **xem**. Lenh tao token in ra `value` (secret) **chi mot lan** — luu lai.
 
-### Bước 2: trên máy monitor
+### Buoc 2: tren may monitor
 
 ```bash
 bash /root/monitor-grafana-proxmox-full/menu.sh remote-add
 ```
 
-(hoặc menu **17**, hoặc cài trọn gói **S → 4**). Tool hỏi:
+(hoac menu **17**, hoac cai tron goi **S → 4**). Tool hoi:
 
-| Câu hỏi | Ví dụ / mặc định |
+| Cau hoi | Vi du / mac dinh |
 |---|---|
-| Tên cluster | `FPT-HCM` |
-| IP các node Proxmox | `10.16.16.60,10.16.16.61,10.16.16.62` — node đầu chết tự chuyển node sau |
-| Token ID / secret | `monitor@pve!exporter` / secret (gõ không hiện) |
-| Kiểm tra chứng chỉ TLS | `N` (Proxmox mặc định cert tự ký) |
-| Ceph mgr | Enter = tự tìm mgr active trên mọi node của cluster (`:9283`) |
-| Tên job Prometheus | `Proxmox-FPT-HCM` (phải chứa `Proxmox-`) |
-| Port | port trống kế tiếp từ 9830 |
+| Ten cluster | `FPT-HCM` |
+| IP cac node Proxmox | `10.16.16.60,10.16.16.61,10.16.16.62` — node dau chet tu chuyen node sau |
+| Token ID / secret | `monitor@pve!exporter` / secret (go khong hien) |
+| Kiem tra chung chi TLS | `N` (Proxmox mac dinh cert tu ky) |
+| Ceph mgr | Enter = tu tim mgr active tren moi node cua cluster (`:9283`) |
+| Ten job Prometheus | `Proxmox-FPT-HCM` (phai chua `Proxmox-`) |
+| Port | port trong ke tiep tu 9830 |
 
-Tool **chạy thử kết nối** và báo từng phần ✔ / ✘ (401 = sai token, 403 = thiếu quyền, refused/timeout = firewall), sau đó lưu `/etc/pve-ceph-extra-exporter/<tên>.env` (chmod 600, chỉ root đọc), bật service và in mẫu `prometheus.yml` (1 target `IP-máy-monitor:port`).
+Tool **chay thu ket noi** va bao tung phan ✔ / ✘ (401 = sai token, 403 = thieu quyen, refused/timeout = firewall), sau do luu `/etc/pve-ceph-extra-exporter/<ten>.env` (chmod 600, chi root doc), bat service va in mau `prometheus.yml` (1 target `IP-may-monitor:port`).
 
-Máy monitor cần đi tới được **node:8006** và **mgr:9283**.
+May monitor can di toi duoc **node:8006** va **mgr:9283**.
 
-### An toàn & tải
+### An toan & tai
 
-- Service chạy bằng **user tạm** (`DynamicUser`), không phải root; hệ thống file chỉ đọc (`ProtectSystem=strict`); giới hạn `CPUQuota=25%`, `MemoryMax=256M`.
-- Token chỉ nằm trong file `.env` quyền 600, không xuất hiện trên dòng lệnh / `ps`.
-- Mỗi 30 giây: 5–6 request API + 1 request mgr cho mỗi cluster. Phía Proxmox gần như không tốn gì.
+- Service chay bang **user tam** (`DynamicUser`), khong phai root; he thong file chi doc (`ProtectSystem=strict`); gioi han `CPUQuota=25%`, `MemoryMax=256M`.
+- Token chi nam trong file `.env` quyen 600, khong xuat hien tren dong lenh / `ps`.
+- Moi 30 giay: 5–6 request API + 1 request mgr cho moi cluster. Phia Proxmox gan nhu khong ton gi.
 
-### Chạy trên server không phải Ubuntu
+### Chay tren server khong phai Ubuntu
 
-| Hệ điều hành | Ghi chú |
+| He dieu hanh | Ghi chu |
 |---|---|
-| Debian, Ubuntu, Rocky / Alma / RHEL 8+, Fedora, openSUSE, Arch | Đầy đủ: menu **21** cài gói, **17** thêm cluster |
-| CentOS 7 / RHEL 7 | Chạy được; systemd cũ bỏ qua `DynamicUser` nên service chạy bằng root |
-| Alpine, máy không có systemd, Windows (Docker Desktop / WSL2) | Dùng Docker: menu **17** rồi **23** |
+| Debian, Ubuntu, Rocky / Alma / RHEL 8+, Fedora, openSUSE, Arch | Day du: menu **21** cai goi, **17** them cluster |
+| CentOS 7 / RHEL 7 | Chay duoc; systemd cu bo qua `DynamicUser` nen service chay bang root |
+| Alpine, may khong co systemd, Windows (Docker Desktop / WSL2) | Dung Docker: menu **17** roi **23** |
 
-Firewall (ufw / firewalld / pve-firewall): menu **22**, nhập IP Prometheus là mở đủ các port exporter trên máy.
+Firewall (ufw / firewalld / pve-firewall): menu **22**, nhap IP Prometheus la mo du cac port exporter tren may.
 
 ### Docker
 
-Thêm cluster ở menu **17** (để có file cấu hình), rồi menu **23**: tool build image `fixnhanh/pve-ceph-exporter:<version>`, dừng service systemd của cluster đó và chạy container `fixnhanh-pve-<tên>` cùng port (giới hạn 256 MB / 0.25 CPU, read-only, bỏ mọi capability). Target Prometheus giữ nguyên. Menu **24** xem log / khởi động lại / xoá container (tự quay về systemd).
+Them cluster o menu **17** (de co file cau hinh), roi menu **23**: tool build image `fixnhanh/pve-ceph-exporter:<version>`, dung service systemd cua cluster do va chay container `fixnhanh-pve-<ten>` cung port (gioi han 256 MB / 0.25 CPU, read-only, bo moi capability). Target Prometheus giu nguyen. Menu **24** xem log / khoi dong lai / xoa container (tu quay ve systemd).
 
-Chạy tay không qua menu:
+Chay tay khong qua menu:
 
 ```bash
 docker build -t fixnhanh/pve-ceph-exporter exporter/
@@ -220,7 +220,7 @@ docker build -t fixnhanh/pve-ceph-exporter exporter/
 docker run -d --name fixnhanh-pve-FPT-HCM --restart unless-stopped -p 9830:9830 --env-file /etc/pve-ceph-extra-exporter/FPT-HCM.env fixnhanh/pve-ceph-exporter
 ```
 
-## 1. Cài exporter thủ công (trên 1 node Ceph của mỗi cluster)
+## 1. Cai exporter thu cong (tren 1 node Ceph cua moi cluster)
 
 ```bash
 scp -r exporter root@<node-proxmox>:/root/
@@ -230,13 +230,13 @@ scp -r exporter root@<node-proxmox>:/root/
 bash /root/exporter/install_exporter.sh
 ```
 
-Kiểm tra nhanh không cần cài: `python3 pve_ceph_extra_exporter.py --once`
+Kiem tra nhanh khong can cai: `python3 pve_ceph_extra_exporter.py --once`
 
-## 2. Thêm vào Prometheus
+## 2. Them vao Prometheus
 
-### Mặc định: gộp tất cả metric ra 1 port
+### Mac dinh: gop tat ca metric ra 1 port
 
-Exporter phát lại `/metrics` của ceph mgr đang active (lấy địa chỉ qua `ceph mgr services`) và tự xuất metric Proxmox từ `pvesh` (tên giống `prometheus-pve-exporter`: `pve_cluster_info`, `pve_up`, `pve_cpu_usage_ratio`, `pve_memory_*`, `pve_disk_*`, `pve_uptime_seconds`, `pve_ha_state`). Mỗi cluster chỉ cần **1 target**:
+Exporter phat lai `/metrics` cua ceph mgr dang active (lay dia chi qua `ceph mgr services`) va tu xuat metric Proxmox tu `pvesh` (ten giong `prometheus-pve-exporter`: `pve_cluster_info`, `pve_up`, `pve_cpu_usage_ratio`, `pve_memory_*`, `pve_disk_*`, `pve_uptime_seconds`, `pve_ha_state`). Moi cluster chi can **1 target**:
 
 ```yaml
   - job_name: Proxmox-DECO
@@ -244,69 +244,69 @@ Exporter phát lại `/metrics` của ceph mgr đang active (lấy địa chỉ 
     scrape_timeout: 25s
     static_configs:
       - targets:
-          - 10.0.0.11:9830   # pve_ceph_extra_exporter (tất cả metric)
+          - 10.0.0.11:9830   # pve_ceph_extra_exporter (tat ca metric)
 ```
 
-Điều kiện: đã bật module prometheus của ceph mgr (`ceph mgr module enable prometheus`), menu **1** sẽ kiểm tra.
+Dieu kien: da bat module prometheus cua ceph mgr (`ceph mgr module enable prometheus`), menu **1** se kiem tra.
 
-**Phải xoá** target `:9283` (ceph mgr) và `:9221` (pve exporter) cũ của cluster đó khỏi job, nếu không mọi số liệu bị nhân đôi. Menu **12** báo `Trùng` khi một job có 2 target cùng xuất metric ceph hoặc Proxmox.
+**Phai xoa** target `:9283` (ceph mgr) va `:9221` (pve exporter) cu cua cluster do khoi job, neu khong moi so lieu bi nhan doi. Menu **12** bao `Trung` khi mot job co 2 target cung xuat metric ceph hoac Proxmox.
 
-### Nhiều cluster trên 1 máy monitor
+### Nhieu cluster tren 1 may monitor
 
-Menu **10** (hoặc `bash menu.sh prom-all`) gộp mọi cluster thành `prometheus-scrape-all.yml`, file đã có sẵn dòng `scrape_configs:`.
+Menu **10** (hoac `bash menu.sh prom-all`) gop moi cluster thanh `prometheus-scrape-all.yml`, file da co san dong `scrape_configs:`.
 
-| Prometheus của bạn | Cách đưa vào |
+| Prometheus cua ban | Cach dua vao |
 |---|---|
-| Tách file: `prometheus.yml` có `scrape_config_files: [/etc/prometheus/scrape_configs/*.yml]` | Chép **nguyên file** vào thư mục đó, vd `proxmox-ceph-<tên-máy-monitor>.yml` |
-| 1 file (mặc định) | Dán các khối `- job_name:` vào dưới `scrape_configs:` của `prometheus.yml` |
+| Tach file: `prometheus.yml` co `scrape_config_files: [/etc/prometheus/scrape_configs/*.yml]` | Chep **nguyen file** vao thu muc do, vd `proxmox-ceph-<ten-may-monitor>.yml` |
+| 1 file (mac dinh) | Dan cac khoi `- job_name:` vao duoi `scrape_configs:` cua `prometheus.yml` |
 
-Với kiểu tách file, trả lời `y` ở câu *Đẩy file lên máy Prometheus qua SSH* (hoặc `bash menu.sh prom-push`). Tool tự làm:
+Voi kieu tach file, tra loi `y` o cau *Day file len may Prometheus qua SSH* (hoac `bash menu.sh prom-push`). Tool tu lam:
 
-1. SSH vào máy Prometheus (cần đăng nhập bằng key: `ssh-copy-id root@<prometheus>`), kiểm tra thư mục và `scrape_config_files`.
-2. **Dừng** nếu `job_name` đã có ở file khác — Prometheus không cho trùng job giữa các file.
-3. Liệt kê target `:9283` / `:9221` cũ để bạn xoá nếu là cùng cluster (tránh nhân đôi số liệu).
-4. Chép file, chạy `promtool check config`; lỗi thì **trả lại file cũ**, Prometheus không bị ảnh hưởng; OK thì reload.
+1. SSH vao may Prometheus (can dang nhap bang key: `ssh-copy-id root@<prometheus>`), kiem tra thu muc va `scrape_config_files`.
+2. **Dung** neu `job_name` da co o file khac — Prometheus khong cho trung job giua cac file.
+3. Liet ke target `:9283` / `:9221` cu de ban xoa neu la cung cluster (tranh nhan doi so lieu).
+4. Chep file, chay `promtool check config`; loi thi **tra lai file cu**, Prometheus khong bi anh huong; OK thi reload.
 
-Máy SSH, file cấu hình, thư mục được nhớ trong `.menu.conf` cho lần sau.
+May SSH, file cau hinh, thu muc duoc nho trong `.menu.conf` cho lan sau.
 
-**Chuyển job cũ sang exporter:** nếu Prometheus đã có job cùng tên (vd `Proxmox-P1-XD` đang scrape thẳng `:9283` / pve exporter) hoặc job khác trỏ cùng target exporter, tool liệt kê từng block (file, job, dòng, lý do) và hỏi **thay thế**: sao lưu toàn bộ thư mục vào `/root/prom-bak-<giờ>` trên máy Prometheus, gỡ đúng các block đó, đẩy job exporter cùng tên (dashboard giữ nguyên tên job), `promtool` lỗi thì trả lại tất cả.
+**Chuyen job cu sang exporter:** neu Prometheus da co job cung ten (vd `Proxmox-P1-XD` dang scrape thang `:9283` / pve exporter) hoac job khac tro cung target exporter, tool liet ke tung block (file, job, dong, ly do) va hoi **thay the**: sao luu toan bo thu muc vao `/root/prom-bak-<gio>` tren may Prometheus, go dung cac block do, day job exporter cung ten (dashboard giu nguyen ten job), `promtool` loi thi tra lai tat ca.
 
-Sau khi đẩy file scrape, tool hỏi đẩy luôn **alert rules** (hoặc `bash menu.sh prom-rules`): chép `alerts/pve-ceph-alerts.yml` vào thư mục `rule_files` đang dùng (mặc định lấy từ `prometheus.yml`, vd `/etc/prometheus/rules/`). Nếu `prometheus.yml` chưa nạp thư mục đó, tool thêm dòng vào `rule_files` (giữ bản sao `.bak`). `promtool check rules` + `check config` lỗi thì trả lại cả 2 file.
+Sau khi day file scrape, tool hoi day luon **alert rules** (hoac `bash menu.sh prom-rules`): chep `alerts/pve-ceph-alerts.yml` vao thu muc `rule_files` dang dung (mac dinh lay tu `prometheus.yml`, vd `/etc/prometheus/rules/`). Neu `prometheus.yml` chua nap thu muc do, tool them dong vao `rule_files` (giu ban sao `.bak`). `promtool check rules` + `check config` loi thi tra lai ca 2 file.
 
-Đầu menu hiện mã commit đang chạy (vd `2026.10.30 · de76e86`); GitHub có bản mới hơn thì hiện dòng **Có bản mới → chọn 14**.
+Dau menu hien ma commit dang chay (vd `2026.10.30 · de76e86`); GitHub co ban moi hon thi hien dong **Co ban moi → chon 14**.
 
-### Không gộp (giữ target cũ)
+### Khong gop (giu target cu)
 
-Chọn `n` ở câu gộp (service chạy với `--no-ceph-mgr --no-pve`). Target exporter phải nằm **cùng job** với ceph mgr / pve exporter của cluster đó (dashboard lọc theo `job=~"$job"`):
+Chon `n` o cau gop (service chay voi `--no-ceph-mgr --no-pve`). Target exporter phai nam **cung job** voi ceph mgr / pve exporter cua cluster do (dashboard loc theo `job=~"$job"`):
 
 ```yaml
   - job_name: Proxmox-DECO
     static_configs:
       - targets:
-          - 10.0.0.11:9283   # ceph mgr prometheus (đã có)
-          - 10.0.0.11:9830   # pve_ceph_extra_exporter (mới)
+          - 10.0.0.11:9283   # ceph mgr prometheus (da co)
+          - 10.0.0.11:9830   # pve_ceph_extra_exporter (moi)
 ```
 
-### Cảnh báo (alert rules)
+### Canh bao (alert rules)
 
-File `alerts/pve-ceph-alerts.yml` có sẵn các rule, chỉ áp cho job chứa `Proxmox-`:
+File `alerts/pve-ceph-alerts.yml` co san cac rule, chi ap cho job chua `Proxmox-`:
 
-| Nhóm | Alert | Khi nào |
+| Nhom | Alert | Khi nao |
 |---|---|---|
-| Exporter | `PveCephExporterDown` | Target không scrape được 2 phút |
-| | `PveCephExporterCollectorFailed` | Một collector lỗi 5 phút (ô dashboard tương ứng sẽ No data) |
-| | `PveCephExporterStale` | Không thu thập mới quá 3 phút (lệnh ceph / API treo) |
-| Ceph | `CephHealthError` / `CephHealthWarning` | HEALTH_ERR 1 phút / HEALTH_WARN 15 phút |
-| | `CephOsdDown` / `CephOsdOut` | OSD down 5 phút / out 15 phút |
-| | `CephOsdNearFull` / `CephOsdFull` | OSD dùng > 85% / > 90% |
-| | `CephPoolNearFull` | Pool dùng > 80% |
-| | `CephPgInconsistent`, `CephUnfoundObjects` | Có PG inconsistent / object unfound |
-| | `CephRecoveryTooLong` | Recovery / rebalance quá 6 giờ |
-| | `CephOsdHighLatency` | Apply latency > 200 ms trong 10 phút |
-| Proxmox | `PveNodeDown`, `PveClusterNotQuorate`, `PveHaNodeFenced` | Node offline, mất quorum, HA fence / lost |
-| | `PveNodeHighCpu` / `PveNodeHighMemory` | CPU / RAM > 90% trong 15 phút |
+| Exporter | `PveCephExporterDown` | Target khong scrape duoc 2 phut |
+| | `PveCephExporterCollectorFailed` | Mot collector loi 5 phut (o dashboard tuong ung se No data) |
+| | `PveCephExporterStale` | Khong thu thap moi qua 3 phut (lenh ceph / API treo) |
+| Ceph | `CephHealthError` / `CephHealthWarning` | HEALTH_ERR 1 phut / HEALTH_WARN 15 phut |
+| | `CephOsdDown` / `CephOsdOut` | OSD down 5 phut / out 15 phut |
+| | `CephOsdNearFull` / `CephOsdFull` | OSD dung > 85% / > 90% |
+| | `CephPoolNearFull` | Pool dung > 80% |
+| | `CephPgInconsistent`, `CephUnfoundObjects` | Co PG inconsistent / object unfound |
+| | `CephRecoveryTooLong` | Recovery / rebalance qua 6 gio |
+| | `CephOsdHighLatency` | Apply latency > 200 ms trong 10 phut |
+| Proxmox | `PveNodeDown`, `PveClusterNotQuorate`, `PveHaNodeFenced` | Node offline, mat quorum, HA fence / lost |
+| | `PveNodeHighCpu` / `PveNodeHighMemory` | CPU / RAM > 90% trong 15 phut |
 
-Chép file lên máy Prometheus rồi thêm vào `prometheus.yml`:
+Chep file len may Prometheus roi them vao `prometheus.yml`:
 
 ```yaml
 rule_files:
@@ -317,89 +317,89 @@ rule_files:
 promtool check rules /etc/prometheus/rules/pve-ceph-alerts.yml
 ```
 
-Sau đó reload Prometheus. Gửi cảnh báo đi (Telegram, email ...) cấu hình ở Alertmanager. Ngưỡng và thời gian `for:` sửa thẳng trong file.
+Sau do reload Prometheus. Gui canh bao di (Telegram, email ...) cau hinh o Alertmanager. Nguong va thoi gian `for:` sua thang trong file.
 
-## 3. Sinh và import dashboard
+## 3. Sinh va import dashboard
 
 ```bash
 python make_dashboard.py -o proxmox_ceph_dashboard.json
 ```
 
-Tuỳ chọn:
+Tuy chon:
 
 ```bash
 python make_dashboard.py --title "Proxmox - Ceph DECO" --uid pve-ceph-deco --site-regex "/^Prometheus (FPT HN|CMC-Q7)$/" --nodes 5 --pools 4 --classes 1
 ```
 
-- `--site-regex`: lọc datasource Prometheus cho biến **Site**
-- `--job-regex`: lọc job của `pve_cluster_info` (mặc định `/.*Proxmox-/`)
-- `--nodes / --pools / --classes`: chỉnh chiều cao các bảng cho vừa số dòng
-- `--lat-th`: ngưỡng latency (ms) cảnh báo:nghiêm trọng theo class, mặc định `nvme=15:25,ssd=50:100,default=100:200`
-- `--ha-alias "GROUPS=TEXT[:màu]"` (lặp được): tên ngắn và màu cho chuỗi HA Groups, vd `--ha-alias "Gold-6146,HIGH-FREQUENCY,P1-XD=Gold+HIGH+P1-XD:orange"`
-- `--time-from`: khoảng thời gian mặc định, vd `now-5m`
+- `--site-regex`: loc datasource Prometheus cho bien **Site**
+- `--job-regex`: loc job cua `pve_cluster_info` (mac dinh `/.*Proxmox-/`)
+- `--nodes / --pools / --classes`: chinh chieu cao cac bang cho vua so dong
+- `--lat-th`: nguong latency (ms) canh bao:nghiem trong theo class, mac dinh `nvme=15:25,ssd=50:100,default=100:200`
+- `--ha-alias "GROUPS=TEXT[:mau]"` (lap duoc): ten ngan va mau cho chuoi HA Groups, vd `--ha-alias "Gold-6146,HIGH-FREQUENCY,P1-XD=Gold+HIGH+P1-XD:orange"`
+- `--time-from`: khoang thoi gian mac dinh, vd `now-5m`
 
-Ví dụ dựng lại dashboard CMC Q7 / FPT HCM / VIETTEL HCM / CMC HN:
+Vi du dung lai dashboard CMC Q7 / FPT HCM / VIETTEL HCM / CMC HN:
 
 ```bash
 python make_dashboard.py -o cmc.json --title "Proxmox - Ceph Prometheus CMC Q7 - FPT HCM - VIETTEL HCM - CMC HN" --uid fix --time-from now-5m --site-regex "/^(Prometheus FPT HCM|Prometheus FPT HN|Prometheus CMC-Q7|Prometheus VIETTEL HCM|Prometheus CMC HN)$/" --job-regex "/^(?!.*Proxmox-Cluster-DMS|.*Test|.*Deco).*Proxmox-/" --ha-alias "BASIC-COMPUTING,INTEL-HIGH-CPU,P1-XD=BASIC+INTEL+P1-XD:purple" --ha-alias "Gold-6146,HIGH-FREQUENCY,P1-XD=Gold+HIGH+P1-XD:orange" --ha-alias "Gold-8260,INTEL-HIGH-CPU,Platinum-8260=Gold+INTEL+Platinum:blue" --ha-alias "Gold-8260,INTEL-HIGH-CPU,P1-XD,Platinum-8260=Gold+INTEL+P1+Platinum:green"
 ```
 
-Lưu ý: import với `--uid fix` sẽ ghi đè dashboard đang có uid `fix`.
+Luu y: import voi `--uid fix` se ghi de dashboard dang co uid `fix`.
 
-Grafana → Dashboards → New → Import → chọn file JSON.
+Grafana → Dashboards → New → Import → chon file JSON.
 
-## Watchdog: tự khởi động lại exporter bị treo
+## Watchdog: tu khoi dong lai exporter bi treo
 
-Menu **26** → `w` (hoặc `bash menu.sh watchdog`) cài systemd timer `pve-ceph-exporter-watchdog` chạy **2 phút / lần**: gọi `/health` của từng exporter **đang chạy** (local, `@cluster`, container `fixnhanh-pve-*`); treo (`503`) hoặc không trả lời **2 lần liên tiếp** thì khởi động lại đúng cái đó. Dịch vụ bạn chủ động dừng không bị bật lại. Xem lịch sử: `journalctl -t pve-ceph-watchdog`. Chạy lại `w` để tắt và gỡ.
+Menu **26** → `w` (hoac `bash menu.sh watchdog`) cai systemd timer `pve-ceph-exporter-watchdog` chay **2 phut / lan**: goi `/health` cua tung exporter **dang chay** (local, `@cluster`, container `fixnhanh-pve-*`); treo (`503`) hoac khong tra loi **2 lan lien tiep** thi khoi dong lai dung cai do. Dich vu ban chu dong dung khong bi bat lai. Xem lich su: `journalctl -t pve-ceph-watchdog`. Chay lai `w` de tat va go.
 
-## Dashboard khách hàng
+## Dashboard khach hang
 
-Menu **9** → `2` sinh `dashboard-kh-<job>.json` cho **1 khách**:
+Menu **9** → `2` sinh `dashboard-kh-<job>.json` cho **1 khach**:
 
-| | Nội bộ | Khách hàng |
+| | Noi bo | Khach hang |
 |---|---|---|
-| Site / Job | Chọn được mọi datasource, mọi cluster | **Ẩn**, khoá cứng 1 datasource + 1 job |
-| Health, dung lượng, OSD, pool, latency, recovery | ✔ | ✔ |
+| Site / Job | Chon duoc moi datasource, moi cluster | **An**, khoa cung 1 datasource + 1 job |
+| Health, dung luong, OSD, pool, latency, recovery | ✔ | ✔ |
 | CPU / RAM / uptime node | ✔ | ✔ |
-| Detailed Alarms (thông điệp lỗi Ceph gốc) | ✔ | ✘ |
-| Cột HA / HA Groups | ✔ | ✘ |
-| Hàng Exporter (collector, lỗi, phiên bản) | ✔ | ✘ |
-| Sửa dashboard | Được | Khoá (`editable: false`) |
+| Detailed Alarms (thong diep loi Ceph goc) | ✔ | ✘ |
+| Cot HA / HA Groups | ✔ | ✘ |
+| Hang Exporter (collector, loi, phien ban) | ✔ | ✘ |
+| Sua dashboard | Duoc | Khoa (`editable: false`) |
 
-Tool hỏi job của khách (liệt kê sẵn từ Prometheus), tên khách, **tên datasource** trong Grafana (khớp đúng tên đó), tiêu đề, UID `kh-<job>`. Phân quyền trong Grafana: tạo **folder riêng** cho khách → import dashboard vào folder đó (menu 11 hỏi file nào, nhập Folder UID) → cấp quyền **Viewer** cho user / team của khách **trên folder**, không cấp ở cấp tổ chức. Biến ẩn chỉ giấu giao diện — muốn khách tuyệt đối không truy vấn được cluster khác thì khách cần Grafana org riêng có datasource riêng.
+Tool hoi job cua khach (liet ke san tu Prometheus), ten khach, **ten datasource** trong Grafana (khop dung ten do), tieu de, UID `kh-<job>`. Phan quyen trong Grafana: tao **folder rieng** cho khach → import dashboard vao folder do (menu 11 hoi file nao, nhap Folder UID) → cap quyen **Viewer** cho user / team cua khach **tren folder**, khong cap o cap to chuc. Bien an chi giau giao dien — muon khach tuyet doi khong truy van duoc cluster khac thi khach can Grafana org rieng co datasource rieng.
 
 ```bash
-python make_dashboard.py --customer-job Proxmox-P1-XD --site-regex "/^Prometheus FPT HCM$/" --title "Khách P1-XD - Proxmox Ceph" --uid kh-p1-xd -o dashboard-kh-p1-xd.json
+python make_dashboard.py --customer-job Proxmox-P1-XD --site-regex "/^Prometheus FPT HCM$/" --title "Khach P1-XD - Proxmox Ceph" --uid kh-p1-xd -o dashboard-kh-p1-xd.json
 ```
 
-## Metric của exporter
+## Metric cua exporter
 
-| Metric | Ý nghĩa |
+| Metric | Y nghia |
 |---|---|
-| `ceph_custom_recovery_info{content,state}` | Dòng trạng thái; giá trị 0 = OK, 1 = recovery/rebalance, 2 = lỗi |
-| `ceph_custom_recovery_percent` | % dữ liệu ổn định (100 khi không có degraded/misplaced) |
-| `ceph_custom_recovery_speed_bytes` | Tốc độ recovery (bytes/s) |
-| `ceph_custom_recovery_objects_per_sec` | Object recovery / giây |
-| `ceph_custom_degraded_objects`, `_misplaced_objects`, `_unfound_objects` | Số object bất thường |
-| `ceph_custom_pgs_not_clean` | Số PG không active+clean |
-| `ceph_custom_progress_percent{event}` | Tiến độ các sự kiện `ceph progress` |
-| `pve_ha_groups_custom_info{host,groups}` | HA group / node-affinity rule của node |
+| `ceph_custom_recovery_info{content,state}` | Dong trang thai; gia tri 0 = OK, 1 = recovery/rebalance, 2 = loi |
+| `ceph_custom_recovery_percent` | % du lieu on dinh (100 khi khong co degraded/misplaced) |
+| `ceph_custom_recovery_speed_bytes` | Toc do recovery (bytes/s) |
+| `ceph_custom_recovery_objects_per_sec` | Object recovery / giay |
+| `ceph_custom_degraded_objects`, `_misplaced_objects`, `_unfound_objects` | So object bat thuong |
+| `ceph_custom_pgs_not_clean` | So PG khong active+clean |
+| `ceph_custom_progress_percent{event}` | Tien do cac su kien `ceph progress` |
+| `pve_ha_groups_custom_info{host,groups}` | HA group / node-affinity rule cua node |
 
-Cột **HA** và **HA Groups** trong bảng *Resource Cluster* chỉ hiện khi cluster đang chọn ở biến `$job` có HA group / node-affinity rule; cluster không có HA thì hai cột này tự ẩn.
+Cot **HA** va **HA Groups** trong bang *Resource Cluster* chi hien khi cluster dang chon o bien `$job` co HA group / node-affinity rule; cluster khong co HA thi hai cot nay tu an.
 
-Metric tự giám sát của exporter (hàng **Exporter** cuối dashboard):
+Metric tu giam sat cua exporter (hang **Exporter** cuoi dashboard):
 
-| Metric | Ý nghĩa |
+| Metric | Y nghia |
 |---|---|
-| `pve_ceph_extra_exporter_up{collector}` | 1 = thu thập OK. Collector: `ceph_mgr`, `pve`, `ceph`, `ha` (`ceph_mgr` / `pve` không có khi chạy `--no-ceph-mgr` / `--no-pve`) |
-| `pve_ceph_extra_exporter_last_error{collector,error}` | Lỗi gần nhất của collector đang hỏng (401, timeout, mgr standby ...) |
-| `pve_ceph_extra_exporter_collect_seconds{collector}` | Thời gian thu thập lần gần nhất (giây) |
-| `pve_ceph_extra_exporter_last_collect_timestamp` | Thời điểm thu thập gần nhất (unix) — dùng để phát hiện dữ liệu cũ |
+| `pve_ceph_extra_exporter_up{collector}` | 1 = thu thap OK. Collector: `ceph_mgr`, `pve`, `ceph`, `ha` (`ceph_mgr` / `pve` khong co khi chay `--no-ceph-mgr` / `--no-pve`) |
+| `pve_ceph_extra_exporter_last_error{collector,error}` | Loi gan nhat cua collector dang hong (401, timeout, mgr standby ...) |
+| `pve_ceph_extra_exporter_collect_seconds{collector}` | Thoi gian thu thap lan gan nhat (giay) |
+| `pve_ceph_extra_exporter_last_collect_timestamp` | Thoi diem thu thap gan nhat (unix) — dung de phat hien du lieu cu |
 | `pve_ceph_extra_exporter_mode{mode}` | `local` / `remote` |
-| `pve_ceph_extra_exporter_build_info{version}` | Phiên bản exporter |
+| `pve_ceph_extra_exporter_build_info{version}` | Phien ban exporter |
 
-Ngoài `/metrics`, exporter có `/health`: `200 ok` khi lần thu thập gần nhất còn mới, `503 stale` khi vòng thu thập treo quá `3 × INTERVAL` (tối thiểu 120 s). Docker image dùng nó cho `HEALTHCHECK`, nên container treo hiện `unhealthy` trong `docker ps`.
+Ngoai `/metrics`, exporter co `/health`: `200 ok` khi lan thu thap gan nhat con moi, `503 stale` khi vong thu thap treo qua `3 × INTERVAL` (toi thieu 120 s). Docker image dung no cho `HEALTHCHECK`, nen container treo hien `unhealthy` trong `docker ps`.
 
 ---
 
-Bản quyền © 2026 **FIX NHANH**. Bảo lưu mọi quyền — xem [LICENSE](LICENSE).
+Ban quyen © 2026 **FIX NHANH**. Bao luu moi quyen — xem [LICENSE](LICENSE).
