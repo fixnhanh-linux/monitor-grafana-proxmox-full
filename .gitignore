@@ -8,3 +8,5 @@ dashboard-local.json
 .grafana-token
 dashboard-kh-*.json
 dashboard-*.json
+.ha-colors.json
+.ha-groups.seen

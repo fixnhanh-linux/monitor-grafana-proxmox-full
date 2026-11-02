@@ -20,6 +20,7 @@ Vi du:
 
 import argparse
 import json
+import os
 import re
 import sys
 
@@ -161,11 +162,12 @@ def parse_lat_th(text):
     return out
 
 
-def parse_ha_alias(items, auto=None):
+def parse_ha_alias(items, auto=None, state=None):
     """['A,B=Text:purple', ...] -> mapping options cho cot HA Groups.
     Node binh thuong -> mau rieng cua nhom; node co su co da co tien to (HA_STATUS)
     nen khong khop mapping nay -> do / cam.
-    auto: chuoi HA Groups dang co (--ha-group / --prom-url) -> nhom chua co alias tu lay mau."""
+    auto: chuoi HA Groups dang co (--ha-group / --prom-url) -> nhom chua co alias tu lay mau.
+    state: {loai CPU: so thu tu mau} da luu (--color-state) -> loai cu giu mau, loai moi lay mau con trong."""
     opts = {}
     for i, item in enumerate(items or []):
         raw, _, rest = item.rpartition("=")
@@ -173,9 +175,13 @@ def parse_ha_alias(items, auto=None):
         opts[raw] = {"text": text, "color": color or "blue", "index": 10 + i}
     rest = sorted(g for g in set(auto or []) if g and g != "-" and g not in opts)
     # Cung loai CPU -> cung mau (vd Gold-8260,HIGH-MEMORY,...,Platinum-8260 = Gold-8260,...,Platinum-8260)
-    keys = sorted(set(cpu_key(g) for g in rest))
+    state = {} if state is None else state
+    for k in sorted(set(cpu_key(g) for g in rest)):
+        if k not in state:
+            used = set(state.values())
+            state[k] = next((i for i in range(len(AUTO_COLORS)) if i not in used), len(state))
     for i, g in enumerate(rest):
-        opts[g] = {"color": AUTO_COLORS[keys.index(cpu_key(g)) % len(AUTO_COLORS)], "index": 50 + i}
+        opts[g] = {"color": AUTO_COLORS[state[cpu_key(g)] % len(AUTO_COLORS)], "index": 50 + i}
     return opts
 
 
@@ -382,7 +388,7 @@ def build(args):
                             ("custom.cellOptions", {"type": "color-text", "wrapText": True}),
                             ("custom.inspect", True),
                             ("mappings", ha_status_mappings() + [
-                                {"type": "value", "options": dict(parse_ha_alias(args.ha_alias, getattr(args, "ha_auto", [])), **{
+                                {"type": "value", "options": dict(parse_ha_alias(args.ha_alias, getattr(args, "ha_auto", []), getattr(args, "color_map", None)), **{
                                     "-": {"text": "-", "color": "text", "index": 99}})},
                                 {"type": "special", "options": {"match": "null",
                                                                 "result": {"text": "-", "color": "text"}}}])),
@@ -626,6 +632,9 @@ def main():
                     help="an HA Groups string that exists; groups without --ha-alias get an automatic color")
     ap.add_argument("--prom-url", default="", metavar="URL",
                     help="read the HA Groups strings from this Prometheus at generation time (automatic colors)")
+    ap.add_argument("--color-state", default="", metavar="FILE",
+                    help="JSON file remembering the color of each CPU type: old types keep their color, "
+                         "new types get an unused one (shared by every dashboard)")
     ap.add_argument("--time-from",default="now-15m", help="default time range")
     ap.add_argument("--customer-job", default="", metavar="JOB",
                     help="CUSTOMER dashboard: locked to this job, hides Site/Job, drops Detailed Alarms, "
@@ -638,16 +647,18 @@ def main():
         saved = json.load(open(f, encoding="utf-8")).get("fixnhanhArgs")
         if saved is None:
             ap.error("%s has no fixnhanhArgs (made by an old version) -> regenerate once with full arguments" % f)
-        argv = saved + ["-o", f]
+        # Tham so them sau --regen FILE (vd --ha-group, --color-state tu menu) ghi de / bo sung
+        rest = argv[:argv.index("--regen")] + argv[argv.index("--regen") + 2:]
+        argv = saved + rest + ["-o", f]
     args = ap.parse_args(argv)
     # Tham so de sinh lai sau nay (bo -o / --out): refresh doc lai de cap nhat moi dashboard
     keep, skip = [], False
     for a in argv:
         if skip:
             skip = False
-        elif a in ("-o", "--out"):
+        elif a in ("-o", "--out", "--ha-group", "--color-state"):  # menu truyen lai moi lan sinh
             skip = True
-        elif not a.startswith(("--out=", "-o=")):
+        elif not a.startswith(("--out=", "-o=", "--ha-group=", "--color-state=")):
             keep.append(a)
     if args.customer_job and not args.site_regex:
         ap.error("--customer-job needs --site-regex (e.g. \"/^Prometheus FPT HCM$/\") so the customer does not "
@@ -655,7 +666,16 @@ def main():
 
     # Nhom chua co alias tu lay mau: danh sach truyen vao + doc tu Prometheus (moi lan sinh lai)
     args.ha_auto = list(args.ha_group) + (prom_ha_groups(args.prom_url) if args.prom_url else [])
+    args.color_map = {}
+    if args.color_state and os.path.exists(args.color_state):
+        try:
+            args.color_map = {k: int(v) for k, v in json.load(open(args.color_state, encoding="utf-8")).items()}
+        except (ValueError, TypeError, AttributeError) as e:
+            print("warning: %s unreadable (%s) -> colors assigned again" % (args.color_state, e), file=sys.stderr)
     dash = build(args)
+    if args.color_state:
+        with open(args.color_state, "w", encoding="utf-8") as f:
+            json.dump(args.color_map, f, ensure_ascii=False, indent=1, sort_keys=True)
     dash["fixnhanhArgs"] = keep
     with open(args.out, "w", encoding="utf-8") as f:
         json.dump(dash, f, ensure_ascii=False, indent=2)

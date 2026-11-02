@@ -66,6 +66,15 @@ class Dashboard(unittest.TestCase):
         self.assertEqual(c[g[2]], c[g[3]])
         self.assertEqual(len({c[g[0]], c[g[2]], c[g[4]]}), 3)
 
+    def test_ha_groups_colors_stable(self):
+        # Nhom moi xuat hien (host moi) -> nhom cu giu nguyen mau, nhom moi lay mau chua dung
+        st = {}
+        c1 = {k: v["color"] for k, v in md.parse_ha_alias([], ["Gold-6146,P1-XD", "BASIC,P1-XD"], st).items()}
+        c2 = {k: v["color"] for k, v in md.parse_ha_alias([], ["Gold-6146,P1-XD", "BASIC,P1-XD", "AAA,EPYC-7543"], st).items()}
+        self.assertEqual(c1["Gold-6146,P1-XD"], c2["Gold-6146,P1-XD"])
+        self.assertEqual(c1["BASIC,P1-XD"], c2["BASIC,P1-XD"])
+        self.assertNotIn(c2["AAA,EPYC-7543"], c1.values())
+
     def test_customer_locked(self):
         d = md.build(args(customer_job="Proxmox-P1-XD", site_regex="/^Prometheus FPT HCM$/"))
         self.assertFalse(d["editable"])

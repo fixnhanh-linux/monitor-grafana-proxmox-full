@@ -133,7 +133,7 @@ If you move the tool folder, run `bash <new-folder>/menu.sh` once and the shortc
 | 26 | **Services & health**: table of every exporter (local, `@cluster`, container) + Docker + watchdog with state, `/health`, port, start on boot; `r`/`s`/`t` restart / stop / start (one or `a` = all) then **verifies** active + `/health` within 40 s and prints logs on failure; `l` logs; `b`/`B` enable / disable start on boot; `w` watchdog |
 | 27 | **Zabbix: Ceph via Zabbix Agent 2** — runs `zabbix/setup_ceph_zabbix.sh` (see *Zabbix* below) |
 
-Run a single command without the menu: `proxmox-menu setup | check | install [port] | status | metrics | logs | restart | port <number> | uninstall | dashboard | import | prom | prom-check | doctor | update | refresh | about | remote-add [name] | remote-list | remote-test | remote-remove | prom-all | prom-push | prom-rules | urls | deps | firewall | docker-run | docker-manage | docker-net | services | watchdog | zabbix-ceph`.
+Run a single command without the menu: `proxmox-menu setup | check | install [port] | status | metrics | logs | restart | port <number> | uninstall | dashboard | import | prom | prom-check | doctor | update | refresh | about | remote-add [name] | remote-list | remote-test | remote-remove | prom-all | prom-push | prom-rules | urls | deps | firewall | docker-run | docker-manage | docker-net | services | watchdog | zabbix-ceph | ha-sync`.
 
 The menu remembers the Grafana URL, Prometheus URL, dashboard title / UID in `.menu.conf`; the Grafana token (if saved) lives separately in `.grafana-token`.
 
@@ -335,6 +335,8 @@ python3 grafana/make_dashboard.py --title "Proxmox - Ceph DECO" --uid pve-ceph-d
 - `--lat-th`: latency thresholds (ms) warning:critical per class, default `nvme=15:25,ssd=50:100,default=100:200`
 - `--ha-alias "GROUPS=TEXT[:color]"` (repeatable): short name and color for an HA Groups string, e.g. `--ha-alias "Gold-6146,HIGH-FREQUENCY,P1-XD=Gold+HIGH+P1-XD:purple"`; nodes with a problem turn red / orange whatever the group color
 - `--prom-url URL` / `--ha-group GROUPS`: groups without `--ha-alias` get an automatic color (never red / orange), **one color per CPU type**: model names inside the group string (a word + a 3+ digit model, e.g. `Gold-8260`, `Platinum-8260`, `EPYC-7543`) are detected, so `Gold-8260,HIGH-MEMORY,...,Platinum-8260` and `Gold-8260,...,Platinum-8260` share a color; groups without a model name are grouped by their first group (e.g. `BASIC-COMPUTING`); with `--prom-url` the group list is read from Prometheus each time the dashboard is generated. Menu 9 / `refresh` pass the saved Prometheus URL automatically
+- `--color-state FILE`: remembers the color of each CPU type (menu uses `.ha-colors.json`, shared by every dashboard): existing types keep their color, a new type gets an unused one
+- **New hosts / groups are colored automatically**: `refresh` installs the systemd timer `pve-ceph-ha-colors` (root + saved Grafana URL / token). Every 5 minutes it runs `proxmox-menu ha-sync`: when a new HA Groups string appears (new host, new group, new site) it regenerates and re-imports every dashboard. Log: `journalctl -t pve-ceph-ha-colors`
 - `--time-from`: default time range, e.g. `now-5m`
 - `--customer-job JOB`: customer dashboard (see below)
 - `--regen FILE`: regenerate FILE with the arguments saved inside it

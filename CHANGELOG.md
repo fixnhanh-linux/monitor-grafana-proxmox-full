@@ -4,6 +4,7 @@ Newest first. The running commit is shown in the menu header (`version 2026.10.3
 
 ## Unreleased
 
+- **Dashboard**: HA Groups colors fully automatic for new hosts: timer `pve-ceph-ha-colors` (installed by `refresh`) runs `ha-sync` every 5 minutes and regenerates + imports the dashboards when a new group string appears; colors are remembered per CPU type (`--color-state`, `.ha-colors.json`) so existing groups never change color; `dashboard-*.json` copies get the same colors.
 - **Dashboard**: Total Health shows `100%` when healthy (2 decimals only while recovering, e.g. `99.87%`).
 - **Dashboard**: HA Groups auto palette uses 8 clearly different hues first (no two look-alike colors such as purple / light purple), darker shades after that.
 - **Dashboard**: HA Groups auto colors cover every Site: group strings are read from every Prometheus datasource on Grafana (saved URL + token, filtered by Site) when the dashboard is generated; more colors.
