@@ -4,6 +4,8 @@ Mới nhất ở trên. Mã commit đang chạy hiện ở đầu menu (`phien b
 
 ## Chưa phát hành
 
+- **`bash menu.sh refresh`**: cập nhật toàn bộ không hỏi — cài lại exporter, sinh + import dashboard bằng cấu hình / token đã lưu, bảng dịch vụ, kiểm tra Prometheus.
+- Payload import Grafana gửi dạng ASCII, không hỏng khi máy chạy locale không phải UTF-8.
 - **Dashboard**: cột HA Groups không còn bị cắt chữ — xuống dòng trong ô, rộng 380, căn trái, bấm ô để xem đầy đủ.
 - **Menu 26 / `services`**: bảng mọi dịch vụ (exporter local, `@cluster`, container, Docker, watchdog) — trạng thái, `/health`, port, chạy khi khởi động máy; khởi động lại / dừng / chạy từng cái hoặc tất cả rồi tự kiểm tra active + `/health`, lỗi thì in log; restart Docker thì kiểm tra container chạy lại.
 - **Watchdog** (`w` trong menu 26 / `watchdog`): systemd timer 2 phút / lần, `/health` lỗi 2 lần liên tiếp thì khởi động lại đúng exporter đó; log `journalctl -t pve-ceph-watchdog`.

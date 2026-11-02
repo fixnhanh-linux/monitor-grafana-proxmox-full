@@ -579,7 +579,7 @@ if uid != d.get("uid"):
 body = {"dashboard": d, "overwrite": True, "message": "menu.sh import"}
 if sys.argv[2]:
     body["folderUid"] = sys.argv[2]
-print(json.dumps(body, ensure_ascii=False))
+print(json.dumps(body))  # ASCII: khong phu thuoc locale may (LANG=C)
 PY
     resp=$(gcurl -s --max-time 30 -X POST -H "Authorization: Bearer $token" \
         -H "Content-Type: application/json" --data-binary "@$payload" "$(gurl "$url")/api/dashboards/db")
@@ -1494,6 +1494,48 @@ do_docker_run() {
 }
 
 # =============================================================================
+# refresh: chay sau git pull, KHONG hoi gi - dung cau hinh da luu (.menu.conf, token .grafana-token)
+#   cd /root/monitor-grafana-proxmox-full && git pull && bash menu.sh refresh
+# =============================================================================
+do_refresh() {
+    title "CAP NHAT TOAN BO ($(tool_rev))"
+    local fail=()
+    echo "${IND}  ${W}[1/4] Exporter${N}"
+    if [ "$(id -u)" != 0 ]; then warn "Can root de cai lai exporter → bo qua"
+    else
+        if [ -f "$UNIT" ]; then
+            install -m 0755 "$EXPORTER_SRC" "$BIN" && systemctl restart "$SERVICE" \
+                && ok "Exporter local: ban $(sed -n 's/^VERSION = "\(.*\)"/\1/p' "$BIN")" || fail+=("exporter local")
+        fi
+        [ -n "$(remote_names)" ] && { remote_refresh_after_update || fail+=("exporter remote"); }
+        [ -f "$UNIT" ] || [ -n "$(remote_names)" ] || info "May nay chua co exporter"
+    fi
+
+    echo; echo "${IND}  ${W}[2/4] Dashboard${N}"
+    if gen_dashboard; then
+        if [ -n "${GRAFANA_URL:-}" ] && [ -s "$GRAFANA_TOKEN_FILE" ]; then
+            import_dashboard "$GRAFANA_URL" "$(cat "$GRAFANA_TOKEN_FILE")" "${GRAFANA_FOLDER:-}" </dev/null || fail+=("import Grafana")
+        else
+            warn "Chua co Grafana URL / token da luu → import tay: menu 11 (luu token 1 lan)"
+        fi
+        local f; for f in "$DIR"/dashboard-kh-*.json; do
+            [ -f "$f" ] && info "Dashboard khach hang $(basename "$f"): sinh lai o menu 9 → 2 (can ten khach / datasource)"
+        done
+    else fail+=("sinh dashboard"); fi
+
+    echo; echo "${IND}  ${W}[3/4] Dich vu${N}"
+    svc_table || true
+
+    echo; echo "${IND}  ${W}[4/4] Prometheus${N}"
+    if [ -n "${PROM_URL:-}" ]; then prom_check "$PROM_URL" || fail+=("Prometheus")
+    else info "Chua dat Prometheus URL (menu 15)"; fi
+
+    echo
+    if [ "${#fail[@]}" = 0 ]; then ok "${W}Xong, khong co loi${N}"
+    else err "Can xem lai: ${fail[*]}"; return 1; fi
+}
+
+# =============================================================================
 # 26. Dich vu & suc khoe: moi exporter (local, @cluster, container) + Docker + watchdog
 # =============================================================================
 WD_BIN=/usr/local/bin/pve-ceph-exporter-watchdog
@@ -2224,6 +2266,7 @@ if [ $# -gt 0 ]; then
         docker-manage) NONINTERACTIVE=0; do_docker_manage ;;
         docker-net) NONINTERACTIVE=0; do_docker_net ;;
         services) NONINTERACTIVE=0; do_services ;;
+        refresh) NONINTERACTIVE=1; detect_env; do_refresh ;;
         watchdog) NONINTERACTIVE=0; title "WATCHDOG EXPORTER"; need_root && do_watchdog ;;
         help|-h|--help) show_help ;;
         *) err "Lenh khong ro: $cmd"; show_help; exit 1 ;;
