@@ -4,6 +4,7 @@ Newest first. The running commit is shown in the menu header (`version 2026.10.3
 
 ## Unreleased
 
+- **Architecture diagram** redrawn, larger and more detailed: HA colors timer, Zabbix reading the exporter over HTTP, a *how to check it on the servers* panel and a *compare the same value in every place* table (also in README: *Check it on the servers*).
 - **Folders renamed**: `grafana/` → `dashboard-grafana/`, `zabbix/` → `template-zabbix/` (templates no longer in a `templates/` sub-folder). `refresh` handles it, nothing to change on the host.
 - **New Zabbix template** `template-zabbix/pve-ceph-exporter-by-http.yaml`: reads the exporter's `/metrics` over HTTP (no agent) — Ceph health / recovery / unfound / inconsistent PGs, OSD and pool discovery, Proxmox nodes (up, CPU, memory, HA state, HA groups), quorum, exporter collectors; triggers match the Prometheus alerts, thresholds are macros.
 - **CI**: Zabbix templates checked by unit tests (uuids, keys, triggers, macros, metrics really exported) and imported into real Zabbix 6.0, 6.2 and 7.0 (docker), then linked to a host.

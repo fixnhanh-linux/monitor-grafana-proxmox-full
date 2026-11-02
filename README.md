@@ -31,6 +31,34 @@ Query bugs fixed from the old dashboard:
 - **OSDs OUT** computed `count(up) - count(in)`, always 0; now counts `ceph_osd_in == 0`.
 - **OSD Used Class HDD12T** took its Low column from class `hdd`.
 
+## Check it on the servers
+
+Go top to bottom; when a step fails, fix it before looking further (same as the bottom of the diagram).
+
+| Where | Command / place | Expected |
+|---|---|---|
+| Monitor host | `proxmox-menu doctor` | every line ✔ |
+| Monitor host | `proxmox-menu services` | every exporter `active`, `/health ok` |
+| Monitor host | `curl -s http://127.0.0.1:9830/health` (each cluster port: `proxmox-menu remote-list`) | `ok` |
+| Monitor host | `systemctl list-timers 'pve-ceph*'` · `journalctl -t pve-ceph-ha-colors -n 20` | watchdog + ha-colors timers listed; "No new HA groups" or the regenerate lines |
+| Prometheus | `proxmox-menu prom-check`, or **Status → Targets** | every `Proxmox-*` target UP, job matches the ceph mgr job |
+| Prometheus | query `ceph_custom_recovery_percent`, `pve_ha_groups_custom_info` | one series per cluster / node |
+| Prometheus | **Alerts** tab, `promtool check rules /etc/prometheus/rules/pve-ceph-alerts.yml` | group `pve-ceph` loaded, `SUCCESS` |
+| Grafana | `/d/<DASH_UID>` (UID in menu 15) | Total Health `100%`, Ceph Status OK, Exporter row all `1`; same CPU type = same HA Groups color; a down node shows red `OFFLINE: …` |
+| Zabbix | **Monitoring → Latest data** → host, tag `component` | exporter version + recent "last collect"; nodes / OSDs / pools discovered |
+| Zabbix | `zabbix_get -s <node> -k agent.ping` (on the Zabbix server) · `cat /etc/zabbix/cephstatus.txt` (on a node) | `1` · `HEALTH_OK` |
+
+**Compare the same value in every place** (equal within ~1 minute; a difference means a stale exporter, a wrong job / port, or the Zabbix host pointing at the wrong port):
+
+| What | Grafana | Zabbix (exporter by HTTP) | On a Proxmox node |
+|---|---|---|---|
+| Ceph health | Ceph Status | `Ceph: health` | `ceph health` |
+| Total Health % | Total Health | `Ceph: total health (data stable)` | `ceph -s` (degraded / misplaced %) |
+| OSDs up / in | OSDs UP / IN / DOWN | `Ceph: OSDs up`, `Ceph: OSDs in` | `ceph osd stat` |
+| Nodes online / quorum | Resource Cluster | `Proxmox: nodes online`, `Proxmox: cluster quorate` | `pvecm status` |
+| HA state / groups | HA, HA Groups | `Proxmox: node <name> HA state / HA groups` | `ha-manager status`, `/etc/pve/ha/` |
+| Recovery speed | Recovery Speed | `Ceph: recovery speed` | `recovery: … MiB/s` in `ceph -s` |
+
 ## Install: one command, asks once
 
 Clone the repo on one Ceph node of each cluster (or on a separate monitor host, see *Remote monitoring*) and run:
