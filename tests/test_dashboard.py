@@ -51,9 +51,9 @@ class Dashboard(unittest.TestCase):
     def test_ha_groups_auto_colors(self):
         o = md.parse_ha_alias(["A=AB:orange"], ["C,D", "A", "B", "-", "B"])
         self.assertEqual(o["A"]["color"], "orange")  # alias giu mau rieng
-        self.assertEqual((o["B"]["color"], o["C,D"]["color"]), ("green", "blue"))  # theo thu tu ten
+        self.assertEqual((o["B"]["color"], o["C,D"]["color"]), tuple(md.AUTO_COLORS[:2]))  # theo thu tu ten
         self.assertNotIn("-", o)
-        self.assertFalse({"red", "orange"} & set(md.AUTO_COLORS))
+        self.assertEqual(len(set(md.AUTO_COLORS)), len(md.AUTO_COLORS))  # khong trung mau
 
     def test_ha_groups_color_by_cpu(self):
         g = ["BASIC-COMPUTING,P1-XD", "BASIC-COMPUTING,HIGH-MEMORY,P1-XD",

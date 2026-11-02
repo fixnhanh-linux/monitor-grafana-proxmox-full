@@ -4,6 +4,7 @@ Newest first. The running commit is shown in the menu header (`version 2026.10.3
 
 ## Unreleased
 
+- **Dashboard**: HA Groups auto palette uses 8 clearly different hues first (no two look-alike colors such as purple / light purple), darker shades after that.
 - **Dashboard**: HA Groups auto colors cover every Site: group strings are read from every Prometheus datasource on Grafana (saved URL + token, filtered by Site) when the dashboard is generated; more colors.
 - **Dashboard**: HA groups are colored automatically **by CPU type** (model names such as `Gold-8260`, `EPYC-7543` detected in the group string, nothing hard-coded) (groups read from Prometheus when the dashboard is generated: `--prom-url`, `--ha-group`); `--ha-alias ...:color` still wins.
 - **Dashboard**: HA Groups shows node problems: red `OFFLINE` / `FENCE`, orange `MAINTENANCE` / `HA UNKNOWN` (prefix in the cell); healthy nodes keep the group color from `--ha-alias`.

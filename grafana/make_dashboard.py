@@ -194,10 +194,9 @@ def cpu_key(groups):
 
 
 # Mau tu gan cho nhom chua dat alias: khong dung do / cam (danh cho su co)
-AUTO_COLORS = ["green", "blue", "purple", "yellow", "super-light-blue", "light-purple",
-               "light-green", "semi-dark-yellow", "dark-blue", "super-light-purple",
-               "dark-green", "light-blue", "dark-purple", "super-light-yellow", "semi-dark-green",
-               "dark-yellow", "super-light-green", "semi-dark-purple"]
+# 8 sac khac han nhau truoc (khong co 2 mau gan giong nhau ke tiep), het moi lap lai ban dam.
+AUTO_COLORS = ["#73BF69", "#5794F2", "#B877D9", "#FADE2A", "#4FD1C5", "#FF7AC6", "#B5E61D", "#8AB8FF",
+               "#37872D", "#1F60C4", "#7B3FA0", "#C9A800", "#178F86", "#C2187A", "#6E9A00", "#3D71D9"]
 
 
 def prom_ha_groups(url):
