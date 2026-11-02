@@ -45,8 +45,8 @@ class Dashboard(unittest.TestCase):
         ov = [o for o in p["fieldConfig"]["overrides"] if o["matcher"]["options"] == "HA Groups"][0]
         maps = [x["value"] for x in ov["properties"] if x["id"] == "mappings"][0]
         self.assertEqual(maps[0]["options"], {"pattern": "^OFFLINE: .*", "result": {"color": "red", "index": 0}})
-        # mau ":orange" cu bi bo qua -> nhom OK luon xanh
-        self.assertEqual(maps[len(md.HA_STATUS)]["options"]["A,B"], {"text": "AB", "color": "green", "index": 10})
+        # node binh thuong giu mau rieng cua nhom
+        self.assertEqual(maps[len(md.HA_STATUS)]["options"]["A,B"], {"text": "AB", "color": "orange", "index": 10})
 
     def test_customer_locked(self):
         d = md.build(args(customer_job="Proxmox-P1-XD", site_regex="/^Prometheus FPT HCM$/"))

@@ -163,11 +163,13 @@ def parse_lat_th(text):
 
 def parse_ha_alias(items):
     """['A,B=Text:purple', ...] -> mapping options cho cot HA Groups.
-    Mau theo trang thai node (HA_STATUS) -> ":mau" cu bo qua, nhom OK luon xanh."""
+    Node binh thuong -> mau rieng cua nhom; node co su co da co tien to (HA_STATUS)
+    nen khong khop mapping nay -> do / cam."""
     opts = {}
     for i, item in enumerate(items or []):
         raw, _, rest = item.rpartition("=")
-        opts[raw] = {"text": rest.partition(":")[0], "color": "green", "index": 10 + i}
+        text, _, color = rest.partition(":")
+        opts[raw] = {"text": text, "color": color or "blue", "index": 10 + i}
     return opts
 
 
@@ -323,7 +325,7 @@ def build(args):
                                 "Value #RAM_Pct": 4, "Value #RAM_Total": 5, "Value #Uptime": 6}),
                 {"id": "sortBy", "options": {"sort": [{"field": "Node Proxmox"}]}}],
                cell="auto", filterable=True,
-               desc="CPU, RAM, uptime per Proxmox node." if cust else "HA Groups: HA group (PVE 8) / node-affinity rule (PVE 9) of the node; nodes in no group show \"-\". Rules covering every node or disabled rules do not count as groups. Color = node state: green OK, orange MAINTENANCE / HA UNKNOWN, red OFFLINE / FENCE (prefix in the cell).",
+               desc="CPU, RAM, uptime per Proxmox node." if cust else "HA Groups: HA group (PVE 8) / node-affinity rule (PVE 9) of the node; nodes in no group show \"-\". Rules covering every node or disabled rules do not count as groups. Healthy nodes keep the group's own color; red OFFLINE / FENCE, orange MAINTENANCE / HA UNKNOWN (prefix in the cell).",
                overrides=[
                    override("HA", ("mappings", [
                        {"type": "value", "options": {
@@ -334,7 +336,7 @@ def build(args):
                        ("custom.cellOptions", {"type": "color-text"})),
                    # Chuoi HA Groups dai (vd HIGH-MEMORY,INTEL-HIGH-CPU,P1-XD,Platinum-8260) bi cat
                    # -> xuong dong trong o, rong hon, can giua (ca dau "-"); bam o de xem day du.
-                   # Mau theo trang thai node: regex tien to (do / cam), con lai xanh.
+                   # Node co su co: regex tien to (do / cam); binh thuong: mau rieng cua nhom (alias), mac dinh xanh.
                    override("HA Groups", ("custom.width", 380), ("custom.align", "center"),
                             ("color", {"mode": "fixed", "fixedColor": "green"}),
                             ("custom.cellOptions", {"type": "color-text", "wrapText": True}),
@@ -576,7 +578,7 @@ def main():
                     help="latency thresholds (ms) warning:critical per class")
     ap.add_argument("--ha-alias", action="append", default=[], metavar="GROUPS=TEXT[:color]",
                     help='short name for an HA Groups string, e.g. "Gold-6146,HIGH-FREQUENCY,P1-XD=Gold+HIGH+P1-XD" '
-                         '(color follows the node state; an old ":color" suffix is ignored)')
+                         'add :color for the group color, e.g. "...=Gold+HIGH+P1-XD:purple"; nodes with a problem turn red / orange')
     ap.add_argument("--time-from", default="now-15m", help="default time range")
     ap.add_argument("--customer-job", default="", metavar="JOB",
                     help="CUSTOMER dashboard: locked to this job, hides Site/Job, drops Detailed Alarms, "

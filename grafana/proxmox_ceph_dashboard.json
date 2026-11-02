@@ -1648,7 +1648,7 @@
           "countRows": false
         }
       },
-      "description": "HA Groups: HA group (PVE 8) / node-affinity rule (PVE 9) of the node; nodes in no group show \"-\". Rules covering every node or disabled rules do not count as groups. Color = node state: green OK, orange MAINTENANCE / HA UNKNOWN, red OFFLINE / FENCE (prefix in the cell).",
+      "description": "HA Groups: HA group (PVE 8) / node-affinity rule (PVE 9) of the node; nodes in no group show \"-\". Rules covering every node or disabled rules do not count as groups. Healthy nodes keep the group's own color; red OFFLINE / FENCE, orange MAINTENANCE / HA UNKNOWN (prefix in the cell).",
       "id": 18,
       "gridPos": {
         "h": 20,

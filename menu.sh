@@ -425,7 +425,7 @@ ask_aliases() {  # hoi ten ngan cho tung chuoi HA Groups dang co -> DASH_ALIASES
         info "Cannot read HA groups on this host → keeping saved short names (if any)"
         return 0
     fi
-    info "Enter a short name, (e.g. ${W}Gold+HIGH${N}). Empty = keep the original name. Color follows the node state."
+    info "Enter a short name, add :color if you like (e.g. ${W}Gold+HIGH:purple${N}). Empty = keep the original name. Nodes with a problem turn red / orange."
     while IFS= read -r g <&3; do
         t=$(ask "$g" "$(alias_of "$g")")
         [ -n "$t" ] && out+="${out:+;;}$g=$t"
