@@ -4,6 +4,7 @@ Newest first. The running commit is shown in the menu header (`version 2026.10.3
 
 ## Unreleased
 
+- **Vietnamese docs**: `README.vi.md` (full Vietnamese README, with diacritics) and `docs/so-do-kien-truc.vi.svg` (Vietnamese diagram, generated from the English one by `docs/make_vi_svg.py`); both READMEs link to each other. A test checks the Vietnamese diagram is regenerated and both READMEs have the same sections.
 - **Architecture diagram** redrawn, larger and more detailed: HA colors timer, Zabbix reading the exporter over HTTP, a *what each tool shows* panel (Grafana dashboard rows and variables, the 19 Prometheus alerts, the Zabbix template items and discovery), a *how to check it on the servers* panel and a *compare the same value in every place* table; every label starts with a capital letter (also in README: *Check it on the servers*).
 - **Folders renamed**: `grafana/` → `dashboard-grafana/`, `zabbix/` → `template-zabbix/` (templates no longer in a `templates/` sub-folder). `refresh` handles it, nothing to change on the host.
 - **New Zabbix template** `template-zabbix/pve-ceph-exporter-by-http.yaml`: reads the exporter's `/metrics` over HTTP (no agent) — Ceph health / recovery / unfound / inconsistent PGs, OSD and pool discovery, Proxmox nodes (up, CPU, memory, HA state, HA groups), quorum, exporter collectors; triggers match the Prometheus alerts, thresholds are macros.

@@ -1,4 +1,6 @@
-# Monitor Proxmox + Ceph (Prometheus / Grafana)
+# Monitor Proxmox + Ceph (Prometheus / Grafana / Zabbix)
+
+**English** · [Tiếng Việt](README.vi.md)
 
 ![Proxmox + Ceph monitoring architecture](docs/so-do-kien-truc.svg)
 
@@ -11,7 +13,7 @@ A toolkit that builds the **Proxmox - Ceph Prometheus** Grafana dashboard and fi
 | `dashboard-grafana/` | `make_dashboard.py` (dashboard generator) and `proxmox_ceph_dashboard.json` (default dashboard, ready to import) |
 | `prometheus/` | `pve-ceph-alerts.yml` — Prometheus alert rules: exporter, Ceph, Proxmox |
 | `template-zabbix/` | Zabbix templates (6.0+): `pve-ceph-exporter-by-http.yaml` (reads the exporter over HTTP, no agent), `ceph-health-fallback.yaml`; `setup_ceph_zabbix.sh` (Zabbix Agent 2 for Ceph on every node over SSH) |
-| `docs/` | Architecture diagram |
+| `docs/` | Architecture diagram in English and Vietnamese (`make_vi_svg.py` makes the Vietnamese one from the English one) |
 | `tests/` | Unit tests (`python3 -m unittest discover -s tests`), run on GitHub Actions; CI also imports the Zabbix templates into real Zabbix 6.0, 6.2 and 7.0 |
 | `CHANGELOG.md` | Change log |
 

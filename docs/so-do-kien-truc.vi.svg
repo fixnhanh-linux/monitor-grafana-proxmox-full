@@ -1,0 +1,339 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1340 1730" width="1340" height="1730" font-family="Segoe UI, Helvetica, Arial, sans-serif" role="img">
+  <title>Giám sát Proxmox + Ceph: Prometheus / Grafana và Zabbix</title>
+  <desc>Cluster Proxmox + Ceph được pve_ceph_extra_exporter trên máy monitor đọc; Prometheus thu thập, Grafana hiển thị, Zabbix đọc cùng exporter qua HTTP và hỏi zabbix-agent2 trên các node. Phía dưới: cách kiểm tra từng phần trên server và các giá trị phải khớp nhau.</desc>
+  <defs>
+    <marker id="a" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#94a3b8"/></marker>
+    <marker id="az" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#f97316"/></marker>
+    <marker id="ag" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#22c55e"/></marker>
+    <linearGradient id="hd" x1="0" y1="0" x2="1" y2="0"><stop offset="0" stop-color="#172554"/><stop offset="1" stop-color="#134e4a"/></linearGradient>
+    <filter id="sh" x="-5%" y="-5%" width="110%" height="115%"><feDropShadow dx="0" dy="2" stdDeviation="4" flood-color="#000000" flood-opacity=".45"/></filter>
+    <style>
+      .t  { font-size: 13px; font-weight: 600; fill: #e2e8f0; }
+      .s  { font-size: 11px; fill: #94a3b8; }
+      .m  { font-size: 11px; fill: #cbd5e1; font-family: Consolas, Menlo, monospace; }
+      .mo { font-size: 10.5px; fill: #64748b; font-family: Consolas, Menlo, monospace; }
+      .h  { font-size: 14px; font-weight: 700; letter-spacing: .5px; }
+      .lb { font-size: 11px; fill: #cbd5e1; font-weight: 600; font-style: italic; }
+      .lz { font-size: 11px; fill: #fb923c; font-weight: 600; font-style: italic; }
+      .lg { font-size: 11px; fill: #4ade80; font-weight: 600; font-style: italic; }
+      .th { font-size: 11.5px; font-weight: 700; fill: #ffffff; }
+      .flow  { stroke: #94a3b8; stroke-width: 2.2; stroke-linecap: round; fill: none; marker-end: url(#a);  stroke-dasharray: 9 7; animation: f 1.1s linear infinite; }
+      .zflow { stroke: #f97316; stroke-width: 2.2; stroke-linecap: round; fill: none; marker-end: url(#az); stroke-dasharray: 9 7; animation: f 1.1s linear infinite; }
+      .gflow { stroke: #22c55e; stroke-width: 2.2; stroke-linecap: round; fill: none; marker-end: url(#ag); stroke-dasharray: 9 7; animation: f 1.1s linear infinite; }
+      @keyframes f { to { stroke-dashoffset: -32; } }
+    </style>
+  </defs>
+
+  <rect width="1340" height="1730" rx="18" fill="#0b1220"/>
+
+  <!-- ===================== HEADER ===================== -->
+  <rect x="0" y="0" width="1340" height="72" rx="18" fill="url(#hd)"/><rect x="0" y="40" width="1340" height="32" fill="url(#hd)"/>
+  <text x="670" y="32" text-anchor="middle" style="font-size:21px;font-weight:700;fill:#ffffff">Giám sát Proxmox + Ceph  ·  Prometheus → Grafana  ·  Zabbix</text>
+  <text x="670" y="55" text-anchor="middle" style="font-size:12px;fill:#99f6e4">Mũi tên chạy = chiều dữ liệu. Prometheus và Zabbix chủ động kéo; máy monitor đẩy cấu hình (SSH) và dashboard (Grafana API). Phía dưới: cách kiểm tra trên server.</text>
+
+  <!-- ===================== PROXMOX + CEPH CLUSTER ===================== -->
+  <rect x="20" y="90" width="360" height="600" rx="14" fill="#111a2e" stroke="#3b82f6" stroke-width="1.5" filter="url(#sh)"/>
+  <text x="200" y="116" text-anchor="middle" class="h" fill="#60a5fa">CLUSTER PROXMOX + CEPH</text>
+  <text x="200" y="134" text-anchor="middle" class="s">Mỗi site một cluster (P1-XD, FPT01-FPT02, Deco ...)</text>
+
+  <rect x="38" y="150" width="324" height="62" rx="9" fill="#16223b" stroke="#f97316"/>
+  <text x="200" y="171" text-anchor="middle" class="t">Ceph  MON · MGR (active / standby) · OSD</text>
+  <text x="200" y="189" text-anchor="middle" class="s">Health · PG map · OSD · pool · độ trễ</text>
+  <text x="200" y="204" text-anchor="middle" class="s">Các device class NVMe / SSD / HDD</text>
+
+  <rect x="38" y="224" width="324" height="50" rx="9" fill="#16223b" stroke="#f97316"/>
+  <text x="200" y="244" text-anchor="middle" class="t">Ceph mgr prometheus  :9283/metrics</text>
+  <text x="200" y="262" text-anchor="middle" class="m">ceph_health_status · ceph_osd_* · ceph_pool_*</text>
+
+  <rect x="38" y="286" width="324" height="66" rx="9" fill="#16223b" stroke="#3b82f6"/>
+  <text x="200" y="306" text-anchor="middle" class="t">Proxmox API  :8006</text>
+  <text x="200" y="323" text-anchor="middle" class="s">Token chỉ đọc monitor@pve!exporter (PVEAuditor)</text>
+  <text x="200" y="340" text-anchor="middle" class="m">/cluster/status · resources · ha · ceph</text>
+
+  <rect x="38" y="364" width="324" height="128" rx="9" fill="#16223b" stroke="#64748b" stroke-dasharray="5 4"/>
+  <text x="200" y="385" text-anchor="middle" class="t">Chế độ local, tùy chọn (trên node Ceph)</text>
+  <text x="200" y="404" text-anchor="middle" class="s">Dịch vụ pve-ceph-extra-exporter :9830</text>
+  <text x="200" y="421" text-anchor="middle" class="s">Đọc ceph status, pvesh, /etc/pve/ha</text>
+  <text x="200" y="438" text-anchor="middle" class="s">Menu 2 / S  ·  exporter/install_exporter.sh</text>
+  <text x="200" y="460" text-anchor="middle" class="s">Chế độ từ xa: không cài gì lên các node,</text>
+  <text x="200" y="476" text-anchor="middle" class="s">Chỉ cần một token API chỉ đọc (menu 17)</text>
+
+  <rect x="38" y="504" width="324" height="50" rx="9" fill="#16223b" stroke="#f97316"/>
+  <text x="200" y="524" text-anchor="middle" class="t">Ceph mgr restful  :8003</text>
+  <text x="200" y="542" text-anchor="middle" class="s">API key zabbix-monitor · cert tự ký</text>
+
+  <rect x="38" y="566" width="324" height="104" rx="9" fill="#16223b" stroke="#ef4444"/>
+  <text x="200" y="587" text-anchor="middle" class="t">Mọi node: zabbix-agent2  :10050</text>
+  <text x="200" y="605" text-anchor="middle" class="s">Ceph plugin → restful :8003</text>
+  <text x="200" y="623" text-anchor="middle" class="s">Cron mỗi phút: ceph health →</text>
+  <text x="200" y="640" text-anchor="middle" class="m">/etc/zabbix/cephstatus.txt</text>
+  <text x="200" y="657" text-anchor="middle" class="s">(Dự phòng, đọc bằng vfs.file.contents)</text>
+
+  <!-- ===================== MONITOR HOST ===================== -->
+  <rect x="440" y="90" width="400" height="600" rx="14" fill="#111a2e" stroke="#22c55e" stroke-width="1.5" filter="url(#sh)"/>
+  <text x="640" y="116" text-anchor="middle" class="h" fill="#4ade80">MÁY MONITOR</text>
+  <text x="640" y="134" text-anchor="middle" class="s">Ví dụ 10.16.16.38 (Ubuntu) · repo git monitor-grafana-proxmox-full</text>
+
+  <rect x="458" y="150" width="364" height="52" rx="9" fill="#16223b" stroke="#475569"/>
+  <text x="640" y="171" text-anchor="middle" class="t">Menu: proxmox-menu  (menu.sh)</text>
+  <text x="640" y="190" text-anchor="middle" class="m">setup · refresh · services · ha-sync · zabbix-ceph</text>
+
+  <rect x="458" y="214" width="364" height="122" rx="9" fill="#16223b" stroke="#22c55e"/>
+  <text x="640" y="235" text-anchor="middle" class="t">Exporter: pve_ceph_extra_exporter</text>
+  <text x="640" y="253" text-anchor="middle" class="s">Mỗi cluster một exporter, mọi metric trên 1 port:</text>
+  <text x="640" y="270" text-anchor="middle" class="m">:9830 P1-XD · :9831 FPT01-FPT02 · :9832 Deco</text>
+  <text x="640" y="287" text-anchor="middle" class="s">Systemd @tên  hoặc  Docker fixnhanh-pve-&lt;tên&gt;</text>
+  <text x="640" y="304" text-anchor="middle" class="s">Metric mgr + Proxmox + % recovery + nhóm HA</text>
+  <text x="640" y="323" text-anchor="middle" class="m">/metrics · /health</text>
+
+  <rect x="458" y="348" width="364" height="66" rx="9" fill="#16223b" stroke="#475569"/>
+  <text x="640" y="368" text-anchor="middle" class="t">Timer systemd</text>
+  <text x="640" y="386" text-anchor="middle" class="s">Watchdog · 2 phút: /health lỗi 2 lần → khởi động lại</text>
+  <text x="640" y="403" text-anchor="middle" class="s">Màu HA · 5 phút: có nhóm HA mới → tạo lại + import</text>
+
+  <rect x="458" y="426" width="364" height="82" rx="9" fill="#16223b" stroke="#475569"/>
+  <text x="640" y="446" text-anchor="middle" class="t">Dashboard: dashboard-grafana/make_dashboard.py</text>
+  <text x="640" y="464" text-anchor="middle" class="m">dashboard-local.json · dashboard-&lt;name&gt;.json</text>
+  <text x="640" y="481" text-anchor="middle" class="s">HA Groups: mỗi loại CPU một màu (.ha-colors.json)</text>
+  <text x="640" y="498" text-anchor="middle" class="s">Nội bộ / khách hàng · lưu tham số (fixnhanhArgs)</text>
+
+  <rect x="458" y="520" width="364" height="48" rx="9" fill="#16223b" stroke="#475569"/>
+  <text x="640" y="540" text-anchor="middle" class="t">Cảnh báo: prometheus/pve-ceph-alerts.yml</text>
+  <text x="640" y="557" text-anchor="middle" class="s">19 luật cảnh báo: exporter · Ceph · Proxmox</text>
+
+  <rect x="458" y="580" width="364" height="96" rx="9" fill="#16223b" stroke="#ef4444"/>
+  <text x="640" y="600" text-anchor="middle" class="t">Zabbix: template-zabbix/</text>
+  <text x="640" y="618" text-anchor="middle" class="m">pve-ceph-exporter-by-http.yaml</text>
+  <text x="640" y="634" text-anchor="middle" class="m">ceph-health-fallback.yaml</text>
+  <text x="640" y="651" text-anchor="middle" class="m">setup_ceph_zabbix.sh</text>
+  <text x="640" y="667" text-anchor="middle" class="s">Menu 27: agent2 + cron + key restful trên mọi node</text>
+
+  <!-- ===================== PROMETHEUS ===================== -->
+  <rect x="920" y="90" width="400" height="190" rx="14" fill="#111a2e" stroke="#f97316" stroke-width="1.5" filter="url(#sh)"/>
+  <text x="1120" y="116" text-anchor="middle" class="h" fill="#fb923c">PROMETHEUS</text>
+  <text x="1120" y="134" text-anchor="middle" class="s">Ví dụ 10.16.16.24:9090 · mỗi site một máy</text>
+  <rect x="938" y="148" width="364" height="48" rx="9" fill="#16223b" stroke="#f97316"/>
+  <text x="1120" y="168" text-anchor="middle" class="m">scrape_configs/proxmox-ceph-&lt;host&gt;.yml</text>
+  <text x="1120" y="185" text-anchor="middle" class="s">Job Proxmox-&lt;cluster&gt; → 1 target máy-monitor:port</text>
+  <rect x="938" y="206" width="364" height="62" rx="9" fill="#16223b" stroke="#f97316"/>
+  <text x="1120" y="226" text-anchor="middle" class="m">rules/pve-ceph-alerts.yml</text>
+  <text x="1120" y="243" text-anchor="middle" class="s">promtool kiểm tra, lỗi thì trả lại file cũ</text>
+  <text x="1120" y="259" text-anchor="middle" class="s">→ Alertmanager (Telegram / email)</text>
+
+  <!-- ===================== GRAFANA ===================== -->
+  <rect x="920" y="300" width="400" height="192" rx="14" fill="#111a2e" stroke="#eab308" stroke-width="1.5" filter="url(#sh)"/>
+  <text x="1120" y="326" text-anchor="middle" class="h" fill="#facc15">GRAFANA</text>
+  <text x="1120" y="344" text-anchor="middle" class="s">Mỗi site một datasource Prometheus → biến $Site</text>
+  <rect x="938" y="356" width="364" height="48" rx="9" fill="#16223b" stroke="#eab308"/>
+  <text x="1120" y="376" text-anchor="middle" class="t">Dashboard nội bộ</text>
+  <text x="1120" y="393" text-anchor="middle" class="s">$Site · $job · $class · hàng Exporter · cảnh báo</text>
+  <rect x="938" y="412" width="364" height="48" rx="9" fill="#16223b" stroke="#eab308"/>
+  <text x="1120" y="432" text-anchor="middle" class="t">Dashboard khách hàng</text>
+  <text x="1120" y="449" text-anchor="middle" class="s">Khóa job + datasource · chỉ xem · folder riêng</text>
+  <text x="1120" y="479" text-anchor="middle" class="s">Total Health % · OSD · pool · độ trễ · node · HA Groups</text>
+
+  <!-- ===================== ZABBIX ===================== -->
+  <rect x="920" y="510" width="400" height="180" rx="14" fill="#111a2e" stroke="#ef4444" stroke-width="1.5" filter="url(#sh)"/>
+  <text x="1120" y="536" text-anchor="middle" class="h" fill="#f87171">ZABBIX SERVER / PROXY</text>
+  <text x="1120" y="554" text-anchor="middle" class="s">Ví dụ 10.8.10.201 · Zabbix 6.0 / 6.2 / 7.0</text>
+  <rect x="938" y="566" width="364" height="56" rx="9" fill="#16223b" stroke="#ef4444"/>
+  <text x="1120" y="585" text-anchor="middle" class="t">Proxmox Ceph by FIX NHANH exporter</text>
+  <text x="1120" y="602" text-anchor="middle" class="s">HTTP, không cần agent · tự tìm node / OSD / pool</text>
+  <text x="1120" y="616" text-anchor="middle" class="mo">{$PVE.EXPORTER.PORT} = 9830 (port of the cluster)</text>
+  <rect x="938" y="630" width="364" height="48" rx="9" fill="#16223b" stroke="#ef4444"/>
+  <text x="1120" y="650" text-anchor="middle" class="t">Ceph by Zabbix agent 2  +  bản dự phòng health</text>
+  <text x="1120" y="667" text-anchor="middle" class="mo">{$CEPH.API.KEY} {$CEPH.USER} {$CEPH.API.URL}</text>
+
+  <!-- ===================== FLOWS (thang / goc vuong, khong cheo) ===================== -->
+  <path class="flow" d="M458,249 H366"/>
+  <text x="412" y="241" text-anchor="middle" class="lb">Kéo</text>
+  <path class="flow" d="M458,319 H366"/>
+  <text x="412" y="311" text-anchor="middle" class="lb">API</text>
+  <path class="gflow" d="M824,172 H934"/>
+  <text x="880" y="164" text-anchor="middle" class="lg">Đẩy SSH</text>
+  <path class="flow" d="M918,250 H826"/>
+  <text x="872" y="242" text-anchor="middle" class="lb">Thu thập</text>
+  <path class="flow" d="M1250,300 V284"/>
+  <text x="1240" y="296" text-anchor="end" class="lb">PromQL</text>
+  <path class="zflow" d="M936,594 H900 V300 H826"/>
+  <text x="896" y="560" text-anchor="end" class="lz">HTTP</text>
+  <text x="896" y="573" text-anchor="end" class="lz">/metrics</text>
+  <path d="M890,467 H910" stroke="#111a2e" stroke-width="8"/>
+  <path class="gflow" d="M824,467 H918"/>
+  <text x="866" y="459" text-anchor="middle" class="lg">Import</text>
+  <path class="gflow" d="M458,618 H366"/>
+  <text x="412" y="610" text-anchor="middle" class="lg">SSH</text>
+  <path class="zflow" d="M1120,692 V716 H200 V674"/>
+  <text x="660" y="736" text-anchor="middle" class="lz">Zabbix hỏi zabbix-agent2 :10050 trên mọi node</text>
+  <path class="zflow" d="M200,566 V556"/>
+
+  <!-- ===================== WHAT EACH TOOL SHOWS ===================== -->
+  <rect x="20" y="752" width="1300" height="420" rx="14" fill="#111a2e" stroke="#2a3a5c" stroke-width="1.5" filter="url(#sh)"/>
+  <text x="40" y="778" class="h" fill="#f1f5f9">MỖI CÔNG CỤ HIỂN THỊ GÌ</text>
+  <text x="1300" y="778" text-anchor="end" class="s">Cùng dữ liệu exporter, ba cách xem</text>
+  <rect x="36" y="792" width="620" height="364" rx="10" fill="#16223b" stroke="#eab308"/>
+  <text x="50" y="814" class="t" style="fill:#facc15">Grafana dashboard  ·  Proxmox - Ceph Prometheus</text>
+  <rect x="50" y="826" width="170" height="38" rx="19" fill="#0b1220" stroke="#eab308" stroke-width="1.6"/>
+  <text x="135" y="842" text-anchor="middle" class="t">$Site</text>
+  <text x="135" y="857" text-anchor="middle" class="s">Prometheus datasource</text>
+  <path class="flow" d="M222,845 L246,845"/>
+  <rect x="250" y="826" width="170" height="38" rx="19" fill="#0b1220" stroke="#eab308" stroke-width="1.6"/>
+  <text x="335" y="842" text-anchor="middle" class="t">$job</text>
+  <text x="335" y="857" text-anchor="middle" class="s">pve_cluster_info</text>
+  <path class="flow" d="M422,845 L446,845"/>
+  <rect x="450" y="826" width="170" height="38" rx="19" fill="#0b1220" stroke="#eab308" stroke-width="1.6"/>
+  <text x="535" y="842" text-anchor="middle" class="t">$class</text>
+  <text x="535" y="857" text-anchor="middle" class="s">ceph_osd_metadata</text>
+  <rect x="50" y="876" width="592" height="34" rx="6" fill="#0b1220" stroke="#2a3a5c"/>
+  <rect x="50" y="876" width="4" height="34" rx="2" fill="#22c55e"/>
+  <text x="64" y="891" class="t">1 · Cluster State</text>
+  <text x="64" y="905" class="mo" style="fill:#94a3b8">Health status · Detailed alarms · Capacity · Used · PG inconsistent</text>
+  <rect x="50" y="915" width="592" height="34" rx="6" fill="#0b1220" stroke="#2a3a5c"/>
+  <rect x="50" y="915" width="4" height="34" rx="2" fill="#22c55e"/>
+  <text x="64" y="930" class="t">2 · OSD State</text>
+  <text x="64" y="944" class="mo" style="fill:#94a3b8">OUT · DOWN · UP · IN · OSD low / high · Used per $class</text>
+  <rect x="50" y="954" width="592" height="48" rx="6" fill="#0b1220" stroke="#2a3a5c"/>
+  <rect x="50" y="954" width="4" height="48" rx="2" fill="#3b82f6"/>
+  <text x="64" y="969" class="t">3 · Proxmox Resource - HA Group</text>
+  <text x="64" y="983" class="mo" style="fill:#94a3b8">Nodes: CPU · RAM · Uptime · HA · HA Groups (color per CPU type)</text>
+  <text x="64" y="997" class="mo" style="fill:#94a3b8">OSD class details · Ceph pool details (size · avail · %used · PG)</text>
+  <rect x="50" y="1007" width="592" height="34" rx="6" fill="#0b1220" stroke="#2a3a5c"/>
+  <rect x="50" y="1007" width="4" height="34" rx="2" fill="#22c55e"/>
+  <text x="64" y="1022" class="t">4 · Latency All OSD (High → Low)</text>
+  <text x="64" y="1036" class="mo" style="fill:#94a3b8">Apply latency graph · per $class: nvme 15/25 · ssd 50/100 · hdd 100/200 ms</text>
+  <rect x="50" y="1046" width="592" height="34" rx="6" fill="#0b1220" stroke="#2a3a5c"/>
+  <rect x="50" y="1046" width="4" height="34" rx="2" fill="#a855f7"/>
+  <text x="64" y="1061" class="t">5 · Ceph Recovery &amp; Rebalance</text>
+  <text x="64" y="1075" class="mo" style="fill:#94a3b8">Ceph Status · Total Health % (100% when clean) · Recovery Speed</text>
+  <rect x="50" y="1085" width="592" height="34" rx="6" fill="#0b1220" stroke="#2a3a5c"/>
+  <rect x="50" y="1085" width="4" height="34" rx="2" fill="#a855f7"/>
+  <text x="64" y="1100" class="t">6 · Exporter (chỉ dashboard nội bộ)</text>
+  <text x="64" y="1114" class="mo" style="fill:#94a3b8">Collector up / error · Data age · Mode local / remote · Version</text>
+  <rect x="672" y="792" width="316" height="364" rx="10" fill="#16223b" stroke="#f97316"/>
+  <text x="686" y="814" class="t" style="fill:#fb923c">Cảnh báo Prometheus  ·  19 luật</text>
+  <text x="686" y="840" class="t">Exporter (3)</text>
+  <text x="694" y="858" class="s">• Exporter không trả lời</text>
+  <text x="694" y="874" class="s">• Collector bị lỗi</text>
+  <text x="694" y="890" class="s">• Dữ liệu cũ (quá 3 phút)</text>
+  <text x="686" y="914" class="t">Ceph (11)</text>
+  <text x="694" y="932" class="s">• Health ERROR · Health WARNING</text>
+  <text x="694" y="948" class="s">• OSD down · OSD out</text>
+  <text x="694" y="964" class="s">• OSD gần đầy 85% · OSD đầy 90%</text>
+  <text x="694" y="980" class="s">• Pool gần đầy 80%</text>
+  <text x="694" y="996" class="s">• PG inconsistent · Object unfound</text>
+  <text x="694" y="1012" class="s">• Recovery quá lâu · Độ trễ cao</text>
+  <text x="686" y="1036" class="t">Proxmox (5)</text>
+  <text x="694" y="1054" class="s">• Node chết · Cluster mất quorum</text>
+  <text x="694" y="1070" class="s">• Node HA bị fence / lost / gone</text>
+  <text x="694" y="1086" class="s">• CPU cao 90% · RAM cao 90%</text>
+  <text x="686" y="1146" class="s" style="fill:#fb923c">→ Alertmanager → Telegram / email</text>
+  <rect x="1004" y="792" width="300" height="364" rx="10" fill="#16223b" stroke="#ef4444"/>
+  <text x="1018" y="814" class="t" style="fill:#f87171">Template Zabbix (exporter qua HTTP)</text>
+  <text x="1018" y="840" class="t">Item</text>
+  <text x="1026" y="858" class="s">• Exporter: version · chế độ · lần thu thập cuối</text>
+  <text x="1026" y="874" class="s">• Ceph: health · % / tốc độ recovery</text>
+  <text x="1026" y="890" class="s">• Object degraded / misplaced / unfound</text>
+  <text x="1026" y="906" class="s">• PG chưa clean / inconsistent</text>
+  <text x="1026" y="922" class="s">• OSD up / in · quorum · node online</text>
+  <text x="1018" y="946" class="t">Tự tìm (LLD)</text>
+  <text x="1026" y="964" class="s">• Node: up · CPU · RAM · uptime · HA</text>
+  <text x="1026" y="980" class="s">• OSD: up · in · độ trễ · % dùng</text>
+  <text x="1026" y="996" class="s">• Pool: % dùng · đã lưu · còn trống</text>
+  <text x="1026" y="1012" class="s">• Collector: up · lỗi cuối</text>
+  <text x="1018" y="1146" class="s" style="fill:#f87171">Ngưỡng là macro, sửa riêng từng host</text>
+
+  <!-- ===================== CHECK ON THE SERVERS ===================== -->
+  <rect x="20" y="1192" width="1300" height="262" rx="14" fill="#111a2e" stroke="#2a3a5c" stroke-width="1.5" filter="url(#sh)"/>
+  <text x="40" y="1218" class="h" fill="#f1f5f9">CÁCH KIỂM TRA TRÊN SERVER</text>
+  <text x="1300" y="1218" text-anchor="end" class="s">Đi từ trên xuống: bước nào lỗi → sửa trước rồi mới xem tiếp</text>
+
+  <rect x="36" y="1232" width="302" height="208" rx="10" fill="#16223b" stroke="#22c55e"/>
+  <circle cx="58" cy="1254" r="12" fill="#16a34a"/><text x="58" y="1258" text-anchor="middle" class="th">1</text>
+  <text x="78" y="1259" class="t">Máy monitor (ssh root)</text>
+  <text x="50" y="1284" class="m">proxmox-menu doctor</text><text x="324" y="1284" text-anchor="end" class="mo">all ✔</text>
+  <text x="50" y="1306" class="m">proxmox-menu services</text><text x="324" y="1306" text-anchor="end" class="mo">active · ok</text>
+  <text x="50" y="1328" class="m">curl -s :9830/health</text><text x="324" y="1328" text-anchor="end" class="mo">ok</text>
+  <text x="50" y="1350" class="m">proxmox-menu remote-list</text><text x="324" y="1350" text-anchor="end" class="mo">ports</text>
+  <text x="50" y="1372" class="m">systemctl list-timers 'pve-ceph*'</text>
+  <text x="50" y="1394" class="m">journalctl -t pve-ceph-ha-colors</text>
+  <text x="50" y="1416" class="s">Có 2 timer: watchdog + ha-colors</text>
+
+  <rect x="354" y="1232" width="302" height="208" rx="10" fill="#16223b" stroke="#f97316"/>
+  <circle cx="376" cy="1254" r="12" fill="#f97316"/><text x="376" y="1258" text-anchor="middle" class="th">2</text>
+  <text x="396" y="1259" class="t">Prometheus</text>
+  <text x="368" y="1284" class="m">proxmox-menu prom-check</text><text x="642" y="1284" text-anchor="end" class="mo">up</text>
+  <text x="368" y="1306" class="s">Status → Targets: mọi Proxmox-* UP</text>
+  <text x="368" y="1328" class="m">up{job=~".*Proxmox-.*"}</text><text x="642" y="1328" text-anchor="end" class="mo">1</text>
+  <text x="368" y="1350" class="m">ceph_custom_recovery_percent</text>
+  <text x="368" y="1372" class="m">pve_ha_groups_custom_info</text>
+  <text x="368" y="1394" class="s">Tab Alerts: đã nạp nhóm pve-ceph</text>
+  <text x="368" y="1416" class="m">promtool check rules &lt;file&gt;</text>
+
+  <rect x="672" y="1232" width="302" height="208" rx="10" fill="#16223b" stroke="#eab308"/>
+  <circle cx="694" cy="1254" r="12" fill="#ca8a04"/><text x="694" y="1258" text-anchor="middle" class="th">3</text>
+  <text x="714" y="1259" class="t">Grafana</text>
+  <text x="686" y="1284" class="s">Mở /d/&lt;DASH_UID&gt; (UID xem ở menu 15)</text>
+  <text x="686" y="1306" class="s">Total Health 100% · Ceph Status OK</text>
+  <text x="686" y="1328" class="s">Hàng Exporter: mọi collector = 1</text>
+  <text x="686" y="1350" class="s">HA Groups: cùng loại CPU = cùng màu</text>
+  <text x="686" y="1372" class="s">Node chết → đỏ  OFFLINE: &lt;nhóm&gt;</text>
+  <text x="686" y="1394" class="s">Host mới → có màu trong 5 phút</text>
+  <text x="686" y="1416" class="s">Bản cũ /d/pve-ceph-prom không được cập nhật</text>
+
+  <rect x="990" y="1232" width="302" height="208" rx="10" fill="#16223b" stroke="#ef4444"/>
+  <circle cx="1012" cy="1254" r="12" fill="#dc2626"/><text x="1012" y="1258" text-anchor="middle" class="th">4</text>
+  <text x="1032" y="1259" class="t">Zabbix</text>
+  <text x="1004" y="1284" class="s">Latest data → host → tag component</text>
+  <text x="1004" y="1306" class="s">Exporter: có version, thu thập mới</text>
+  <text x="1004" y="1328" class="s">Discovery: đã thấy node, OSD, pool</text>
+  <text x="1004" y="1350" class="s">Problems: giống cảnh báo Prometheus</text>
+  <text x="1004" y="1372" class="m">zabbix_get -s &lt;node&gt; -k agent.ping</text>
+  <text x="1004" y="1394" class="m">cat /etc/zabbix/cephstatus.txt</text>
+  <text x="1004" y="1416" class="s">zabbix_get chạy trên Zabbix, cat trên node</text>
+
+  <!-- ===================== COMPARE ===================== -->
+  <rect x="20" y="1470" width="1300" height="196" rx="14" fill="#111a2e" stroke="#2a3a5c" stroke-width="1.5" filter="url(#sh)"/>
+  <text x="40" y="1496" class="h" fill="#f1f5f9">SO SÁNH: CÙNG MỘT GIÁ TRỊ Ở MỌI NƠI</text>
+  <text x="1300" y="1496" text-anchor="end" class="s">Khớp nhau trong ~1 phút; lệch → exporter treo, sai job / port, hoặc host Zabbix sai port</text>
+  <rect x="36" y="1506" width="1268" height="24" rx="5" fill="#1e293b"/>
+  <text x="48" y="1522" class="th">Giá trị</text>
+  <text x="262" y="1522" class="th">Panel Grafana (Prometheus)</text>
+  <text x="600" y="1522" class="th">Item Zabbix (exporter qua HTTP)</text>
+  <text x="960" y="1522" class="th">Trên node Proxmox (lệnh)</text>
+  <rect x="36" y="1532" width="1268" height="22" fill="#16223b"/>
+  <text x="48" y="1547" class="t">Ceph health</text>
+  <text x="262" y="1547" class="s">Ceph Status</text>
+  <text x="600" y="1547" class="m">Ceph: health</text>
+  <text x="960" y="1547" class="m">ceph health</text>
+  <text x="48" y="1569" class="t">Total Health %</text>
+  <text x="262" y="1569" class="s">Đồng hồ Total Health (100% khi sạch)</text>
+  <text x="600" y="1569" class="m">Ceph: total health (data stable)</text>
+  <text x="960" y="1569" class="m">ceph -s  (degraded / misplaced %)</text>
+  <rect x="36" y="1576" width="1268" height="22" fill="#16223b"/>
+  <text x="48" y="1591" class="t">OSD up / in</text>
+  <text x="262" y="1591" class="s">OSDs UP · OSDs IN · OSDs DOWN</text>
+  <text x="600" y="1591" class="m">Ceph: OSDs up · Ceph: OSDs in</text>
+  <text x="960" y="1591" class="m">ceph osd stat</text>
+  <text x="48" y="1613" class="t">Node online / quorum</text>
+  <text x="262" y="1613" class="s">Bảng Resource Cluster</text>
+  <text x="600" y="1613" class="m">Proxmox: nodes online · quorate</text>
+  <text x="960" y="1613" class="m">pvecm status</text>
+  <rect x="36" y="1620" width="1268" height="22" fill="#16223b"/>
+  <text x="48" y="1635" class="t">Trạng thái HA / nhóm HA</text>
+  <text x="262" y="1635" class="s">Cột HA · HA Groups</text>
+  <text x="600" y="1635" class="m">node &lt;name&gt; HA state · HA groups</text>
+  <text x="960" y="1635" class="m">ha-manager status · /etc/pve/ha/</text>
+  <text x="48" y="1657" class="s">Recovery: Recovery Speed trên Grafana = Zabbix "Ceph: recovery speed" = "recovery: … MiB/s" trong ceph -s</text>
+
+  <!-- ===================== LEGEND ===================== -->
+  <rect x="40" y="1682" width="16" height="12" rx="2" fill="#16223b" stroke="#f97316"/><text x="62" y="1692" class="s">Ceph</text>
+  <rect x="110" y="1682" width="16" height="12" rx="2" fill="#16223b" stroke="#3b82f6"/><text x="132" y="1692" class="s">Proxmox API</text>
+  <rect x="220" y="1682" width="16" height="12" rx="2" fill="#16223b" stroke="#22c55e"/><text x="242" y="1692" class="s">Exporter</text>
+  <rect x="310" y="1682" width="16" height="12" rx="2" fill="#16223b" stroke="#f97316"/><text x="332" y="1692" class="s">Prometheus</text>
+  <rect x="410" y="1682" width="16" height="12" rx="2" fill="#16223b" stroke="#eab308"/><text x="432" y="1692" class="s">Grafana</text>
+  <rect x="496" y="1682" width="16" height="12" rx="2" fill="#16223b" stroke="#ef4444"/><text x="518" y="1692" class="s">Zabbix</text>
+  <line x1="580" y1="1688" x2="610" y2="1688" class="flow"/><text x="616" y="1692" class="s">Đọc dữ liệu</text>
+  <line x1="690" y1="1688" x2="720" y2="1688" class="gflow"/><text x="726" y="1692" class="s">Đẩy cấu hình / dashboard</text>
+  <line x1="880" y1="1688" x2="910" y2="1688" class="zflow"/><text x="916" y="1692" class="s">Zabbix</text>
+  <text x="40" y="1716" class="s">Repo: menu.sh · exporter/ · dashboard-grafana/ · prometheus/ · template-zabbix/ · docs/ · tests/   ·   Cập nhật mọi thứ: proxmox-menu refresh</text>
+</svg>
