@@ -11,7 +11,11 @@ groups:
   - name: pve-ceph-exporter
     rules:
       - alert: PveCephExporterDown
-        expr: up{job=~".*Proxmox-.*"} == 0
+        # Chi target cua pve_ceph_extra_exporter (tung xuat build_info trong 1 ngay qua):
+        # bo qua mgr standby / pve exporter cu cua cac job scrape thang (luon co target down)
+        expr: |
+          (up{job=~".*Proxmox-.*"} == 0)
+          and on(job, instance) max_over_time(pve_ceph_extra_exporter_build_info[1d])
         for: 2m
         labels:
           severity: critical
