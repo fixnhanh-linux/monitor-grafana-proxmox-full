@@ -50,24 +50,24 @@
   <text x="200" y="323" text-anchor="middle" class="s">Read-only token monitor@pve!exporter (PVEAuditor)</text>
   <text x="200" y="340" text-anchor="middle" class="m">/cluster/status · resources · ha · ceph</text>
 
-  <rect x="38" y="364" width="324" height="50" rx="9" fill="#16223b" stroke="#f97316"/>
-  <text x="200" y="384" text-anchor="middle" class="t">Ceph mgr restful  :8003</text>
-  <text x="200" y="402" text-anchor="middle" class="s">API key zabbix-monitor · self-signed cert</text>
+  <rect x="38" y="364" width="324" height="128" rx="9" fill="#16223b" stroke="#64748b" stroke-dasharray="5 4"/>
+  <text x="200" y="385" text-anchor="middle" class="t">Optional local mode (on a Ceph node)</text>
+  <text x="200" y="404" text-anchor="middle" class="s">Service pve-ceph-extra-exporter :9830</text>
+  <text x="200" y="421" text-anchor="middle" class="s">Reads ceph status, pvesh, /etc/pve/ha</text>
+  <text x="200" y="438" text-anchor="middle" class="s">Menu 2 / S  ·  exporter/install_exporter.sh</text>
+  <text x="200" y="460" text-anchor="middle" class="s">Remote mode: nothing is installed on the nodes,</text>
+  <text x="200" y="476" text-anchor="middle" class="s">Only a read-only API token (menu 17)</text>
 
-  <rect x="38" y="426" width="324" height="104" rx="9" fill="#16223b" stroke="#ef4444"/>
-  <text x="200" y="447" text-anchor="middle" class="t">Every node: zabbix-agent2  :10050</text>
-  <text x="200" y="465" text-anchor="middle" class="s">Ceph plugin → restful :8003</text>
-  <text x="200" y="483" text-anchor="middle" class="s">Cron every minute: ceph health →</text>
-  <text x="200" y="500" text-anchor="middle" class="m">/etc/zabbix/cephstatus.txt</text>
-  <text x="200" y="517" text-anchor="middle" class="s">(Fallback, read with vfs.file.contents)</text>
+  <rect x="38" y="504" width="324" height="50" rx="9" fill="#16223b" stroke="#f97316"/>
+  <text x="200" y="524" text-anchor="middle" class="t">Ceph mgr restful  :8003</text>
+  <text x="200" y="542" text-anchor="middle" class="s">API key zabbix-monitor · self-signed cert</text>
 
-  <rect x="38" y="544" width="324" height="128" rx="9" fill="#16223b" stroke="#64748b" stroke-dasharray="5 4"/>
-  <text x="200" y="565" text-anchor="middle" class="t">Optional local mode (on a Ceph node)</text>
-  <text x="200" y="584" text-anchor="middle" class="s">Service pve-ceph-extra-exporter :9830</text>
-  <text x="200" y="601" text-anchor="middle" class="s">Reads ceph status, pvesh, /etc/pve/ha</text>
-  <text x="200" y="618" text-anchor="middle" class="s">Menu 2 / S  ·  exporter/install_exporter.sh</text>
-  <text x="200" y="640" text-anchor="middle" class="s">Remote mode: nothing is installed on the nodes,</text>
-  <text x="200" y="656" text-anchor="middle" class="s">Only a read-only API token (menu 17)</text>
+  <rect x="38" y="566" width="324" height="104" rx="9" fill="#16223b" stroke="#ef4444"/>
+  <text x="200" y="587" text-anchor="middle" class="t">Every node: zabbix-agent2  :10050</text>
+  <text x="200" y="605" text-anchor="middle" class="s">Ceph plugin → restful :8003</text>
+  <text x="200" y="623" text-anchor="middle" class="s">Cron every minute: ceph health →</text>
+  <text x="200" y="640" text-anchor="middle" class="m">/etc/zabbix/cephstatus.txt</text>
+  <text x="200" y="657" text-anchor="middle" class="s">(Fallback, read with vfs.file.contents)</text>
 
   <!-- ===================== MONITOR HOST ===================== -->
   <rect x="440" y="90" width="400" height="600" rx="14" fill="#111a2e" stroke="#22c55e" stroke-width="1.5" filter="url(#sh)"/>
@@ -144,27 +144,28 @@
   <text x="1120" y="650" text-anchor="middle" class="t">Ceph by Zabbix agent 2  +  health fallback</text>
   <text x="1120" y="667" text-anchor="middle" class="mo">{$CEPH.API.KEY} {$CEPH.USER} {$CEPH.API.URL}</text>
 
-  <!-- ===================== FLOWS ===================== -->
-  <path class="flow" d="M458,250 C420,250 400,249 364,249"/>
-  <text x="410" y="242" text-anchor="middle" class="lb">Pull</text>
-  <path class="flow" d="M458,296 C425,300 400,318 364,319"/>
-  <text x="410" y="322" text-anchor="middle" class="lb">API</text>
-  <path class="flow" d="M938,172 C885,176 880,240 824,250"/>
-  <text x="862" y="268" text-anchor="middle" class="lb">Scrape</text>
-  <path class="flow" d="M1250,300 C1250,294 1250,290 1250,282"/>
-  <text x="1240" y="295" text-anchor="end" class="lb">PromQL</text>
-  <path class="gflow" d="M824,176 C870,170 890,226 936,234"/>
-  <text x="880" y="160" text-anchor="middle" class="lg">SSH push</text>
-  <path class="gflow" d="M824,467 C875,467 890,392 936,384"/>
-  <text x="880" y="500" text-anchor="middle" class="lg">API import</text>
-  <path class="zflow" d="M938,606 C880,560 885,350 824,322"/>
-  <text x="880" y="566" text-anchor="middle" class="lz">HTTP</text>
-  <text x="880" y="579" text-anchor="middle" class="lz">/metrics</text>
-  <path class="zflow" d="M938,660 C900,712 560,716 410,700 C390,640 392,560 364,505"/>
-  <text x="640" y="728" text-anchor="middle" class="lz">Zabbix polls zabbix-agent2 :10050 on every node</text>
-  <path class="zflow" d="M200,426 C200,422 200,420 200,416"/>
-  <path class="gflow" d="M458,628 C420,628 400,560 364,512"/>
-  <text x="414" y="610" text-anchor="middle" class="lg">SSH</text>
+  <!-- ===================== FLOWS (thang / goc vuong, khong cheo) ===================== -->
+  <path class="flow" d="M458,249 H366"/>
+  <text x="412" y="241" text-anchor="middle" class="lb">Pull</text>
+  <path class="flow" d="M458,319 H366"/>
+  <text x="412" y="311" text-anchor="middle" class="lb">API</text>
+  <path class="gflow" d="M824,172 H934"/>
+  <text x="880" y="164" text-anchor="middle" class="lg">SSH push</text>
+  <path class="flow" d="M918,250 H826"/>
+  <text x="872" y="242" text-anchor="middle" class="lb">Scrape</text>
+  <path class="flow" d="M1250,300 V284"/>
+  <text x="1240" y="296" text-anchor="end" class="lb">PromQL</text>
+  <path class="zflow" d="M936,594 H900 V300 H826"/>
+  <text x="896" y="560" text-anchor="end" class="lz">HTTP</text>
+  <text x="896" y="573" text-anchor="end" class="lz">/metrics</text>
+  <path d="M890,467 H910" stroke="#111a2e" stroke-width="8"/>
+  <path class="gflow" d="M824,467 H918"/>
+  <text x="866" y="459" text-anchor="middle" class="lg">Import</text>
+  <path class="gflow" d="M458,618 H366"/>
+  <text x="412" y="610" text-anchor="middle" class="lg">SSH</text>
+  <path class="zflow" d="M1120,692 V716 H200 V674"/>
+  <text x="660" y="736" text-anchor="middle" class="lz">Zabbix polls zabbix-agent2 :10050 on every node</text>
+  <path class="zflow" d="M200,566 V556"/>
 
   <!-- ===================== WHAT EACH TOOL SHOWS ===================== -->
   <rect x="20" y="752" width="1300" height="420" rx="14" fill="#111a2e" stroke="#2a3a5c" stroke-width="1.5" filter="url(#sh)"/>
