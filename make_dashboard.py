@@ -312,8 +312,8 @@ def build(args):
                                                        "result": {"text": "-", "color": "text"}}}]),
                        ("custom.cellOptions", {"type": "color-text"})),
                    # Chuoi HA Groups dai (vd HIGH-MEMORY,INTEL-HIGH-CPU,P1-XD,Platinum-8260) bi cat
-                   # -> xuong dong trong o, rong hon, can trai; bam o de xem day du
-                   override("HA Groups", ("custom.width", 380), ("custom.align", "left"),
+                   # -> xuong dong trong o, rong hon, can giua (ca dau "-"); bam o de xem day du
+                   override("HA Groups", ("custom.width", 380), ("custom.align", "center"),
                             ("custom.cellOptions", {"type": "color-text", "wrapText": True}),
                             ("custom.inspect", True),
                             ("mappings", [

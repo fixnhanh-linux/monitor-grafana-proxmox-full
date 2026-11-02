@@ -1435,7 +1435,7 @@
               },
               {
                 "id": "custom.align",
-                "value": "left"
+                "value": "center"
               },
               {
                 "id": "custom.cellOptions",

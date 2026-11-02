@@ -4,6 +4,7 @@ Moi nhat o tren. Ma commit dang chay hien o dau menu (`phien ban 2026.10.30 · <
 
 ## Chua phat hanh
 
+- **Dashboard**: cot HA Groups can giua (ca dau `-` khi node khong co nhom), thang hang voi cac cot khac.
 - **Nhieu dashboard**: file dashboard luu tham so sinh (`fixnhanhArgs`), `make_dashboard.py --regen FILE`; `refresh` sinh lai + import moi `dashboard-*.json`; import giu folder hien tai cua dashboard tren Grafana (khong tu chuyen ve General); menu 11 chon duoc moi file.
 - **Toan bo chu hien thi khong dau**: dashboard (tieu de cot, mo ta, chu khi chua co du lieu), exporter 2026.10.30-8 (dong trang thai Ceph) — dong bo voi menu.sh; doc duoc tren moi terminal / font.
 - **Dashboard**: cot HA / HA Groups luon hien; node khong thuoc nhom nao ghi `-` (thay cho an ca cot / "No Group").
