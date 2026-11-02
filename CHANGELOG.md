@@ -6,7 +6,7 @@ Newest first. The running commit is shown in the menu header (`version 2026.10.3
 
 - **Folders renamed**: `grafana/` → `dashboard-grafana/`, `zabbix/` → `template-zabbix/` (templates no longer in a `templates/` sub-folder). `refresh` handles it, nothing to change on the host.
 - **New Zabbix template** `template-zabbix/pve-ceph-exporter-by-http.yaml`: reads the exporter's `/metrics` over HTTP (no agent) — Ceph health / recovery / unfound / inconsistent PGs, OSD and pool discovery, Proxmox nodes (up, CPU, memory, HA state, HA groups), quorum, exporter collectors; triggers match the Prometheus alerts, thresholds are macros.
-- **CI**: Zabbix templates checked by unit tests (uuids, keys, triggers, macros, metrics really exported) and imported into real Zabbix 6.0 and 7.0 (docker), then linked to a host.
+- **CI**: Zabbix templates checked by unit tests (uuids, keys, triggers, macros, metrics really exported) and imported into real Zabbix 6.0, 6.2 and 7.0 (docker), then linked to a host.
 - **Dashboard**: HA Groups colors fully automatic for new hosts: timer `pve-ceph-ha-colors` (installed by `refresh`) runs `ha-sync` every 5 minutes and regenerates + imports the dashboards when a new group string appears; colors are remembered per CPU type (`--color-state`, `.ha-colors.json`) so existing groups never change color; `dashboard-*.json` copies get the same colors.
 - **Dashboard**: Total Health shows `100%` when healthy (2 decimals only while recovering, e.g. `99.87%`).
 - **Dashboard**: HA Groups auto palette uses 8 clearly different hues first (no two look-alike colors such as purple / light purple), darker shades after that.

@@ -12,7 +12,7 @@ A toolkit that builds the **Proxmox - Ceph Prometheus** Grafana dashboard and fi
 | `prometheus/` | `pve-ceph-alerts.yml` — Prometheus alert rules: exporter, Ceph, Proxmox |
 | `template-zabbix/` | Zabbix templates (6.0+): `pve-ceph-exporter-by-http.yaml` (reads the exporter over HTTP, no agent), `ceph-health-fallback.yaml`; `setup_ceph_zabbix.sh` (Zabbix Agent 2 for Ceph on every node over SSH) |
 | `docs/` | Architecture diagram |
-| `tests/` | Unit tests (`python3 -m unittest discover -s tests`), run on GitHub Actions; CI also imports the Zabbix templates into real Zabbix 6.0 and 7.0 |
+| `tests/` | Unit tests (`python3 -m unittest discover -s tests`), run on GitHub Actions; CI also imports the Zabbix templates into real Zabbix 6.0, 6.2 and 7.0 |
 | `CHANGELOG.md` | Change log |
 
 Generated on the host (not in git): `dashboard-local.json`, `dashboard-<name>.json`, `prometheus-scrape-all.yml`, `.menu.conf`, `.grafana-token`, `.grafana-cert.pem`, `.ha-colors.json`, `.ha-groups.seen`.
@@ -383,7 +383,7 @@ Menu **26** → `w` (or `proxmox-menu watchdog`) installs the systemd timer `pve
 
 `template-zabbix/pve-ceph-exporter-by-http.yaml` gives Zabbix the same data as the Grafana dashboard and the Prometheus alerts, **without zabbix-agent**: one HTTP request per minute to the exporter's `/metrics`, every other item is computed from it.
 
-1. Zabbix web → **Data collection → Templates → Import** → the file (Zabbix 6.0+; tested on 6.0 and 7.0 in CI).
+1. Zabbix web → **Data collection → Templates → Import** → the file (Zabbix 6.0+; tested on 6.0, 6.2 and 7.0 in CI).
 2. **Data collection → Hosts → Create host**: interface = IP of the host running the exporter (the monitor host in remote mode, or the node), link `Proxmox Ceph by FIX NHANH exporter`.
 3. Remote mode (several clusters on one monitor host): one Zabbix host per cluster, same IP, macro `{$PVE.EXPORTER.PORT}` = that cluster's port (`proxmox-menu remote-list`).
 

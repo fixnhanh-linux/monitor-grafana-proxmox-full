@@ -9,7 +9,7 @@ jobs:
   check:
     runs-on: ubuntu-24.04
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
       - name: Bash syntax
         run: bash -n menu.sh && bash -n exporter/install_exporter.sh
@@ -36,15 +36,15 @@ jobs:
           mkdir -p /tmp/dq && python3 tests/dashboard_rules.py dashboard-grafana/proxmox_ceph_dashboard.json > /tmp/dq/dash-rules.yml
           docker run --rm -v /tmp/dq:/a:ro --entrypoint promtool prom/prometheus:v2.53.0 check rules /a/dash-rules.yml
 
-  # Import template Zabbix vao Zabbix that (6.0 LTS va 7.0 LTS) roi gan vao 1 host
+  # Import template Zabbix vao Zabbix that (6.0 LTS, 6.2, 7.0 LTS) roi gan vao 1 host
   zabbix-import:
     runs-on: ubuntu-24.04
     strategy:
       fail-fast: false
       matrix:
-        zabbix: ["6.0", "7.0"]
+        zabbix: ["6.0", "6.2", "7.0"]
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
       - name: Start Zabbix ${{ matrix.zabbix }} (postgres + server + web)
         run: |
