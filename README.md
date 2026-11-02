@@ -4,15 +4,18 @@
 
 A toolkit that builds the **Proxmox - Ceph Prometheus** Grafana dashboard and fills every panel that used to show `No data`.
 
-| File | Purpose |
+| Path | Purpose |
 |---|---|
-| `menu.sh` | **Management menu for everything**: checks, install, status, logs, dashboard generation / import, Prometheus checks |
-| `make_dashboard.py` | Generates the Grafana dashboard JSON |
-| `exporter/pve_ceph_extra_exporter.py` | Extra exporter: recovery / rebalance status, Total Health %, Recovery Speed, HA Groups; also re-serves ceph mgr + Proxmox metrics on one port |
-| `exporter/install_exporter.sh` | Installs the exporter as a systemd service on a Proxmox node |
-| `alerts/pve-ceph-alerts.yml` | Prometheus alert rules: exporter, Ceph, Proxmox |
+| `menu.sh` | **Management menu for everything** (`proxmox-menu`): checks, install, status, logs, dashboards, Prometheus, Zabbix, Docker, services |
+| `exporter/` | `pve_ceph_extra_exporter.py` (recovery / rebalance, Total Health %, Recovery Speed, HA Groups; re-serves ceph mgr + Proxmox metrics on one port), `install_exporter.sh`, systemd unit `pve-ceph-extra-exporter@.service`, `Dockerfile` |
+| `grafana/` | `make_dashboard.py` (dashboard generator) and `proxmox_ceph_dashboard.json` (default dashboard) |
+| `prometheus/` | `pve-ceph-alerts.yml` — Prometheus alert rules: exporter, Ceph, Proxmox |
+| `zabbix/` | `setup_ceph_zabbix.sh` (Zabbix Agent 2 for Ceph on every node over SSH) and `templates/ceph-health-fallback.yaml` |
+| `docs/` | Architecture diagram |
 | `tests/` | Unit tests (`python3 -m unittest discover -s tests`), run on GitHub Actions |
 | `CHANGELOG.md` | Change log |
+
+Generated on the host (not in git): `dashboard-local.json`, `dashboard-<name>.json`, `prometheus-scrape-all.yml`, `.menu.conf`, `.grafana-token`, `.grafana-cert.pem`.
 
 ## Why the old dashboard showed "No data"
 
@@ -128,8 +131,9 @@ If you move the tool folder, run `bash <new-folder>/menu.sh` once and the shortc
 | 24 | Manage containers: status, logs, restart, remove (back to systemd) |
 | 25 | Change the Docker IP range (`docker0` + range for new networks): checks private range / route overlap, backs up `daemon.json`, restarts Docker, checks containers come back; restores the old file if Docker fails |
 | 26 | **Services & health**: table of every exporter (local, `@cluster`, container) + Docker + watchdog with state, `/health`, port, start on boot; `r`/`s`/`t` restart / stop / start (one or `a` = all) then **verifies** active + `/health` within 40 s and prints logs on failure; `l` logs; `b`/`B` enable / disable start on boot; `w` watchdog |
+| 27 | **Zabbix: Ceph via Zabbix Agent 2** — runs `zabbix/setup_ceph_zabbix.sh` (see *Zabbix* below) |
 
-Run a single command without the menu: `proxmox-menu setup | check | install [port] | status | metrics | logs | restart | port <number> | uninstall | dashboard | import | prom | prom-check | doctor | update | refresh | about | remote-add [name] | remote-list | remote-test | remote-remove | prom-all | prom-push | prom-rules | urls | deps | firewall | docker-run | docker-manage | docker-net | services | watchdog`.
+Run a single command without the menu: `proxmox-menu setup | check | install [port] | status | metrics | logs | restart | port <number> | uninstall | dashboard | import | prom | prom-check | doctor | update | refresh | about | remote-add [name] | remote-list | remote-test | remote-remove | prom-all | prom-push | prom-rules | urls | deps | firewall | docker-run | docker-manage | docker-net | services | watchdog | zabbix-ceph`.
 
 The menu remembers the Grafana URL, Prometheus URL, dashboard title / UID in `.menu.conf`; the Grafana token (if saved) lives separately in `.grafana-token`.
 
@@ -265,7 +269,7 @@ With split files, answer `y` to *Push the file to the Prometheus host over SSH* 
 
 The SSH host, config file and directory are remembered in `.menu.conf`.
 
-After the scrape file, the tool offers to push the **alert rules** too (or `proxmox-menu prom-rules`): copies `alerts/pve-ceph-alerts.yml` into the `rule_files` directory in use (read from `prometheus.yml`, e.g. `/etc/prometheus/rules/`). If `prometheus.yml` does not load that directory yet, the tool adds it to `rule_files` (keeps a `.bak`). If `promtool check rules` + `check config` fail, both files are restored.
+After the scrape file, the tool offers to push the **alert rules** too (or `proxmox-menu prom-rules`): copies `prometheus/pve-ceph-alerts.yml` into the `rule_files` directory in use (read from `prometheus.yml`, e.g. `/etc/prometheus/rules/`). If `prometheus.yml` does not load that directory yet, the tool adds it to `rule_files` (keeps a `.bak`). If `promtool check rules` + `check config` fail, both files are restored.
 
 The menu header shows the running commit (e.g. `2026.10.30 · de76e86`); when GitHub has a newer one it shows **New version → pick 14**.
 
@@ -283,7 +287,7 @@ Answer `n` to the merge question (service runs with `--no-ceph-mgr --no-pve`). T
 
 ### Alert rules
 
-`alerts/pve-ceph-alerts.yml` ships these rules, applied to jobs containing `Proxmox-`:
+`prometheus/pve-ceph-alerts.yml` ships these rules, applied to jobs containing `Proxmox-`:
 
 | Group | Alert | When |
 |---|---|---|
@@ -316,13 +320,13 @@ Then reload Prometheus. Delivery (Telegram, email ...) is configured in Alertman
 ## 3. Generate and import the dashboard
 
 ```bash
-python3 make_dashboard.py -o proxmox_ceph_dashboard.json
+python3 grafana/make_dashboard.py -o grafana/proxmox_ceph_dashboard.json
 ```
 
 Options:
 
 ```bash
-python3 make_dashboard.py --title "Proxmox - Ceph DECO" --uid pve-ceph-deco --site-regex "/^Prometheus (FPT HN|CMC-Q7)$/" --nodes 5 --pools 4 --classes 1
+python3 grafana/make_dashboard.py --title "Proxmox - Ceph DECO" --uid pve-ceph-deco --site-regex "/^Prometheus (FPT HN|CMC-Q7)$/" --nodes 5 --pools 4 --classes 1
 ```
 
 - `--site-regex`: Prometheus datasource filter for the **Site** variable
@@ -343,10 +347,10 @@ Every `dashboard-<name>.json` in the tool folder stores the arguments used to cr
 Create it once (take the UID from the existing dashboard URL `/d/<uid>/...`; the same UID overwrites that dashboard):
 
 ```bash
-cd /root/monitor-grafana-proxmox-full && python3 make_dashboard.py -o dashboard-cmc.json --title "Proxmox - Ceph Prometheus CMC Q7 - FPT HCM - VIETTEL HCM - CMC HN" --uid fix --time-from now-5m --site-regex "/^(Prometheus FPT HCM|Prometheus FPT HN|Prometheus CMC-Q7|Prometheus VIETTEL HCM|Prometheus CMC HN)$/" --job-regex "/^(?!.*Proxmox-Cluster-DMS|.*Test|.*Deco).*Proxmox-/" --nodes 15 --pools 6 --ha-alias "BASIC-COMPUTING,INTEL-HIGH-CPU,P1-XD=BASIC+INTEL+P1-XD:purple" --ha-alias "Gold-6146,HIGH-FREQUENCY,P1-XD=Gold+HIGH+P1-XD:orange" --ha-alias "Gold-8260,INTEL-HIGH-CPU,P1-XD,Platinum-8260=Gold+INTEL+P1+Platinum:green" --ha-alias "Gold-8260,INTEL-HIGH-CPU,Platinum-8260=Gold+INTEL+Platinum:blue"
+cd /root/monitor-grafana-proxmox-full && python3 grafana/make_dashboard.py -o dashboard-cmc.json --title "Proxmox - Ceph Prometheus CMC Q7 - FPT HCM - VIETTEL HCM - CMC HN" --uid fix --time-from now-5m --site-regex "/^(Prometheus FPT HCM|Prometheus FPT HN|Prometheus CMC-Q7|Prometheus VIETTEL HCM|Prometheus CMC HN)$/" --job-regex "/^(?!.*Proxmox-Cluster-DMS|.*Test|.*Deco).*Proxmox-/" --nodes 15 --pools 6 --ha-alias "BASIC-COMPUTING,INTEL-HIGH-CPU,P1-XD=BASIC+INTEL+P1-XD:purple" --ha-alias "Gold-6146,HIGH-FREQUENCY,P1-XD=Gold+HIGH+P1-XD:orange" --ha-alias "Gold-8260,INTEL-HIGH-CPU,P1-XD,Platinum-8260=Gold+INTEL+P1+Platinum:green" --ha-alias "Gold-8260,INTEL-HIGH-CPU,Platinum-8260=Gold+INTEL+Platinum:blue"
 ```
 
-Regenerate one file with its saved arguments: `python3 make_dashboard.py --regen dashboard-cmc.json`.
+Regenerate one file with its saved arguments: `python3 grafana/make_dashboard.py --regen dashboard-cmc.json`.
 
 ## Customer dashboards
 
@@ -365,12 +369,45 @@ Menu **9** → `2` generates `dashboard-kh-<job>.json` for **one customer**:
 The tool asks for the customer's job (listed from Prometheus), the customer name, the **Grafana datasource name** (matched exactly), title and UID `kh-<job>`. Grafana permissions: create a **folder** for the customer → import the dashboard into it (menu 11 asks which file and the folder UID) → grant the customer's users / team **Viewer on that folder**, not at the organization level. Hidden variables only hide the UI — if the customer must never query other clusters, give them a separate Grafana organization with its own datasource.
 
 ```bash
-python3 make_dashboard.py --customer-job Proxmox-P1-XD --site-regex "/^Prometheus FPT HCM$/" --title "Customer P1-XD - Proxmox Ceph" --uid kh-p1-xd -o dashboard-kh-p1-xd.json
+python3 grafana/make_dashboard.py --customer-job Proxmox-P1-XD --site-regex "/^Prometheus FPT HCM$/" --title "Customer P1-XD - Proxmox Ceph" --uid kh-p1-xd -o dashboard-kh-p1-xd.json
 ```
 
 ## Watchdog: restart hung exporters automatically
 
 Menu **26** → `w` (or `proxmox-menu watchdog`) installs the systemd timer `pve-ceph-exporter-watchdog`, running **every 2 minutes**: it calls `/health` of every **running** exporter (local, `@cluster`, container `fixnhanh-pve-*`); hung (`503`) or no answer **twice in a row** restarts exactly that exporter. Services you stopped on purpose are not restarted. History: `journalctl -t pve-ceph-watchdog`. Run `w` again to turn it off and remove it.
+
+## Zabbix: Ceph via Zabbix Agent 2
+
+Independent of Prometheus / Grafana: Zabbix polls **zabbix-agent2** on every Proxmox node, whose built-in Ceph plugin reads the **ceph-mgr restful API** (`:8003`). A cron job on each node also writes `ceph health` to `/etc/zabbix/cephstatus.txt` every minute, as a fallback when the API is down.
+
+Run from any host that can SSH to the nodes (e.g. the monitor host):
+
+```bash
+proxmox-menu zabbix-ceph
+```
+
+(menu **27**, or `bash zabbix/setup_ceph_zabbix.sh <zabbix-ip> <node1> <node2> ...`). It asks for the Zabbix server / proxy IP and the node IPs; SSH keys are used when present, otherwise the root password is asked once (`sshpass`, never shown in `ps`). On every node it:
+
+1. Installs `zabbix-agent2` if missing (needs the Zabbix package repo) and sets `Server` / `ServerActive`, `Plugins.Ceph.InsecureSkipVerify=true` (keeps `zabbix_agent2.conf.bak`).
+2. Installs `/etc/zabbix/cephstatus.sh` + a cron job every minute → `/etc/zabbix/cephstatus.txt`.
+3. Restarts and enables the agent.
+
+On the first node it enables the `restful` mgr module, creates the API key `zabbix-monitor` and a self-signed cert, then prints the three macros:
+
+```text
+{$CEPH.API.KEY} = <key>
+{$CEPH.USER}    = zabbix-monitor
+{$CEPH.API.URL} = https://<active-mgr>:8003
+```
+
+In Zabbix web (**Data collection → Hosts → host**):
+
+| Template | How |
+|---|---|
+| `Ceph by Zabbix agent 2` | Built into Zabbix. Link it and set the three macros above (**Macros → Inherited and host macros**) |
+| `Ceph health fallback by Zabbix agent 2` | Import `zabbix/templates/ceph-health-fallback.yaml` once (**Data collection → Templates → Import**, Zabbix 6.0+), then link it. Items: `vfs.file.contents[/etc/zabbix/cephstatus.txt]` (trigger: not `HEALTH_OK`), `vfs.file.time[...]` (trigger: not updated for 5 minutes) |
+
+The fallback uses `vfs.file.contents`, so `AllowKey=system.run[*]` and `docfile.sh` from the old script are no longer needed (the script removes `docfile.sh`). If the restful module is not available on your Ceph version, the script says so — use the Prometheus / Grafana path instead.
 
 ## Exporter metrics
 

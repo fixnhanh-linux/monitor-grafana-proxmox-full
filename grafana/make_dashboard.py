@@ -13,8 +13,8 @@ Khac ban dashboard tay cu:
     co gia tri mac dinh khi khong co recovery.
 
 Vi du:
-  python make_dashboard.py -o proxmox_ceph_dashboard.json
-  python make_dashboard.py --title "Proxmox - Ceph DECO" --uid pve-ceph-deco \
+  python3 grafana/make_dashboard.py -o grafana/proxmox_ceph_dashboard.json
+  python3 grafana/make_dashboard.py --title "Proxmox - Ceph DECO" --uid pve-ceph-deco \
       --site-regex "/^Prometheus (FPT HN|CMC-Q7)$/" --job-regex "/.*Proxmox-/"
 """
 

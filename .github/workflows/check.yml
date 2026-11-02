@@ -18,15 +18,15 @@ jobs:
         run: shellcheck -S error menu.sh exporter/install_exporter.sh
 
       - name: Python compile
-        run: python3 -m py_compile exporter/pve_ceph_extra_exporter.py make_dashboard.py
+        run: python3 -m py_compile exporter/pve_ceph_extra_exporter.py grafana/make_dashboard.py
 
       - name: Unit tests
         run: python3 -m unittest discover -s tests -v
 
       - name: Regenerate dashboard, compare with repo file
         run: |
-          python3 make_dashboard.py -o /tmp/dash.json
-          python3 -c "import json,sys; a=json.load(open('/tmp/dash.json')); b=json.load(open('proxmox_ceph_dashboard.json')); sys.exit(0 if a==b else 'proxmox_ceph_dashboard.json was not regenerated after changing make_dashboard.py')"
+          python3 grafana/make_dashboard.py -o /tmp/dash.json
+          python3 -c "import json,sys; a=json.load(open('/tmp/dash.json')); b=json.load(open('grafana/proxmox_ceph_dashboard.json')); sys.exit(0 if a==b else 'grafana/proxmox_ceph_dashboard.json was not regenerated after changing grafana/make_dashboard.py')"
 
       - name: promtool check rules
-        run: docker run --rm -v "$PWD/alerts:/a:ro" --entrypoint promtool prom/prometheus:v2.53.0 check rules /a/pve-ceph-alerts.yml
+        run: docker run --rm -v "$PWD/prometheus:/a:ro" --entrypoint promtool prom/prometheus:v2.53.0 check rules /a/pve-ceph-alerts.yml

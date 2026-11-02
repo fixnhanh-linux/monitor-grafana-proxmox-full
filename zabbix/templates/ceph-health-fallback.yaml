@@ -1,0 +1,49 @@
+# FIX NHANH - template du phong cho Ceph: doc /etc/zabbix/cephstatus.txt do
+# zabbix/setup_ceph_zabbix.sh ghi moi phut (ceph health). Dung vfs.file.contents,
+# khong can AllowKey=system.run[*]. Gan cung host voi "Ceph by Zabbix agent 2".
+# Import: Zabbix web -> Data collection -> Templates -> Import (Zabbix 6.0+).
+zabbix_export:
+  version: '6.0'
+  date: '2026-11-02T00:00:00Z'
+  groups:
+    - uuid: 20bee2ac2d434e9b81be9def70b8d82b
+      name: Templates/Applications
+  templates:
+    - uuid: 55b8623a48b54743ade436050fc6bfae
+      template: 'Ceph health fallback by Zabbix agent 2'
+      name: 'Ceph health fallback by Zabbix agent 2'
+      description: 'Reads /etc/zabbix/cephstatus.txt written every minute by zabbix/setup_ceph_zabbix.sh (ceph health). Works even when the Ceph RESTful API is down. FIX NHANH.'
+      groups:
+        - name: Templates/Applications
+      items:
+        - uuid: 343cdbcc16ff4ead836090c6afbe72e8
+          name: 'Ceph: health (cephstatus.txt)'
+          key: 'vfs.file.contents[/etc/zabbix/cephstatus.txt]'
+          delay: 1m
+          history: 7d
+          trends: '0'
+          value_type: TEXT
+          tags:
+            - tag: component
+              value: ceph
+          triggers:
+            - uuid: c77a28a0f1024ff0a03a69908bac41f2
+              expression: 'find(/Ceph health fallback by Zabbix agent 2/vfs.file.contents[/etc/zabbix/cephstatus.txt],,"like","HEALTH_OK")=0'
+              name: 'Ceph: health is not HEALTH_OK'
+              priority: AVERAGE
+              description: 'Run "ceph health detail" on the node.'
+        - uuid: eed6a1b2f7f74a4fb8a352bec0cce767
+          name: 'Ceph: cephstatus.txt last update'
+          key: 'vfs.file.time[/etc/zabbix/cephstatus.txt]'
+          delay: 1m
+          history: 7d
+          units: unixtime
+          tags:
+            - tag: component
+              value: ceph
+          triggers:
+            - uuid: 84d09ffe0cd644499974f32e4bc75ea1
+              expression: 'now()-last(/Ceph health fallback by Zabbix agent 2/vfs.file.time[/etc/zabbix/cephstatus.txt])>300'
+              name: 'Ceph: cephstatus.txt not updated for 5 minutes'
+              priority: WARNING
+              description: 'The cron job /etc/zabbix/cephstatus.sh or the ceph command is stuck. Check: crontab -l, ceph health.'

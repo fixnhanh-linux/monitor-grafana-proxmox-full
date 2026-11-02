@@ -10,7 +10,7 @@ import sys
 import unittest
 from types import SimpleNamespace
 
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "grafana"))
 import make_dashboard as md  # noqa: E402
 
 

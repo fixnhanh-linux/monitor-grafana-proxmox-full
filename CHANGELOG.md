@@ -4,6 +4,9 @@ Newest first. The running commit is shown in the menu header (`version 2026.10.3
 
 ## Unreleased
 
+- **Repo layout**: `exporter/`, `grafana/` (`make_dashboard.py`, default dashboard), `prometheus/` (alert rules), `zabbix/`, `docs/`, `tests/`; `menu.sh` stays at the root. Old local leftovers removed.
+- **Zabbix merged in** (from `huong-dan-monitor-ceph-proxmox-zabbix`): `zabbix/setup_ceph_zabbix.sh` (menu 27 / `zabbix-ceph`) configures zabbix-agent2 for Ceph on every node over SSH (key first, password once via `sshpass -e`), cron fallback file, restful API key + macros; new template `zabbix/templates/ceph-health-fallback.yaml` reads the fallback file with `vfs.file.contents` — `AllowKey=system.run[*]` and `docfile.sh` are no longer used.
+- **Architecture diagram** redrawn: cluster, monitor host, Prometheus, Grafana and Zabbix with every data flow.
 - **English UI**: every message of the menu, exporter (2026.10.30-9), dashboards and alert rules is now in English; code comments stay in Vietnamese (unaccented). README / CHANGELOG / LICENSE in English.
 - **Dashboard**: HA Groups column centered (including `-` for nodes without a group).
 - **Multiple dashboards**: dashboard files store their generation arguments (`fixnhanhArgs`), `make_dashboard.py --regen FILE`; `refresh` regenerates + imports every `dashboard-*.json`; imports keep the dashboard's current Grafana folder (no move to General); menu 11 can pick any file.
