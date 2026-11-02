@@ -4,6 +4,7 @@ Mới nhất ở trên. Mã commit đang chạy hiện ở đầu menu (`phien b
 
 ## Chưa phát hành
 
+- **Exporter 2026.10.30-7 — HA rule PVE 9**: bỏ rule node-affinity bao trùm **mọi node** (vd `ha-rule-7fa207ce-7b43` — không phải nhóm) và rule đang tắt; rule có `comment` thì hiện comment thay cho mã `ha-rule-…`. Cluster không còn rule có ý nghĩa thì cột HA / HA Groups trên dashboard tự ẩn.
 - **Alert `PveCephExporterDown`** chỉ báo target của exporter này (đã từng xuất `pve_ceph_extra_exporter_build_info` trong 1 ngày) — không còn báo sai mgr standby / pve exporter cũ của các job scrape thẳng.
 - **Lệnh tắt `proxmox-menu`**: tự tạo `/usr/local/bin/proxmox-menu` khi chạy bằng root, gõ ở bất kỳ đâu; đổi thư mục tool thì tự trỏ lại.
 - **`proxmox-menu refresh`** tự `git pull` trước rồi chạy bằng code mới — không cần `cd` + `git pull` nữa.

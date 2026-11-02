@@ -53,6 +53,32 @@ class HaCfg(unittest.TestCase):
         self.assertEqual(ex.parse_ha_cfg(rules, ("node-affinity",)), {"ha-rule-1": ["pve3"]})
 
 
+class HaRules(unittest.TestCase):
+    NODES = ["pve%d" % i for i in range(1, 5)]
+
+    def r(self, nodes, disable=False, comment=""):
+        return {"nodes": nodes, "disable": disable, "comment": comment}
+
+    def test_rule_all_nodes_hidden(self):
+        # PVE 9: rule node-affinity chua MOI node (vd ha-rule-7fa207ce-7b43) khong phai nhom
+        self.assertEqual(ex.ha_by_host({}, {"ha-rule-7fa207ce-7b43": self.r(self.NODES)}, self.NODES), {})
+
+    def test_rule_subset_comment_disabled(self):
+        rules = {"ha-rule-aaaa": self.r(["pve1", "pve2"], comment="Gold"),
+                 "ha-rule-bbbb": self.r(["pve3"], disable=True),
+                 "ha-group-Silver": self.r(["pve2"])}
+        self.assertEqual(ex.ha_by_host({}, rules, self.NODES), {"pve1": "Gold", "pve2": "Gold,ha-group-Silver"})
+
+    def test_group_pve8_kept(self):
+        self.assertEqual(ex.ha_by_host({"All": self.r(self.NODES)}, {}, self.NODES)["pve1"], "All")
+
+    def test_parse_rules_cfg(self):
+        cfg = ("node-affinity: ha-rule-1\n\tnodes pve1:2,pve2\n\tdisable 1\n\tcomment Nhom A\n"
+               "\tresources vm:100\n")
+        self.assertEqual(ex.parse_ha_sections(cfg, ("node-affinity",)),
+                         {"ha-rule-1": {"nodes": ["pve1", "pve2"], "disable": True, "comment": "Nhom A"}})
+
+
 class PveMetrics(unittest.TestCase):
     def test_cluster_and_nodes(self):
         status = [{"type": "cluster", "name": "proxmox-1", "nodes": 2, "quorate": 1, "version": 4}]

@@ -51,7 +51,7 @@ from socketserver import ThreadingMixIn
 from urllib.error import HTTPError
 from urllib.request import Request, urlopen
 
-VERSION = "2026.10.30-6"
+VERSION = "2026.10.30-7"
 
 HA_GROUPS_CFG = "/etc/pve/ha/groups.cfg"
 HA_RULES_CFG = "/etc/pve/ha/rules.cfg"  # PVE 9: HA group -> node-affinity rule
@@ -173,8 +173,8 @@ def ceph_metrics(r):
 
 
 # ---------------------------------------------------------------- HA groups
-def parse_ha_cfg(text, section_types):
-    """Doc file cau hinh dang section cua PVE, tra ve {ten: [node,...]}."""
+def parse_ha_sections(text, section_types):
+    """Doc file cau hinh dang section cua PVE -> {ten: {"nodes": [...], "disable": bool, "comment": str}}."""
     result, cur = {}, None
     for raw in text.splitlines():
         line = raw.rstrip()
@@ -184,29 +184,53 @@ def parse_ha_cfg(text, section_types):
         if m and not raw[0].isspace():
             cur = m.group(2) if m.group(1) in section_types else None
             if cur is not None:
-                result.setdefault(cur, [])
+                result.setdefault(cur, {"nodes": [], "disable": False, "comment": ""})
             continue
         if cur is None:
             continue
         kv = line.strip().split(None, 1)
         if len(kv) == 2 and kv[0] == "nodes":
-            for n in kv[1].split(","):
-                n = n.strip().split(":")[0]  # bo priority "pve1:2"
-                if n:
-                    result[cur].append(n)
+            result[cur]["nodes"] += parse_nodes(kv[1])  # bo priority "pve1:2"
+        elif len(kv) == 2 and kv[0] == "disable":
+            result[cur]["disable"] = kv[1].strip() not in ("0", "")
+        elif len(kv) == 2 and kv[0] == "comment":
+            result[cur]["comment"] = kv[1].strip()
     return result
 
 
+def parse_ha_cfg(text, section_types):
+    """{ten: [node,...]} (giu cho tuong thich)."""
+    return {k: v["nodes"] for k, v in parse_ha_sections(text, section_types).items()}
+
+
+def ha_by_host(groups, rules, all_nodes):
+    """groups / rules: {ten: {"nodes", "disable", "comment"}} -> {host: "ten1,ten2"}.
+    PVE 9 doi HA group thanh node-affinity rule: bo rule dang tat va rule bao trum MOI node
+    (khong noi len nhom nao, vd ha-rule-xxxx tao tu dong); rule co comment thi hien comment."""
+    allset = set(all_nodes)
+    out = {}
+    for kind, items in (("group", groups), ("rule", rules)):
+        for name, it in items.items():
+            nodes = set(it["nodes"])
+            if not nodes or (kind == "rule" and (it.get("disable") or (len(allset) > 1 and nodes >= allset))):
+                continue
+            label = (it.get("comment") or name) if kind == "rule" else name
+            for n in nodes:
+                out.setdefault(n, set()).add(label.replace(",", " "))
+    return {h: ",".join(sorted(g)) for h, g in out.items()}
+
+
 def ha_groups_by_host():
-    groups = {}
-    for path, types in ((HA_GROUPS_CFG, ("group",)),
-                        (HA_RULES_CFG, ("node-affinity",))):
-        if os.path.exists(path):
-            with open(path, encoding="utf-8", errors="replace") as f:
-                for name, nodes in parse_ha_cfg(f.read(), types).items():
-                    for n in nodes:
-                        groups.setdefault(n, set()).add(name)
-    return {h: ",".join(sorted(g)) for h, g in groups.items()}
+    def read(path, types):
+        if not os.path.exists(path):
+            return {}
+        with open(path, encoding="utf-8", errors="replace") as f:
+            return parse_ha_sections(f.read(), types)
+    try:
+        all_nodes = list((read_json(PVE_MEMBERS).get("nodelist") or {}).keys())
+    except Exception:
+        all_nodes = []
+    return ha_by_host(read(HA_GROUPS_CFG, ("group",)), read(HA_RULES_CFG, ("node-affinity",)), all_nodes)
 
 
 def ha_metrics(by_host):
@@ -391,7 +415,8 @@ def remote_ceph_status(api):
 
 
 def remote_ha_groups(api):
-    groups, ok, last = {}, False, None
+    found = {"group": {}, "rule": {}}
+    ok, last = False, None
     for path, kind, key in (("/cluster/ha/groups", None, "group"),
                             ("/cluster/ha/rules", "node-affinity", "rule")):  # PVE 9
         try:
@@ -403,11 +428,16 @@ def remote_ha_groups(api):
         for it in items:
             if kind and it.get("type") != kind:
                 continue
-            for n in parse_nodes(it.get("nodes")):
-                groups.setdefault(n, set()).add(it.get(key, "?"))
+            found[key][it.get(key, "?")] = {"nodes": parse_nodes(it.get("nodes")),
+                                            "disable": bool(int(it.get("disable") or 0)),
+                                            "comment": (it.get("comment") or "").strip()}
     if not ok:
         raise RuntimeError("khong doc duoc HA groups / rules: %s" % last)
-    return {h: ",".join(sorted(g)) for h, g in groups.items()}
+    try:
+        all_nodes = [n.get("name") for n in api.get("/cluster/status") or [] if n.get("type") == "node"]
+    except Exception:
+        all_nodes = []
+    return ha_by_host(found["group"], found["rule"], all_nodes)
 
 
 def remote_mgr_metrics(mgr_hosts, timeout, start=0):
