@@ -1463,34 +1463,44 @@ do_docker_run() {
     sel=$(ask "Chay cluster nao bang Docker (ten, cach nhau dau cach, hoac all)" "all")
     if [ "$sel" = all ]; then list=$names; else list=$sel; fi
 
-    ver=$(sed -n 's/^VERSION = "\(.*\)"/\1/p' "$EXPORTER_SRC")
-    info "Build image ${W}$DOCKER_IMAGE:$ver${N}..."
-    docker build -q -t "$DOCKER_IMAGE:$ver" -t "$DOCKER_IMAGE:latest" "$DIR/exporter" 2>&1 | sub \
-        || { err "Build image loi"; return 1; }
-
-    for n in $list; do
-        f="$REMOTE_DIR/$n.env"
-        [ -f "$f" ] || { err "Khong co cluster '$n'"; continue; }
-        p=$(env_get "$f" PORT); c=$(container_of "$n")
-        if [ "$(systemctl is-active "$SERVICE@$n" 2>/dev/null)" = active ]; then
-            info "$n: dung service systemd de chuyen sang Docker (cung port $p)"
-            systemctl disable --now "$SERVICE@$n" >/dev/null 2>&1
-        fi
-        docker rm -f "$c" >/dev/null 2>&1
-        if docker run -d --name "$c" --restart unless-stopped -p "$p:$p" --env-file "$f" \
-                --memory 256m --cpus 0.25 --read-only --cap-drop ALL \
-                --security-opt no-new-privileges "$DOCKER_IMAGE:$ver" >/dev/null; then
-            sleep 5
-            if curl -sf --max-time 60 "http://127.0.0.1:$p/metrics" | grep -q '^pve_ceph_extra_exporter_up'; then
-                ok "$n: container ${W}$c${N} chay tai ${W}http://$(local_ip):$p/metrics${N}"
-            else
-                err "$n: container chua tra metric → docker logs $c"
-            fi
-        else
-            err "$n: docker run loi"
-        fi
-    done
+    ver=$(docker_build_image) || return 1
+    for n in $list; do docker_run_cluster "$n" "$ver"; done
     info "Target Prometheus khong doi: $(local_ip):<port> nhu khi chay systemd"
+}
+
+docker_build_image() {  # build image theo VERSION cua exporter -> in version (da co thi bo qua)
+    local ver; ver=$(sed -n 's/^VERSION = "\(.*\)"/\1/p' "$EXPORTER_SRC")
+    if docker image inspect "$DOCKER_IMAGE:$ver" >/dev/null 2>&1; then
+        info "Image ${W}$DOCKER_IMAGE:$ver${N} da co" >&2
+    else
+        info "Build image ${W}$DOCKER_IMAGE:$ver${N}..." >&2
+        docker build -q -t "$DOCKER_IMAGE:$ver" -t "$DOCKER_IMAGE:latest" "$DIR/exporter" 2>&1 | sub >&2
+        docker image inspect "$DOCKER_IMAGE:$ver" >/dev/null 2>&1 || { err "Build image loi" >&2; return 1; }
+    fi
+    echo "$ver"
+}
+
+docker_run_cluster() {  # docker_run_cluster TEN VERSION -> (tao lai) container cua cluster, kiem tra metric
+    local n="$1" ver="$2" f p c
+    f="$REMOTE_DIR/$n.env"
+    [ -f "$f" ] || { err "Khong co cluster '$n'"; return 1; }
+    p=$(env_get "$f" PORT); c=$(container_of "$n")
+    if [ "$(systemctl is-active "$SERVICE@$n" 2>/dev/null)" = active ]; then
+        info "$n: dung service systemd de chuyen sang Docker (cung port $p)"
+        systemctl disable --now "$SERVICE@$n" >/dev/null 2>&1
+    fi
+    docker rm -f "$c" >/dev/null 2>&1
+    if ! docker run -d --name "$c" --restart unless-stopped -p "$p:$p" --env-file "$f" \
+            --memory 256m --cpus 0.25 --read-only --cap-drop ALL \
+            --security-opt no-new-privileges "$DOCKER_IMAGE:$ver" >/dev/null; then
+        err "$n: docker run loi"; return 1
+    fi
+    sleep 5
+    if curl -sf --max-time 60 "http://127.0.0.1:$p/metrics" | grep -q '^pve_ceph_extra_exporter_up'; then
+        ok "$n: container ${W}$c${N} ($ver) chay tai ${W}http://$(local_ip):$p/metrics${N}"
+    else
+        err "$n: container chua tra metric → docker logs $c"; return 1
+    fi
 }
 
 # =============================================================================
@@ -1507,7 +1517,24 @@ do_refresh() {
             install -m 0755 "$EXPORTER_SRC" "$BIN" && systemctl restart "$SERVICE" \
                 && ok "Exporter local: ban $(sed -n 's/^VERSION = "\(.*\)"/\1/p' "$BIN")" || fail+=("exporter local")
         fi
-        [ -n "$(remote_names)" ] && { remote_refresh_after_update || fail+=("exporter remote"); }
+        if [ -n "$(remote_names)" ]; then
+            remote_refresh_after_update >/dev/null || fail+=("exporter remote")
+            # Cluster chay Docker: build image ban moi (neu chua co) roi tao lai container, cung port
+            local n dk=() cur ver
+            for n in $(remote_names); do has docker && [ "$(container_state "$n")" = running ] && dk+=("$n"); done
+            if [ "${#dk[@]}" -gt 0 ]; then
+                if ver=$(docker_build_image); then
+                    for n in "${dk[@]}"; do
+                        cur=$(docker inspect -f '{{.Config.Image}}' "$(container_of "$n")" 2>/dev/null)
+                        if [ "$cur" = "$DOCKER_IMAGE:$ver" ]; then ok "$n: container da la ban $ver"
+                        else docker_run_cluster "$n" "$ver" || fail+=("container $n"); fi
+                    done
+                else fail+=("build image"); fi
+            fi
+            for n in $(remote_names); do
+                [ "$(systemctl is-active "$SERVICE@$n" 2>/dev/null)" = active ] && ok "$n: service systemd da chay lai ban moi"
+            done
+        fi
         [ -f "$UNIT" ] || [ -n "$(remote_names)" ] || info "May nay chua co exporter"
     fi
 

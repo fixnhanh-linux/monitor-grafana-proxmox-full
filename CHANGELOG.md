@@ -4,6 +4,7 @@ Mới nhất ở trên. Mã commit đang chạy hiện ở đầu menu (`phien b
 
 ## Chưa phát hành
 
+- **`refresh`** giờ cập nhật luôn cluster chạy Docker: build image theo phiên bản exporter (có rồi thì bỏ qua), tạo lại container cùng port, kiểm tra trả metric; container đã đúng phiên bản thì để nguyên.
 - **`bash menu.sh refresh`**: cập nhật toàn bộ không hỏi — cài lại exporter, sinh + import dashboard bằng cấu hình / token đã lưu, bảng dịch vụ, kiểm tra Prometheus.
 - Payload import Grafana gửi dạng ASCII, không hỏng khi máy chạy locale không phải UTF-8.
 - **Dashboard**: cột HA Groups không còn bị cắt chữ — xuống dòng trong ô, rộng 380, căn trái, bấm ô để xem đầy đủ.
