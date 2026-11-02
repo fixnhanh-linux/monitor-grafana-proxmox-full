@@ -51,7 +51,7 @@ from socketserver import ThreadingMixIn
 from urllib.error import HTTPError
 from urllib.request import Request, urlopen
 
-VERSION = "2026.10.30-8"
+VERSION = "2026.10.30-9"
 
 HA_GROUPS_CFG = "/etc/pve/ha/groups.cfg"
 HA_RULES_CFG = "/etc/pve/ha/rules.cfg"  # PVE 9: HA group -> node-affinity rule
@@ -121,7 +121,7 @@ def parse_ceph_status(st):
         if unfound:
             parts.append("unfound %d" % unfound)
         content = "%s - Recovery/Rebalance: %.2f%% (%s)" % (
-            health, percent, ", ".join(parts) or "dang xu ly")
+            health, percent, ", ".join(parts) or "in progress")
         if speed > 0:
             content += " - %s/s" % fmt_bytes(speed)
         if unfound:
@@ -134,7 +134,7 @@ def parse_ceph_status(st):
         if not_clean:
             content = "%s - %d/%d PG active+clean" % (health, clean, num_pgs)
         else:
-            content = "%s - Tat ca %d PG active+clean, khong co recovery" % (
+            content = "%s - All %d PGs active+clean, no recovery" % (
                 health, num_pgs)
 
     return {
@@ -147,7 +147,7 @@ def parse_ceph_status(st):
 
 def ceph_metrics(r):
     lines = [
-        "# HELP ceph_custom_recovery_info Trang thai recovery 1 dong (0=OK,1=recovery,2=loi).",
+        "# HELP ceph_custom_recovery_info One-line recovery status (0=OK,1=recovery,2=error).",
         "# TYPE ceph_custom_recovery_info gauge",
         'ceph_custom_recovery_info{content="%s",state="%s"} %d'
         % (esc(r["content"]), r["state"], r["code"]),
@@ -234,7 +234,7 @@ def ha_groups_by_host():
 
 
 def ha_metrics(by_host):
-    lines = ["# HELP pve_ha_groups_custom_info HA group / node-affinity rule cua node.",
+    lines = ["# HELP pve_ha_groups_custom_info HA group / node-affinity rule of the node.",
              "# TYPE pve_ha_groups_custom_info gauge"]
     for host, g in sorted(by_host.items()):
         lines.append('pve_ha_groups_custom_info{host="%s",groups="%s"} 1' % (esc(host), esc(g)))
@@ -248,7 +248,7 @@ def ceph_mgr_url(ceph_bin, timeout):
                                   stderr=subprocess.DEVNULL, timeout=timeout)
     url = json.loads(out.decode("utf-8", "replace")).get("prometheus")
     if not url:
-        raise RuntimeError("chua bat module prometheus: ceph mgr module enable prometheus")
+        raise RuntimeError("prometheus module not enabled: ceph mgr module enable prometheus")
     return url
 
 
@@ -258,7 +258,7 @@ def ceph_mgr_metrics(url, timeout):
     with urlopen(url.rstrip("/") + "/metrics", timeout=timeout) as resp:
         text = resp.read().decode("utf-8", "replace")
     if "ceph_health_status" not in text:
-        raise RuntimeError("mgr tra ve rong (standby?)")
+        raise RuntimeError("mgr returned no data (standby?)")
     return text.rstrip("\n").splitlines()
 
 
@@ -373,7 +373,7 @@ class PveApi(object):
             self.ctx.verify_mode = ssl.CERT_NONE
 
     def get(self, path):
-        last = RuntimeError("chua cau hinh PVE_API")
+        last = RuntimeError("PVE_API not configured")
         for i in [(self.good + k) % len(self.urls) for k in range(len(self.urls))]:
             req = Request(self.urls[i] + "/api2/json" + path,
                           headers={"Authorization": "PVEAPIToken=" + self.token})
@@ -411,7 +411,7 @@ def remote_ceph_status(api):
     for n in api.get("/cluster/status") or []:
         if n.get("type") == "node" and n.get("online"):
             return api.get("/nodes/%s/ceph/status" % n.get("name"))
-    raise RuntimeError("khong co node online")
+    raise RuntimeError("no node online")
 
 
 def remote_ha_groups(api):
@@ -432,7 +432,7 @@ def remote_ha_groups(api):
                                             "disable": bool(int(it.get("disable") or 0)),
                                             "comment": (it.get("comment") or "").strip()}
     if not ok:
-        raise RuntimeError("khong doc duoc HA groups / rules: %s" % last)
+        raise RuntimeError("cannot read HA groups / rules: %s" % last)
     try:
         all_nodes = [n.get("name") for n in api.get("/cluster/status") or [] if n.get("type") == "node"]
     except Exception:
@@ -451,7 +451,7 @@ def remote_mgr_metrics(mgr_hosts, timeout, start=0):
             return ceph_mgr_metrics(url, timeout), i
         except Exception as e:
             errs.append("%s: %s" % (h, e))
-    raise RuntimeError("; ".join(errs) or "chua cau hinh CEPH_MGR")
+    raise RuntimeError("; ".join(errs) or "CEPH_MGR not configured")
 
 
 # ---------------------------------------------------------------- server
@@ -583,7 +583,7 @@ def make_handler(collector):
                     body = ("ok %ds\n" % age).encode()
                 else:
                     code = 503
-                    body = ("stale %s\n" % ("chua thu thap" if age is None else "%ds" % age)).encode()
+                    body = ("stale %s\n" % ("no collection yet" if age is None else "%ds" % age)).encode()
                 ctype = "text/plain"
             else:
                 body = b"<a href='/metrics'>/metrics</a> <a href='/health'>/health</a>\n"
@@ -605,30 +605,30 @@ class Server(ThreadingMixIn, HTTPServer):
 
 def main():
     env = os.environ.get
-    ap = argparse.ArgumentParser(description="Exporter Proxmox + Ceph (local tren node / remote qua API)")
+    ap = argparse.ArgumentParser(description="Proxmox + Ceph exporter (local on a node / remote over the API)")
     ap.add_argument("--listen", default=env("LISTEN", "0.0.0.0"))
     ap.add_argument("--port", type=int, default=int(env("PORT", "9830")))
     ap.add_argument("--remote", action="store_true", default=env("REMOTE", "") == "1",
-                    help="lay du lieu qua API Proxmox + ceph mgr, khong can chay tren node")
-    ap.add_argument("--pve-api", default=env("PVE_API", ""), help="node1,node2 hoac https://node1:8006,...")
+                    help="collect over the Proxmox API + ceph mgr, no need to run on a node")
+    ap.add_argument("--pve-api", default=env("PVE_API", ""), help="node1,node2 or https://node1:8006,...")
     ap.add_argument("--pve-token", default=env("PVE_TOKEN", ""),
-                    help="USER@REALM!TOKENID=SECRET (nen dat qua bien moi truong PVE_TOKEN)")
+                    help="USER@REALM!TOKENID=SECRET (better passed via the PVE_TOKEN env var)")
     ap.add_argument("--verify-tls", action="store_true", default=env("PVE_VERIFY_TLS", "0") == "1")
     ap.add_argument("--ceph-mgr", default=env("CEPH_MGR", ""), help="host:9283,... (remote)")
     ap.add_argument("--ceph-bin", default="ceph")
     ap.add_argument("--pvesh-bin", default="pvesh")
-    ap.add_argument("--ceph-mgr-url", default="", help="mac dinh lay tu `ceph mgr services`")
+    ap.add_argument("--ceph-mgr-url", default="", help="default: taken from `ceph mgr services`")
     ap.add_argument("--no-ceph-mgr", action="store_true",
-                    help="khong phat lai metric ceph mgr (Prometheus scrape :9283 rieng)")
+                    help="do not re-serve ceph mgr metrics (Prometheus scrapes :9283 separately)")
     ap.add_argument("--no-pve", action="store_true",
-                    help="khong xuat metric Proxmox (da co prometheus-pve-exporter rieng)")
-    ap.add_argument("--timeout", type=int, default=10, help="timeout lenh ceph (giay)")
+                    help="do not export Proxmox metrics (prometheus-pve-exporter runs separately)")
+    ap.add_argument("--timeout", type=int, default=10, help="ceph command timeout (seconds)")
     ap.add_argument("--interval", type=int, default=int(env("INTERVAL", "30")),
-                    help="chu ky thu thap nen (giay); scrape chi doc ket qua san co")
-    ap.add_argument("--once", action="store_true", help="in metric ra stdout roi thoat")
+                    help="background collection interval (seconds); scrapes only read the cached result")
+    ap.add_argument("--once", action="store_true", help="print metrics to stdout and exit")
     args = ap.parse_args()
     if args.remote and not (args.pve_api and args.pve_token):
-        ap.error("--remote can PVE_API va PVE_TOKEN")
+        ap.error("--remote needs PVE_API and PVE_TOKEN")
 
     collector = Collector(args)
     if args.once:

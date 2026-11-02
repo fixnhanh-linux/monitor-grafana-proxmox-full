@@ -185,7 +185,7 @@ def node_q(expr):
 NO_ALARM = ('max by (severity, name, message) (ceph_health_detail{%s} > 0)\n'
             'or on() label_replace(label_replace(label_replace(vector(0),\n'
             '  "severity", "OK", "", ""), "name", "HEALTH_OK", "", ""),\n'
-            '  "message", "Khong co canh bao", "", "")' % J)
+            '  "message", "No alarms", "", "")' % J)
 
 HIDE = "^(Time.*|__name__.*|instance.*|job.*|job_type.*|id( \\d+)?|state( \\d+)?|group( \\d+)?|Value #Group)$"
 
@@ -260,7 +260,7 @@ def build(args):
                   organize(rename={"ceph_daemon": "OSD", "Value #High": "High", "Value #Low": "Low"},
                            order={"ceph_daemon": 0, "Value #High": 1, "Value #Low": 2})],
                  unit="percent", decimals=2, th=used_th,
-                 desc="Lap theo bien OSD Class: OSD dung nhieu nhat / it nhat cua tung device class.")
+                 desc="Repeated per OSD Class: most / least used OSD of each device class.")
     b.add(repeat(used), 0, 12, 5)
     b.y += 5
 
@@ -272,9 +272,9 @@ def build(args):
               [tgt('max by (cluster, nodes, quorate) (label_replace(pve_cluster_info{%s},'
                    ' "cluster", "$1", "id", "cluster/(.*)"))' % J)],
               text_mode="name", color_mode="none", value_size=20,
-              no_value="Job nay khong co pve_cluster_info",
-              desc="Cluster Proxmox (pve_cluster_info) cua job dang chon. Hai job ra cung ten cluster "
-                   "thi bang ben duoi giong nhau la dung; mot job ra nhieu o la job dang tron nhieu cluster.")
+              no_value="No pve_cluster_info for this job",
+              desc="Proxmox cluster (pve_cluster_info) of the selected job. Two jobs with the same cluster name "
+                   "show the same nodes below by design; one job with several tiles mixes several clusters.")
     pc["fieldConfig"]["defaults"]["displayName"] = \
         "${__field.labels.cluster} · ${__field.labels.nodes} node · quorate ${__field.labels.quorate}"
     pc["options"]["text"]["titleSize"] = 20
@@ -297,12 +297,12 @@ def build(args):
                 drop_extra_fields(HIDE),
                 organize(rename={"host": "Node Proxmox", "groups": "HA Groups", "Value #HA": "HA",
                                  "Value #CPU": "CPU (%)", "Value #RAM_Pct": "RAM (%)",
-                                 "Value #RAM_Total": "Tong RAM", "Value #Uptime": "UPTIME"},
+                                 "Value #RAM_Total": "Total RAM", "Value #Uptime": "UPTIME"},
                          order={"host": 0, "groups": 1, "Value #HA": 2, "Value #CPU": 3,
                                 "Value #RAM_Pct": 4, "Value #RAM_Total": 5, "Value #Uptime": 6}),
                 {"id": "sortBy", "options": {"sort": [{"field": "Node Proxmox"}]}}],
                cell="auto", filterable=True,
-               desc="CPU, RAM, uptime tung node Proxmox." if cust else "HA Groups: HA group (PVE 8) / node-affinity rule (PVE 9) cua node; node khong thuoc nhom nao hien \"-\". Rule chua moi node hoac dang tat khong tinh la nhom.",
+               desc="CPU, RAM, uptime per Proxmox node." if cust else "HA Groups: HA group (PVE 8) / node-affinity rule (PVE 9) of the node; nodes in no group show \"-\". Rules covering every node or disabled rules do not count as groups.",
                overrides=[
                    override("HA", ("mappings", [
                        {"type": "value", "options": {
@@ -327,7 +327,7 @@ def build(args):
                    override("RAM (%)", ("unit", "percent"), ("decimals", 1),
                             ("thresholds", steps("green", 80, "orange", 90, "red")),
                             ("custom.cellOptions", {"type": "color-text"})),
-                   override("Tong RAM", ("unit", "bytes"), ("decimals", 0)),
+                   override("Total RAM", ("unit", "bytes"), ("decimals", 0)),
                    override("UPTIME", ("unit", "dtdhms"))])
     b.line(4 + 2 * args.nodes, (ha, 24))
 
@@ -404,7 +404,7 @@ def build(args):
                           order={"hostname": 0, "ceph_daemon": 1, "Value": 2}),
                  {"id": "sortBy", "options": {"sort": [{"field": col, "desc": True}]}}],
                 unit="ms", decimals=0, th=steps("green", dw, "orange", dc, "red"), filterable=True,
-                desc="Tat ca OSD cua class, sap xep latency cao → thap. Nguong theo class: %s; class khac %g/%g ms."
+                desc="All OSDs of the class, latency high → low. Thresholds per class: %s; other classes %g/%g ms."
                      % (", ".join("%s %g/%g" % (k, w, c) for k, (w, c) in sorted(lat_th.items())), dw, dc),
                 overrides=[override("%s (ms)" % k, ("thresholds", steps("green", w, "orange", c, "red")))
                            for k, (w, c) in sorted(lat_th.items())])
@@ -416,8 +416,8 @@ def build(args):
     status = stat("Ceph Status", [tgt('max by (content) (ceph_custom_recovery_info{%s})' % J,
                                       legend="{{content}}")],
                   th=steps("green", 1, "orange", 2, "red"), text_mode="name",
-                  no_value="Chua co du lieu - kiem tra pve_ceph_extra_exporter",
-                  desc="Dong trang thai giong giao dien Proxmox (pve_ceph_extra_exporter).")
+                  no_value="No data yet - check pve_ceph_extra_exporter",
+                  desc="Status line like the Proxmox UI (pve_ceph_extra_exporter).")
     status["fieldConfig"]["defaults"]["displayName"] = "${__field.labels.content}"
     status["options"]["reduceOptions"]["limit"] = 1
     b.line(3, (status, 24))
@@ -430,7 +430,7 @@ def build(args):
                              "overrides": []},
              "options": {"reduceOptions": {"calcs": ["lastNotNull"], "fields": "", "values": False},
                          "showThresholdLabels": False, "showThresholdMarkers": True}}
-    speed = {"type": "timeseries", "title": "Recovery Speed (Toc do phuc hoi)", "datasource": DS,
+    speed = {"type": "timeseries", "title": "Recovery Speed", "datasource": DS,
              "targets": [tgt('max(ceph_custom_recovery_speed_bytes{%s})' % J, "A",
                              legend="Recovery Speed", instant=False),
                          tgt('sum(ceph_custom_degraded_objects{%s})' % J, "B",
@@ -466,33 +466,33 @@ def exporter_row(b):
                       fmt="table")],
                  [{"id": "joinByField", "options": {"byField": "collector", "mode": "outer"}},
                   drop_extra_fields("^(Time.*|Value #E)$"),
-                  organize(rename={"collector": "COLLECTOR", "Value #U": "TRANG THAI",
-                                   "Value #S": "THOI GIAN", "error": "LOI GAN NHAT"},
+                  organize(rename={"collector": "COLLECTOR", "Value #U": "STATUS",
+                                   "Value #S": "DURATION", "error": "LAST ERROR"},
                            order={"collector": 0, "Value #U": 1, "Value #S": 2, "error": 3}),
                   {"id": "sortBy", "options": {"sort": [{"field": "COLLECTOR"}]}}],
-                 cell="auto", no_value="Khong co metric exporter trong job nay",
-                 desc="ceph_mgr: phat lai /metrics cua ceph mgr · pve: node Proxmox · ceph: Ceph Status / "
-                      "Recovery · ha: HA Groups. Collector loi thi cac o dung du lieu do se No data.",
+                 cell="auto", no_value="No exporter metrics in this job",
+                 desc="ceph_mgr: re-served ceph mgr /metrics · pve: Proxmox nodes · ceph: Ceph Status / "
+                      "Recovery · ha: HA Groups. A failing collector leaves the panels using its data at No data.",
                  overrides=[
-                     override("TRANG THAI", ("custom.width", 120),
+                     override("STATUS", ("custom.width", 120),
                               ("custom.cellOptions", {"type": "color-background", "mode": "basic"}),
                               ("mappings", [{"type": "value", "options": {
                                   "1": {"text": "OK", "color": "green", "index": 0},
                                   "0": {"text": "LOI", "color": "red", "index": 1}}}])),
-                     override("THOI GIAN", ("unit", "s"), ("decimals", 2), ("custom.width", 110),
+                     override("DURATION", ("unit", "s"), ("decimals", 2), ("custom.width", 110),
                               ("thresholds", steps("green", 5, "orange", 15, "red")),
                               ("custom.cellOptions", {"type": "color-text"})),
-                     override("LOI GAN NHAT", ("custom.align", "left"),
+                     override("LAST ERROR", ("custom.align", "left"),
                               ("custom.cellOptions", {"type": "color-text"}),
                               ("color", {"mode": "fixed", "fixedColor": "red"}))])
-    age = stat("Du lieu cu", [tgt('time() - max(pve_ceph_extra_exporter_last_collect_timestamp{%s})' % J)],
+    age = stat("Data age", [tgt('time() - max(pve_ceph_extra_exporter_last_collect_timestamp{%s})' % J)],
                unit="s", decimals=0, th=steps("green", 90, "orange", 180, "red"),
-               no_value="Exporter khong chay",
-               desc="Bao lau tu lan thu thap gan nhat. Binh thuong < INTERVAL (30s) + scrape_interval.")
-    mode = stat("Che do", [tgt('max by (mode) (pve_ceph_extra_exporter_mode{%s})' % J,
+               no_value="Exporter not running",
+               desc="Time since the last collection. Normally < INTERVAL (30s) + scrape_interval.")
+    mode = stat("Mode", [tgt('max by (mode) (pve_ceph_extra_exporter_mode{%s})' % J,
                                legend="{{mode}}")],
                 text_mode="name", color_mode="none", no_value="-")
-    ver = stat("Phien ban", [tgt('max by (version) (pve_ceph_extra_exporter_build_info{%s})' % J,
+    ver = stat("Version", [tgt('max by (version) (pve_ceph_extra_exporter_build_info{%s})' % J,
                                  legend="{{version}}")],
                text_mode="name", color_mode="none", no_value="-")
     for p, label in ((mode, "mode"), (ver, "version")):
@@ -540,31 +540,31 @@ def dashboard(args, b, cust):
 
 
 def main():
-    ap = argparse.ArgumentParser(description="Sinh dashboard Grafana Proxmox + Ceph")
+    ap = argparse.ArgumentParser(description="Generate the Proxmox + Ceph Grafana dashboard")
     ap.add_argument("-o", "--out", default="proxmox_ceph_dashboard.json")
     ap.add_argument("--title", default="Proxmox - Ceph Prometheus")
     ap.add_argument("--uid", default="pve-ceph-prom")
-    ap.add_argument("--site-regex", default="", help='loc datasource, vd "/^Prometheus (FPT HN|CMC-Q7)$/"')
-    ap.add_argument("--job-regex", default="/.*Proxmox-/", help="loc job cua pve_cluster_info")
-    ap.add_argument("--nodes", type=int, default=8, help="so node du kien (chieu cao bang HA)")
-    ap.add_argument("--pools", type=int, default=8, help="so pool du kien (chieu cao bang pool)")
+    ap.add_argument("--site-regex", default="", help='datasource filter, e.g. "/^Prometheus (FPT HN|CMC-Q7)$/"')
+    ap.add_argument("--job-regex", default="/.*Proxmox-/", help="job filter on pve_cluster_info")
+    ap.add_argument("--nodes", type=int, default=8, help="expected node count (HA table height)")
+    ap.add_argument("--pools", type=int, default=8, help="expected pool count (pool table height)")
     ap.add_argument("--classes", type=int, default=3, help="so device class du kien")
     ap.add_argument("--lat-th", default="nvme=15:25,ssd=50:100,default=100:200",
-                    help="nguong latency (ms) canh bao:nghiem trong theo class")
-    ap.add_argument("--ha-alias", action="append", default=[], metavar="GROUPS=TEXT[:mau]",
-                    help='ten ngan cho chuoi HA Groups, vd "Gold-6146,HIGH-FREQUENCY,P1-XD=Gold+HIGH+P1-XD:orange"')
-    ap.add_argument("--time-from", default="now-15m", help="khoang thoi gian mac dinh")
+                    help="latency thresholds (ms) warning:critical per class")
+    ap.add_argument("--ha-alias", action="append", default=[], metavar="GROUPS=TEXT[:color]",
+                    help='short name for an HA Groups string, e.g. "Gold-6146,HIGH-FREQUENCY,P1-XD=Gold+HIGH+P1-XD:orange"')
+    ap.add_argument("--time-from", default="now-15m", help="default time range")
     ap.add_argument("--customer-job", default="", metavar="JOB",
-                    help="dashboard KHACH HANG: khoa cung job nay, an Site/Job, bo Detailed Alarms, "
-                         "HA Groups, hang Exporter; can --site-regex chi dung datasource cua khach")
+                    help="CUSTOMER dashboard: locked to this job, hides Site/Job, drops Detailed Alarms, "
+                         "HA Groups, Exporter row; needs --site-regex matching only the customer datasource")
     ap.add_argument("--regen", metavar="FILE",
-                    help="sinh lai FILE bang dung tham so da luu trong chinh no (fixnhanhArgs)")
+                    help="regenerate FILE with the arguments saved inside it (fixnhanhArgs)")
     argv = sys.argv[1:]
     if "--regen" in argv:
         f = argv[argv.index("--regen") + 1]
         saved = json.load(open(f, encoding="utf-8")).get("fixnhanhArgs")
         if saved is None:
-            ap.error("%s khong co fixnhanhArgs (sinh tu ban cu) -> sinh lai bang tham so day du 1 lan" % f)
+            ap.error("%s has no fixnhanhArgs (made by an old version) -> regenerate once with full arguments" % f)
         argv = saved + ["-o", f]
     args = ap.parse_args(argv)
     # Tham so de sinh lai sau nay (bo -o / --out): refresh doc lai de cap nhat moi dashboard
@@ -577,14 +577,14 @@ def main():
         elif not a.startswith(("--out=", "-o=")):
             keep.append(a)
     if args.customer_job and not args.site_regex:
-        ap.error("--customer-job can --site-regex (vd \"/^Prometheus FPT HCM$/\") de khach khong "
-                 "thay datasource khac")
+        ap.error("--customer-job needs --site-regex (e.g. \"/^Prometheus FPT HCM$/\") so the customer does not "
+                 "see other datasources")
 
     dash = build(args)
     dash["fixnhanhArgs"] = keep
     with open(args.out, "w", encoding="utf-8") as f:
         json.dump(dash, f, ensure_ascii=False, indent=2)
-    print("Da ghi %s (%d panel)" % (args.out, len(dash["panels"])))
+    print("Wrote %s (%d panels)" % (args.out, len(dash["panels"])))
 
 
 if __name__ == "__main__":

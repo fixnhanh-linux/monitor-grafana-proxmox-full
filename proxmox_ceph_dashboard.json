@@ -221,7 +221,7 @@
             "type": "prometheus",
             "uid": "${Site}"
           },
-          "expr": "max by (severity, name, message) (ceph_health_detail{job=~\"$job\"} > 0)\nor on() label_replace(label_replace(label_replace(vector(0),\n  \"severity\", \"OK\", \"\", \"\"), \"name\", \"HEALTH_OK\", \"\", \"\"),\n  \"message\", \"Khong co canh bao\", \"\", \"\")",
+          "expr": "max by (severity, name, message) (ceph_health_detail{job=~\"$job\"} > 0)\nor on() label_replace(label_replace(label_replace(vector(0),\n  \"severity\", \"OK\", \"\", \"\"), \"name\", \"HEALTH_OK\", \"\", \"\"),\n  \"message\", \"No alarms\", \"\", \"\")",
           "refId": "A",
           "range": false,
           "instant": true,
@@ -1133,7 +1133,7 @@
           "countRows": false
         }
       },
-      "description": "Lap theo bien OSD Class: OSD dung nhieu nhat / it nhat cua tung device class.",
+      "description": "Repeated per OSD Class: most / least used OSD of each device class.",
       "repeat": "class",
       "repeatDirection": "h",
       "maxPerRow": 2,
@@ -1193,7 +1193,7 @@
           "color": {
             "mode": "thresholds"
           },
-          "noValue": "Job nay khong co pve_cluster_info",
+          "noValue": "No pve_cluster_info for this job",
           "displayName": "${__field.labels.cluster} · ${__field.labels.nodes} node · quorate ${__field.labels.quorate}"
         },
         "overrides": []
@@ -1218,7 +1218,7 @@
           "titleSize": 20
         }
       },
-      "description": "Cluster Proxmox (pve_cluster_info) cua job dang chon. Hai job ra cung ten cluster thi bang ben duoi giong nhau la dung; mot job ra nhieu o la job dang tron nhieu cluster.",
+      "description": "Proxmox cluster (pve_cluster_info) of the selected job. Two jobs with the same cluster name show the same nodes below by design; one job with several tiles mixes several clusters.",
       "id": 17,
       "gridPos": {
         "h": 3,
@@ -1328,7 +1328,7 @@
               "Value #HA": "HA",
               "Value #CPU": "CPU (%)",
               "Value #RAM_Pct": "RAM (%)",
-              "Value #RAM_Total": "Tong RAM",
+              "Value #RAM_Total": "Total RAM",
               "Value #Uptime": "UPTIME"
             },
             "indexByName": {
@@ -1562,7 +1562,7 @@
           {
             "matcher": {
               "id": "byName",
-              "options": "Tong RAM"
+              "options": "Total RAM"
             },
             "properties": [
               {
@@ -1601,7 +1601,7 @@
           "countRows": false
         }
       },
-      "description": "HA Groups: HA group (PVE 8) / node-affinity rule (PVE 9) cua node; node khong thuoc nhom nao hien \"-\". Rule chua moi node hoac dang tat khong tinh la nhom.",
+      "description": "HA Groups: HA group (PVE 8) / node-affinity rule (PVE 9) of the node; nodes in no group show \"-\". Rules covering every node or disabled rules do not count as groups.",
       "id": 18,
       "gridPos": {
         "h": 20,
@@ -2311,7 +2311,7 @@
           "countRows": false
         }
       },
-      "description": "Tat ca OSD cua class, sap xep latency cao → thap. Nguong theo class: nvme 15/25, ssd 50/100; class khac 100/200 ms.",
+      "description": "All OSDs of the class, latency high → low. Thresholds per class: nvme 15/25, ssd 50/100; other classes 100/200 ms.",
       "repeat": "class",
       "repeatDirection": "h",
       "maxPerRow": 2,
@@ -2380,7 +2380,7 @@
           "color": {
             "mode": "thresholds"
           },
-          "noValue": "Chua co du lieu - kiem tra pve_ceph_extra_exporter",
+          "noValue": "No data yet - check pve_ceph_extra_exporter",
           "displayName": "${__field.labels.content}"
         },
         "overrides": []
@@ -2402,7 +2402,7 @@
           "limit": 1
         }
       },
-      "description": "Dong trang thai giong giao dien Proxmox (pve_ceph_extra_exporter).",
+      "description": "Status line like the Proxmox UI (pve_ceph_extra_exporter).",
       "id": 25,
       "gridPos": {
         "h": 3,
@@ -2481,7 +2481,7 @@
     },
     {
       "type": "timeseries",
-      "title": "Recovery Speed (Toc do phuc hoi)",
+      "title": "Recovery Speed",
       "datasource": {
         "type": "prometheus",
         "uid": "${Site}"
@@ -2655,9 +2655,9 @@
             "excludeByName": {},
             "renameByName": {
               "collector": "COLLECTOR",
-              "Value #U": "TRANG THAI",
-              "Value #S": "THOI GIAN",
-              "error": "LOI GAN NHAT"
+              "Value #U": "STATUS",
+              "Value #S": "DURATION",
+              "error": "LAST ERROR"
             },
             "indexByName": {
               "collector": 0,
@@ -2702,13 +2702,13 @@
             "inspect": false,
             "filterable": false
           },
-          "noValue": "Khong co metric exporter trong job nay"
+          "noValue": "No exporter metrics in this job"
         },
         "overrides": [
           {
             "matcher": {
               "id": "byName",
-              "options": "TRANG THAI"
+              "options": "STATUS"
             },
             "properties": [
               {
@@ -2747,7 +2747,7 @@
           {
             "matcher": {
               "id": "byName",
-              "options": "THOI GIAN"
+              "options": "DURATION"
             },
             "properties": [
               {
@@ -2793,7 +2793,7 @@
           {
             "matcher": {
               "id": "byName",
-              "options": "LOI GAN NHAT"
+              "options": "LAST ERROR"
             },
             "properties": [
               {
@@ -2829,7 +2829,7 @@
           "countRows": false
         }
       },
-      "description": "ceph_mgr: phat lai /metrics cua ceph mgr · pve: node Proxmox · ceph: Ceph Status / Recovery · ha: HA Groups. Collector loi thi cac o dung du lieu do se No data.",
+      "description": "ceph_mgr: re-served ceph mgr /metrics · pve: Proxmox nodes · ceph: Ceph Status / Recovery · ha: HA Groups. A failing collector leaves the panels using its data at No data.",
       "id": 29,
       "gridPos": {
         "h": 6,
@@ -2840,7 +2840,7 @@
     },
     {
       "type": "stat",
-      "title": "Du lieu cu",
+      "title": "Data age",
       "datasource": {
         "type": "prometheus",
         "uid": "${Site}"
@@ -2882,7 +2882,7 @@
             "mode": "thresholds"
           },
           "decimals": 0,
-          "noValue": "Exporter khong chay"
+          "noValue": "Exporter not running"
         },
         "overrides": []
       },
@@ -2902,7 +2902,7 @@
           "values": false
         }
       },
-      "description": "Bao lau tu lan thu thap gan nhat. Binh thuong < INTERVAL (30s) + scrape_interval.",
+      "description": "Time since the last collection. Normally < INTERVAL (30s) + scrape_interval.",
       "id": 30,
       "gridPos": {
         "h": 6,
@@ -2913,7 +2913,7 @@
     },
     {
       "type": "stat",
-      "title": "Che do",
+      "title": "Mode",
       "datasource": {
         "type": "prometheus",
         "uid": "${Site}"
@@ -2979,7 +2979,7 @@
     },
     {
       "type": "stat",
-      "title": "Phien ban",
+      "title": "Version",
       "datasource": {
         "type": "prometheus",
         "uid": "${Site}"

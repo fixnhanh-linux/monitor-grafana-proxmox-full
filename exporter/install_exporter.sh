@@ -13,19 +13,19 @@ DIR="$(cd "$(dirname "$0")" && pwd)"
 BIN=/usr/local/bin/pve_ceph_extra_exporter.py
 UNIT=/etc/systemd/system/pve-ceph-extra-exporter.service
 
-[ "$(id -u)" = 0 ] || { echo "Can chay bang root"; exit 1; }
+[ "$(id -u)" = 0 ] || { echo "Must run as root"; exit 1; }
 
 if [ "${1:-}" = "uninstall" ]; then
     systemctl disable --now pve-ceph-extra-exporter 2>/dev/null || true
     rm -f "$BIN" "$UNIT"
     systemctl daemon-reload
-    echo "Da go pve-ceph-extra-exporter"
+    echo "pve-ceph-extra-exporter removed"
     exit 0
 fi
 
-command -v python3 >/dev/null || { echo "Thieu python3"; exit 1; }
-command -v ceph >/dev/null || { echo "Node nay khong co lenh ceph"; exit 1; }
-ceph status --format json >/dev/null || { echo "Khong chay duoc 'ceph status' (thieu keyring?)"; exit 1; }
+command -v python3 >/dev/null || { echo "python3 missing"; exit 1; }
+command -v ceph >/dev/null || { echo "No ceph command on this node"; exit 1; }
+ceph status --format json >/dev/null || { echo "Cannot run 'ceph status' (missing keyring?)"; exit 1; }
 
 install -m 0755 "$DIR/pve_ceph_extra_exporter.py" "$BIN"
 
@@ -56,13 +56,13 @@ sleep 2
 
 if curl -sf "http://127.0.0.1:$PORT/metrics" | grep -E '^(ceph_custom_recovery_info|pve_ceph_extra_exporter_up)'; then
     echo
-    echo "OK - exporter chay tai http://$(hostname -I | awk '{print $1}'):$PORT/metrics"
+    echo "OK - exporter running at http://$(hostname -I | awk '{print $1}'):$PORT/metrics"
     if [ -z "$ARGS" ]; then
-        echo "Che do gop: job Prometheus cua cluster CHI CAN 1 target nay (xoa target :9283 / :9221 cu)."
+        echo "Merged mode: the cluster's Prometheus job needs ONLY this 1 target (remove the old :9283 / :9221 targets)."
     else
-        echo "Them target nay vao CUNG job Prometheus voi ceph mgr / pve exporter cua cluster."
+        echo "Add this target to the SAME Prometheus job as the cluster's ceph mgr / pve exporter."
     fi
 else
-    echo "Exporter chua tra metric, xem: journalctl -u pve-ceph-extra-exporter -n 50"
+    echo "Exporter returns no metrics yet, see: journalctl -u pve-ceph-extra-exporter -n 50"
     exit 1
 fi

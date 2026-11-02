@@ -4,22 +4,22 @@
 #    - pve_ceph_extra_exporter (Ceph recovery + HA groups)
 #    - Dashboard Grafana (make_dashboard.py)
 #
-#  Chay menu:        proxmox-menu        (hoac bash menu.sh; lenh tat tu cai khi chay bang root)
-#  Cap nhat het:     proxmox-menu refresh   (git pull + cai lai exporter + dashboard + kiem tra)
-#  Chay 1 lenh:      proxmox-menu <lenh>
-#      setup | check | install | status | metrics | logs | restart | port <so> |
+#  Open the menu:    proxmox-menu        (or bash menu.sh; the shortcut is installed when run as root)
+#  Update all:       proxmox-menu refresh   (git pull + reinstall exporter + dashboards + checks)
+#  Run one command:  proxmox-menu <command>
+#      setup | check | install | status | metrics | logs | restart | port <number> |
 #      uninstall | dashboard | import | prom | prom-check | doctor | update | refresh | about | help |
-#      remote-add [ten] | remote-list | remote-test | remote-remove | services | watchdog |
+#      remote-add [name] | remote-list | remote-test | remote-remove | services | watchdog |
 #      prom-all | prom-push | prom-rules | urls | deps | firewall | docker-run | docker-manage | docker-net
 #
-#  Ban quyen © 2026 FIX NHANH. Bao luu moi quyen.
+#  Copyright © 2026 FIX NHANH. All rights reserved.
 # =============================================================================
 set -uo pipefail
 
 TOOL_NAME="FIX NHANH · Monitor Proxmox + Ceph"
 TOOL_VERSION="2026.10.30"
 REPO_URL="https://github.com/fixnhanh-linux/monitor-grafana-proxmox-full"
-COPYRIGHT="© 2026 FIX NHANH · Bao luu moi quyen"
+COPYRIGHT="© 2026 FIX NHANH · All rights reserved"
 
 DIR="$(cd "$(dirname "$0")" && pwd)"
 EXPORTER_SRC="$DIR/exporter/pve_ceph_extra_exporter.py"
@@ -103,7 +103,7 @@ title() {
 }
 pause() {
     [ -t 0 ] && [ "${NONINTERACTIVE:-0}" = 0 ] || return 0
-    echo; read -rp "${IND}  ${D}Nhan Enter de quay lai menu...${N}" _
+    echo; read -rp "${IND}  ${D}Press Enter to return to the menu...${N}" _
 }
 
 ask() {  # ask "Cau hoi" "mac dinh" -> in gia tri
@@ -119,7 +119,7 @@ confirm() {  # confirm "Cau hoi" -> 0 neu dong y
 
 need_root() {
     [ "$(id -u)" = 0 ] && return 0
-    err "Can chay bang root (sudo bash menu.sh)"; return 1
+    err "Must run as root (sudo proxmox-menu)"; return 1
 }
 has() { command -v "$1" >/dev/null 2>&1; }
 
@@ -139,7 +139,7 @@ current_flags() {  # co --no-* cua service dang cai (rong = gop tat ca metric 1 
     if [ -f "$UNIT" ]; then grep -o -- '--no-[a-z-]*' "$UNIT" | xargs; else echo "${EXPORTER_ARGS:-}"; fi
 }
 mode_text() {  # mode_text FLAGS
-    if [ -z "$1" ]; then echo "gop 1 port (ceph mgr + Proxmox + bo sung)"; else echo "chi metric bo sung ($1)"; fi
+    if [ -z "$1" ]; then echo "merged on 1 port (ceph mgr + Proxmox + extras)"; else echo "extra metrics only ($1)"; fi
 }
 
 current_port() {
@@ -171,13 +171,13 @@ detect_env() {
 }
 
 ceph_health_short() {
-    [ "${ENV_CEPH:-0}" = 1 ] || { echo "${D}khong co tren may nay${N}"; return; }
+    [ "${ENV_CEPH:-0}" = 1 ] || { echo "${D}not on this host${N}"; return; }
     local h; h=$(timeout 8 ceph health 2>/dev/null | awk '{print $1}')
     case "$h" in
         HEALTH_OK)   echo "${G}${W}HEALTH_OK${N}" ;;
         HEALTH_WARN) echo "${Y}${W}HEALTH_WARN${N}" ;;
         HEALTH_ERR)  echo "${R}${W}HEALTH_ERR${N}" ;;
-        *)           echo "${R}khong doc duoc${N}" ;;
+        *)           echo "${R}unreadable${N}" ;;
     esac
 }
 
@@ -185,13 +185,13 @@ ceph_health_short() {
 # 1. Kiem tra moi truong
 # =============================================================================
 do_check() {
-    title "KIEM TRA MOI TRUONG"
+    title "ENVIRONMENT CHECK"
     local bad=0
 
     if [ -f /etc/pve/.version ] || has pveversion; then
         ok "Proxmox VE: $(pveversion 2>/dev/null | head -1)"
     else
-        warn "Khong thay Proxmox VE (van chay duoc tren node Ceph thuong)"
+        warn "Proxmox VE not found (still works on a plain Ceph node)"
     fi
 
     if has python3; then
@@ -199,58 +199,58 @@ do_check() {
         if python3 -c 'import sys;sys.exit(0 if sys.version_info>=(3,5) else 1)'; then
             ok "python3 $pv"
         else
-            err "python3 $pv qua cu (can >= 3.5)"; bad=1
+            err "python3 $pv too old (need >= 3.5)"; bad=1
         fi
     else
-        err "Thieu python3 (apt install python3)"; bad=1
+        err "python3 missing (apt install python3)"; bad=1
     fi
 
     if has ceph; then
-        ok "Lenh ceph: $(ceph --version 2>/dev/null | awk '{print $3, $5}')"
+        ok "ceph command: $(ceph --version 2>/dev/null | awk '{print $3, $5}')"
         if timeout 15 ceph status --format json >/dev/null 2>&1; then
-            ok "ceph status chay duoc: $(timeout 15 ceph health 2>/dev/null)"
+            ok "ceph status OK: $(timeout 15 ceph health 2>/dev/null)"
         else
-            err "Khong chay duoc 'ceph status' (thieu /etc/ceph/ceph.client.admin.keyring hoac khong ket noi duoc mon)"; bad=1
+            err "Cannot run 'ceph status' (missing /etc/ceph/ceph.client.admin.keyring or cannot reach the mons)"; bad=1
         fi
     else
-        err "May nay khong co lenh ceph → cai exporter tren 1 node Ceph cua cluster"; bad=1
+        err "No ceph command on this host → install the exporter on a Ceph node of the cluster"; bad=1
     fi
 
     if [ -f /etc/pve/ha/groups.cfg ] || [ -f /etc/pve/ha/rules.cfg ]; then
-        ok "Co cau hinh HA: $(ls /etc/pve/ha/groups.cfg /etc/pve/ha/rules.cfg 2>/dev/null | xargs)"
+        ok "HA config found: $(ls /etc/pve/ha/groups.cfg /etc/pve/ha/rules.cfg 2>/dev/null | xargs)"
     else
-        info "Chua co HA group/rule → cot HA Groups se trong (binh thuong)"
+        info "No HA group/rule → HA Groups column shows "-" (normal)"
     fi
 
     local port; port=$(current_port)
     if has ss && ss -ltnp 2>/dev/null | grep -q ":$port "; then
         if ss -ltnp 2>/dev/null | grep ":$port " | grep -q python3; then
-            ok "Port $port dang duoc exporter su dung"
+            ok "Port $port is used by the exporter"
         else
-            err "Port $port bi chuong trinh khac chiem: $(ss -ltnp | grep ":$port " | awk '{print $NF}')"; bad=1
+            err "Port $port is taken by another program: $(ss -ltnp | grep ":$port " | awk '{print $NF}')"; bad=1
         fi
     else
-        ok "Port $port con trong"
+        ok "Port $port is free"
     fi
 
     if has pve-firewall && pve-firewall status 2>/dev/null | grep -q "enabled/running"; then
-        warn "PVE firewall dang bat → mo port $port cho IP Prometheus:"
-        echo "Datacenter/Node → Firewall → Add: IN ACCEPT tcp dport $port source <IP Prometheus>" | sub
+        warn "PVE firewall is enabled → open port $port for the Prometheus IP:"
+        echo "Datacenter/Node → Firewall → Add: IN ACCEPT tcp dport $port source <Prometheus IP>" | sub
     fi
 
     if [ -z "$(current_flags)" ]; then
         if has ceph && timeout 10 ceph mgr services -f json 2>/dev/null | grep -q '"prometheus"'; then
-            ok "ceph mgr module prometheus dang bat"
+            ok "ceph mgr prometheus module is enabled"
         elif has ceph; then
-            err "Chua bat module prometheus cua ceph mgr (can cho che do gop 1 port):"
+            err "ceph mgr prometheus module is not enabled (required for merged 1-port mode):"
             echo "ceph mgr module enable prometheus" | sub; bad=1
         fi
-        if has pvesh; then ok "pvesh co san (metric Proxmox)"; else err "Thieu pvesh - may nay khong phai node Proxmox"; bad=1; fi
+        if has pvesh; then ok "pvesh available (Proxmox metrics)"; else err "pvesh missing - this host is not a Proxmox node"; bad=1; fi
     fi
 
-    has curl || warn "Thieu curl (apt install curl) - can cho xem metric / import Grafana"
+    has curl || warn "curl missing (apt install curl) - needed for metrics / Grafana import"
 
-    if [ "$bad" = 0 ]; then ok "${G}${W}Moi truong san sang${N}"; else err "${R}${W}Can xu ly cac loi tren truoc khi cai${N}"; fi
+    if [ "$bad" = 0 ]; then ok "${G}${W}Environment ready${N}"; else err "${R}${W}Fix the errors above before installing${N}"; fi
     return $bad
 }
 
@@ -258,28 +258,28 @@ do_check() {
 # 2. Cai / cap nhat exporter
 # =============================================================================
 do_install() {
-    title "CAI / CAP NHAT EXPORTER"
+    title "INSTALL / UPDATE EXPORTER"
     need_root || return 1
-    [ -f "$EXPORTER_SRC" ] || { err "Khong thay $EXPORTER_SRC"; return 1; }
+    [ -f "$EXPORTER_SRC" ] || { err "$EXPORTER_SRC not found"; return 1; }
     local port="${1:-}"
-    [ -n "$port" ] || port=$(ask "Port exporter" "$(current_port)")
+    [ -n "$port" ] || port=$(ask "Exporter port" "$(current_port)")
     [[ "$port" =~ ^[0-9]+$ ]] && [ "$port" -ge 1024 ] && [ "$port" -le 65535 ] \
-        || { err "Port khong hop le: $port"; return 1; }
+        || { err "Invalid port: $port"; return 1; }
 
     if [ -f "$BIN" ]; then
         local old new
         old=$(sed -n 's/^VERSION = "\(.*\)"/\1/p' "$BIN")
         new=$(sed -n 's/^VERSION = "\(.*\)"/\1/p' "$EXPORTER_SRC")
-        info "Ban dang cai: ${old:-?}  →  ban moi: ${new:-?}"
+        info "Installed: ${old:-?}  →  new: ${new:-?}"
     fi
 
     local flags="${2-$(current_flags)}"
-    info "Che do: ${W}$(mode_text "$flags")${N}"
+    info "Mode: ${W}$(mode_text "$flags")${N}"
     if PORT="$port" ARGS="$flags" bash "$INSTALLER" 2>&1 | sub; then
-        ok "Da cai service ${W}$SERVICE${N} port ${W}$port${N}"
-        info "Buoc tiep theo: them target $(local_ip):$port vao Prometheus (menu 10)"
+        ok "Installed service ${W}$SERVICE${N} port ${W}$port${N}"
+        info "Next: add target $(local_ip):$port to Prometheus (menu 10)"
     else
-        err "Cai exporter loi"; return 1
+        err "Exporter install failed"; return 1
     fi
 }
 
@@ -287,18 +287,18 @@ do_install() {
 # 3. Trang thai
 # =============================================================================
 do_status() {
-    title "TRANG THAI EXPORTER"
+    title "EXPORTER STATUS"
     if [ ! -f "$UNIT" ]; then
-        warn "Chua cai exporter tren may nay (menu 2 hoac S)"; return 1
+        warn "Exporter not installed on this host (menu 2 or S)"; return 1
     fi
     local st port; st=$(svc_state); port=$(current_port)
     if [ "$st" = active ]; then ok "Service $SERVICE: ${G}${W}$st${N}"; else err "Service $SERVICE: ${R}$st${N}"; fi
-    info "Port: ${W}$port${N}   ·   Ban: $(sed -n 's/^VERSION = "\(.*\)"/\1/p' "$BIN" 2>/dev/null)"
-    info "Tu khoi dong: $(systemctl is-enabled "$SERVICE" 2>/dev/null)"
+    info "Port: ${W}$port${N}   ·   Version: $(sed -n 's/^VERSION = "\(.*\)"/\1/p' "$BIN" 2>/dev/null)"
+    info "Start on boot: $(systemctl is-enabled "$SERVICE" 2>/dev/null)"
     systemctl show "$SERVICE" -p ActiveEnterTimestamp -p NRestarts -p MemoryCurrent 2>/dev/null | sub
 
     if has curl; then
-        local m line; m=$(curl -sf --max-time 20 "http://127.0.0.1:$port/metrics") || { err "Khong goi duoc /metrics"; return 1; }
+        local m line; m=$(curl -sf --max-time 20 "http://127.0.0.1:$port/metrics") || { err "Cannot fetch /metrics"; return 1; }
         echo
         while read -r l; do
             [ -n "$l" ] || continue
@@ -307,13 +307,13 @@ do_status() {
         line=$(echo "$m" | grep '^ceph_custom_recovery_info')
         [ -n "$line" ] && info "Ceph: ${W}$(echo "$line" | sed 's/.*content="\([^"]*\)".*/\1/')${N}"
         info "Total Health: ${W}$(echo "$m" | awk '/^ceph_custom_recovery_percent /{print $2}') %${N}"
-        info "HA groups: $(echo "$m" | grep -c '^pve_ha_groups_custom_info') node"
-        info "Thoi gian thu thap moi chu ky (s):"
+        info "HA groups: $(echo "$m" | grep -c '^pve_ha_groups_custom_info') nodes"
+        info "Collect time per cycle (s):"
         echo "$m" | sed -n 's/^pve_ceph_extra_exporter_collect_seconds{collector="\([^"]*\)"} \(.*\)/\1 \2/p' \
             | awk '{printf "%-10s %6.2f s\n", $1, $2}' | sub
         local pid; pid=$(systemctl show -p MainPID --value "$SERVICE" 2>/dev/null)
         if [ -n "$pid" ] && [ "$pid" != 0 ]; then
-            info "Tai nguyen: $(ps -o %cpu=,rss= -p "$pid" | awk '{printf "CPU %s%%  RAM %.0f MB", $1, $2/1024}')  (gioi han CPU 25%, RAM 256M)"
+            info "Resources: $(ps -o %cpu=,rss= -p "$pid" | awk '{printf "CPU %s%%  RAM %.0f MB", $1, $2/1024}')  (limit CPU 25%, RAM 256M)"
         fi
     fi
 }
@@ -322,15 +322,15 @@ do_status() {
 # 4. Xem metric
 # =============================================================================
 do_metrics() {
-    title "METRIC HIEN TAI"
+    title "CURRENT METRICS"
     local port; port=$(current_port)
     if [ "$(svc_state)" = active ] && has curl; then
         curl -sf --max-time 20 "http://127.0.0.1:$port/metrics" | grep -v '^#' | sub
     elif has python3 && [ -f "$EXPORTER_SRC" ]; then
-        info "Service chua chay → chay thu 1 lan tu file nguon:"
+        info "Service not running → one-shot run from source:"
         python3 "$EXPORTER_SRC" --once | grep -v '^#' | sub
     else
-        err "Khong lay duoc metric"
+        err "Cannot get metrics"
     fi
 }
 
@@ -338,32 +338,32 @@ do_metrics() {
 # 5. Log / 6. Restart / 7. Doi port / 8. Go cai
 # =============================================================================
 do_logs() {
-    title "LOG 50 DONG GAN NHAT"
-    journalctl -u "$SERVICE" -n 50 --no-pager 2>/dev/null | sub || err "Khong doc duoc journal"
+    title "LAST 50 LOG LINES"
+    journalctl -u "$SERVICE" -n 50 --no-pager 2>/dev/null | sub || err "Cannot read journal"
 }
 
 do_restart() {
-    title "KHOI DONG LAI EXPORTER"
+    title "RESTART EXPORTER"
     need_root || return 1
     systemctl restart "$SERVICE" && sleep 2
-    if [ "$(svc_state)" = active ]; then ok "Da khoi dong lai"; else err "Khoi dong lai loi"; do_logs; fi
+    if [ "$(svc_state)" = active ]; then ok "Restarted"; else err "Restart failed"; do_logs; fi
 }
 
 do_port() {
-    title "DOI PORT EXPORTER"
+    title "CHANGE EXPORTER PORT"
     need_root || return 1
     local p="${1:-}"
-    [ -n "$p" ] || p=$(ask "Port moi" "$(current_port)")
-    do_install "$p" && warn "Nho sua target trong prometheus.yml sang port $p"
+    [ -n "$p" ] || p=$(ask "New port" "$(current_port)")
+    do_install "$p" && warn "Remember to change the target in prometheus.yml to port $p"
 }
 
 do_uninstall() {
-    title "GO EXPORTER"
+    title "UNINSTALL EXPORTER"
     need_root || return 1
-    if [ "${NONINTERACTIVE:-0}" = 1 ] || confirm "Go service $SERVICE khoi may nay?"; then
+    if [ "${NONINTERACTIVE:-0}" = 1 ] || confirm "Remove service $SERVICE from this host?"; then
         bash "$INSTALLER" uninstall 2>&1 | sub
     else
-        info "Huy"
+        info "Cancelled"
     fi
 }
 
@@ -420,10 +420,10 @@ ask_aliases() {  # hoi ten ngan cho tung chuoi HA Groups dang co -> DASH_ALIASES
     local groups g t out=""
     groups=$(detect_ha_groups)
     if [ -z "$groups" ]; then
-        info "Khong doc duoc HA groups tren may nay → giu ten ngan da luu (neu co)"
+        info "Cannot read HA groups on this host → keeping saved short names (if any)"
         return 0
     fi
-    info "Nhap ten ngan, them :mau neu muon (vd ${W}Gold+HIGH:orange${N}). Enter trong = giu ten goc."
+    info "Enter a short name, add :color if you like (e.g. ${W}Gold+HIGH:orange${N}). Empty = keep the original name."
     while IFS= read -r g <&3; do
         t=$(ask "$g" "$(alias_of "$g")")
         [ -n "$t" ] && out+="${out:+;;}$g=$t"
@@ -432,7 +432,7 @@ ask_aliases() {  # hoi ten ngan cho tung chuoi HA Groups dang co -> DASH_ALIASES
 }
 
 gen_dashboard() {  # sinh $DASH_JSON tu cac bien DASH_*
-    has python3 || { err "Thieu python3"; return 1; }
+    has python3 || { err "python3 missing"; return 1; }
     dash_defaults
     local a args=(-o "$DASH_JSON" --title "$DASH_TITLE" --uid "$DASH_UID" --site-regex "$DASH_SITE"
                   --job-regex "$DASH_JOB" --nodes "$DASH_NODES" --pools "$DASH_POOLS"
@@ -440,8 +440,8 @@ gen_dashboard() {  # sinh $DASH_JSON tu cac bien DASH_*
     while IFS= read -r a; do
         [ -n "$a" ] && args+=(--ha-alias "$a")
     done <<< "${DASH_ALIASES//;;/$'\n'}"
-    python3 "$MAKE_DASH" "${args[@]}" >/dev/null || { err "Sinh dashboard loi"; return 1; }
-    ok "Da tao ${W}$DASH_JSON${N}"
+    python3 "$MAKE_DASH" "${args[@]}" >/dev/null || { err "Dashboard generation failed"; return 1; }
+    ok "Created ${W}$DASH_JSON${N}"
 }
 
 # Grafana cert tu ky: GHIM dung cert do (curl --cacert), KHONG tat kiem tra TLS.
@@ -461,29 +461,29 @@ gcurl() {
 
 grafana_pin_cert() {  # grafana_pin_cert https://HOST:PORT -> 0 neu da ghim
     local url="$1" hp host port tmp fp subj san name=""
-    has openssl || { err "Can openssl de lay cert (apt install openssl)"; return 1; }
+    has openssl || { err "openssl is required to fetch the cert (apt install openssl)"; return 1; }
     hp=$(echo "$url" | sed -E 's|^https://||; s|/.*||'); host=${hp%:*}; port=${hp##*:}
     [ "$port" = "$hp" ] && port=443
     tmp=$(mktemp)
     openssl s_client -connect "$host:$port" -servername "$host" </dev/null 2>/dev/null | openssl x509 > "$tmp" 2>/dev/null
-    [ -s "$tmp" ] || { rm -f "$tmp"; err "Khong lay duoc cert tu $host:$port"; return 1; }
+    [ -s "$tmp" ] || { rm -f "$tmp"; err "Cannot fetch the cert from $host:$port"; return 1; }
     fp=$(openssl x509 -in "$tmp" -noout -fingerprint -sha256 | cut -d= -f2)
     subj=$(openssl x509 -in "$tmp" -noout -subject | sed 's/^subject= *//')
     san=$(openssl x509 -in "$tmp" -noout -ext subjectAltName 2>/dev/null | tail -n +2 | xargs)
-    info "Cert cua ${W}$host:$port${N}:"
-    printf '%s\n' "Subject : $subj" "Ten/IP  : ${san:-<khong co SAN>}" "SHA-256 : $fp" | sub
-    info "So voi trinh duyet: bam 'Not secure' → Certificate → SHA-256 fingerprint phai GIONG HET"
+    info "Cert of ${W}$host:$port${N}:"
+    printf '%s\n' "Subject : $subj" "Names/IP: ${san:-<no SAN>}" "SHA-256 : $fp" | sub
+    info "Compare in the browser: click 'Not secure' → Certificate → the SHA-256 fingerprint must MATCH"
     # Cert khong ghi IP dang dung -> goi bang ten trong cert
     if [[ "$san" != *"IP Address:$host"* ]] && [[ "$san" != *"DNS:$host"* ]]; then
         name=$(echo "$san" | tr ',' '\n' | sed -n 's/^ *DNS://p' | head -1)
         [ -n "$name" ] || name=$(echo "$subj" | sed -n 's/.*CN *= *\([^,/]*\).*/\1/p')
-        [ -n "$name" ] && info "Cert khong ghi $host → tool goi bang ten ${W}$name${N} va tro ve $host"
+        [ -n "$name" ] && info "Cert does not list $host → calling by name ${W}$name${N}, pointed at $host"
     fi
-    if ! confirm "Van tay khop, tin cert nay (chi dung cho tool goi Grafana)?"; then rm -f "$tmp"; info "Huy"; return 1; fi
+    if ! confirm "Fingerprint matches, trust this cert (only for this tool's Grafana calls)?"; then rm -f "$tmp"; info "Cancelled"; return 1; fi
     install -m 600 "$tmp" "$GRAFANA_CERT_FILE"; rm -f "$tmp"
     GRAFANA_CACERT=$GRAFANA_CERT_FILE; GRAFANA_TLSNAME=$name; GRAFANA_TLSIP=${name:+$host}
     save_conf GRAFANA_CACERT "$GRAFANA_CACERT"; save_conf GRAFANA_TLSNAME "$GRAFANA_TLSNAME"; save_conf GRAFANA_TLSIP "$GRAFANA_TLSIP"
-    ok "Da ghim cert → $GRAFANA_CERT_FILE (cert Grafana doi thi chay lai menu 11, tool hoi lai)"
+    ok "Cert pinned → $GRAFANA_CERT_FILE (if the Grafana cert changes, run menu 11 again and the tool will ask)"
 }
 
 # Noi ro vi sao khong goi duoc URL (cert, sai http/https, firewall, port dong) va cach sua.
@@ -491,19 +491,19 @@ explain_curl_fail() {  # explain_curl_fail URL PATH GREP
     local url="$1" rc w host
     curl -s --max-time 8 -o /dev/null "$url$2" 2>/dev/null; rc=$?
     host=$(echo "$url" | sed -E 's|^https?://||; s|/.*||')
-    err "Khong ket noi duoc $url (curl loi $rc)"
+    err "Cannot connect to $url (curl error $rc)"
     case "$rc" in
-        60|51|58|77) warn "Cert TLS cua $host khong duoc may nay tin (tu ky / CA noi bo)"
-           info "Cach 1: dung http:// neu Grafana khong bat TLS"
-           info "Cach 2: cai CA vao may nay: openssl s_client -connect $host -showcerts </dev/null | openssl x509 > /usr/local/share/ca-certificates/grafana.crt && update-ca-certificates" ;;
-        35) warn "Bat tay TLS loi → port nay co the chay http, khong phai https" ;;
-        7)  warn "Bi tu choi (connection refused) → sai port, hoac Grafana khong nghe tren IP nay" ;;
-        28) warn "Het thoi gian cho → firewall chan, hoac IP public khong vao duoc tu trong mang (thu IP noi bo cua Grafana)" ;;
-        6)  warn "Khong phan giai duoc ten $host" ;;
-        22) warn "Grafana tra loi loi HTTP (sai duong dan / reverse proxy?)" ;;
+        60|51|58|77) warn "TLS cert of $host is not trusted by this host (self-signed / internal CA)"
+           info "Option 1: use http:// if Grafana does not use TLS"
+           info "Option 2: install the CA on this host: openssl s_client -connect $host -showcerts </dev/null | openssl x509 > /usr/local/share/ca-certificates/grafana.crt && update-ca-certificates" ;;
+        35) warn "TLS handshake failed → this port may serve http, not https" ;;
+        7)  warn "Connection refused → wrong port, or Grafana is not listening on this IP" ;;
+        28) warn "Timed out → blocked by a firewall, or the public IP is not reachable from inside (try Grafana's internal IP)" ;;
+        6)  warn "Cannot resolve $host" ;;
+        22) warn "Grafana returned an HTTP error (wrong path / reverse proxy?)" ;;
     esac
     if w=$(url_probe "$url" "$2" "$3" 2>/dev/null) && [ "$w" != "$url" ]; then
-        ok "Nhung ${W}$w${N} thi duoc → dung URL nay (menu 15 de luu)"
+        ok "But ${W}$w${N} works → use this URL (menu 15 to save it)"
     fi
 }
 
@@ -514,8 +514,8 @@ grafana_ds_check() {  # grafana_ds_check URL TOKEN -> 1 neu nguoi dung huy
     ds=$(gcurl -s --max-time 10 -w '\n%{http_code}' -H "Authorization: Bearer $token" "$(gurl "$url")/api/datasources")
     code=${ds##*$'\n'}; ds=${ds%$'\n'*}
     if [ "$code" != 200 ]; then
-        [ "$code" = 401 ] && { err "Token sai / het han (401)"; forget_token; return 1; }
-        info "Khong doc duoc danh sach datasource (HTTP $code, token thieu quyen) → bo qua kiem tra"
+        [ "$code" = 401 ] && { err "Token invalid / expired (401)"; forget_token; return 1; }
+        info "Cannot list datasources (HTTP $code, token lacks permission) → skipping the check"
         return 0
     fi
     out=$(printf '%s' "$ds" | python3 -c '
@@ -527,38 +527,38 @@ for d in ds:
     hit = (not rx) or re.search(rx, d.get("name", "")) is not None
     same = prom and d.get("url", "").rstrip("/") == prom
     print("%s|%s|%s|%s" % ("Y" if hit else "N", "Y" if same else "N", d.get("name", ""), d.get("url", "")))
-' "${DASH_SITE:-}" "${PROM_URL:-}" 2>/dev/null) || { info "Khong doc duoc danh sach datasource → bo qua kiem tra"; return 0; }
+' "${DASH_SITE:-}" "${PROM_URL:-}" 2>/dev/null) || { info "Cannot list datasources → skipping the check"; return 0; }
     if [ -z "$out" ]; then
-        err "Grafana chua co datasource Prometheus nao → dashboard se trong"
+        err "Grafana has no Prometheus datasource → the dashboard will be empty"
         info "Grafana → Connections → Data sources → Add → Prometheus, URL ${PROM_URL:-http://<prometheus>:9090}"
-        confirm "Van import?" || return 1; return 0
+        confirm "Import anyway?" || return 1; return 0
     fi
-    info "Datasource Prometheus tren Grafana (✔ = hien trong bien Site):"
+    info "Prometheus datasources on Grafana (✔ = shown in the Site variable):"
     local hit same name dsurl nhit=0
     while IFS='|' read -r hit same name dsurl; do
         [ "$hit" = Y ] && nhit=$((nhit + 1))
         printf '%s      %s %s%s  %s%s\n' "$IND" "$([ "$hit" = Y ] && echo "${G}✔${N}" || echo "${D}·${N}")" \
-            "$name" "$N" "${D}$dsurl" "$([ "$same" = Y ] && echo "  ${G}← Prometheus da cau hinh${N}")${N}"
+            "$name" "$N" "${D}$dsurl" "$([ "$same" = Y ] && echo "  ${G}← configured Prometheus${N}")${N}"
     done <<< "$out"
     if [ "$nhit" = 0 ]; then
-        warn "Khong datasource nao khop regex Site '${DASH_SITE}' → sua o menu 9 (de trong = tat ca) roi sinh lai"
-        confirm "Van import?" || return 1
+        warn "No datasource matches the Site regex '${DASH_SITE}' → change it in menu 9 (empty = all) and regenerate"
+        confirm "Import anyway?" || return 1
     fi
     if [ -n "${PROM_URL:-}" ] && ! grep -q '^.|Y|' <<< "$out"; then
-        warn "Khong datasource nao tro toi $PROM_URL (Prometheus dang scrape exporter) → kiem tra lai khi chon Site"
+        warn "No datasource points to $PROM_URL (the Prometheus scraping the exporter) → check when choosing Site"
     fi
     return 0
 }
 
 import_dashboard() {  # import_dashboard URL TOKEN FOLDER
     local url="${1%/}" token="$2" folder="$3" payload resp
-    has curl && has python3 || { err "Can curl va python3"; return 1; }
-    [ -f "$DASH_JSON" ] || { err "Chua co $DASH_JSON"; return 1; }
+    has curl && has python3 || { err "curl and python3 are required"; return 1; }
+    [ -f "$DASH_JSON" ] || { err "$DASH_JSON not found"; return 1; }
     if ! gcurl -sf --max-time 10 -H "Authorization: Bearer $token" "$(gurl "$url")/api/health" >/dev/null; then
         gcurl -s --max-time 8 -o /dev/null "$(gurl "$url")/api/health" 2>/dev/null
         case "$?:$url" in
             60:https://*|51:https://*)  # cert tu ky -> de nghi ghim cert (van kiem tra TLS)
-                warn "Grafana dung cert tu ky / CA noi bo → may nay khong tin"
+                warn "Grafana uses a self-signed / internal CA cert → not trusted by this host"
                 grafana_pin_cert "$url" || return 1
                 gcurl -sf --max-time 10 "$(gurl "$url")/api/health" >/dev/null \
                     || { explain_curl_fail "$url" "/api/health" '"database"'; return 1; } ;;
@@ -572,7 +572,7 @@ import_dashboard() {  # import_dashboard URL TOKEN FOLDER
         local duid; duid=$(python3 -c 'import json,sys,re; u=str(json.load(open(sys.argv[1],encoding="utf-8")).get("uid") or ""); print(re.sub(r"[^A-Za-z0-9_]*[^A-Za-z0-9_-][^A-Za-z0-9_]*|-{2,}","-",u).strip("-")[:40])' "$DASH_JSON" 2>/dev/null)
         [ -n "$duid" ] && folder=$(gcurl -s --max-time 10 -H "Authorization: Bearer $token" "$(gurl "$url")/api/dashboards/uid/$duid" 2>/dev/null \
             | python3 -c 'import json,sys; print((json.load(sys.stdin).get("meta") or {}).get("folderUid") or "")' 2>/dev/null)
-        [ -n "$folder" ] && info "Giu folder hien tai cua dashboard (uid folder ${W}$folder${N})"
+        [ -n "$folder" ] && info "Keeping the dashboard's current folder (folder uid ${W}$folder${N})"
     fi
     payload=$(mktemp)
     python3 - "$DASH_JSON" "$folder" > "$payload" <<'PY'
@@ -593,14 +593,14 @@ PY
         -H "Content-Type: application/json" --data-binary "@$payload" "$(gurl "$url")/api/dashboards/db")
     case "$resp" in
         *'"message"'*[Pp]ermission*|*'Access denied'*|*'"status":403'*)
-            warn "Token thieu quyen → service account can role Editor (Viewer chi xem duoc)" ;;
+            warn "Token lacks permission → the service account needs the Editor role (Viewer is read-only)" ;;
     esac
     rm -f "$payload"
     if echo "$resp" | grep -Eq '"status": *"success"'; then
-        ok "Import thanh cong: ${W}$url$(echo "$resp" | sed -En 's/.*"url": *"([^"]*)".*/\1/p')${N}"
+        ok "Imported: ${W}$url$(echo "$resp" | sed -En 's/.*"url": *"([^"]*)".*/\1/p')${N}"
         save_conf GRAFANA_URL "$url"; save_conf GRAFANA_FOLDER "$folder"
     else
-        err "Import loi: $resp"
+        err "Import failed: $resp"
         case "$resp" in *[Ii]nvalid*[Kk]ey*|*[Uu]nauthorized*|*"status":401*) forget_token ;; esac
         return 1
     fi
@@ -611,39 +611,39 @@ prom_snippet() {  # prom_snippet JOB PORT [FLAGS] -> in + luu file mau prometheu
     ip=$(local_ip); f="$DIR/prometheus-target-$job.yml"
     if [ -z "$flags" ]; then
         cat > "$f" <<EOF
-# Gop 1 port: job nay CHI CON 1 target (ceph mgr + Proxmox + bo sung deu o :$port)
+# Merged 1 port: this job needs ONLY 1 target (ceph mgr + Proxmox + extras all on :$port)
   - job_name: $job
     scrape_interval: 30s
     scrape_timeout: 25s
     static_configs:
       - targets:
-          - $ip:$port   # pve_ceph_extra_exporter (tat ca metric)
+          - $ip:$port   # pve_ceph_extra_exporter (all metrics)
 EOF
-        info "Job ${W}'$job'${N} chi can ${W}1 target $ip:$port${N}:"
+        info "Job ${W}'$job'${N} needs only ${W}1 target $ip:$port${N}:"
         echo; sed -n '2,$p' "$f" | sed "s/^/${IND}    ${O}/; s/$/${N}/"; echo
-        warn "XOA target ceph mgr (:9283) va pve exporter (:9221) cu cua cluster nay khoi job,"
-        echo "neu khong moi so lieu se bi nhan doi (menu 12 se bao trung)." | sub
-        info "Da luu mau: $f"
-        info "Tren may Prometheus:"
+        warn "REMOVE this cluster's old ceph mgr (:9283) and pve exporter (:9221) targets from the job,"
+        echo "otherwise every value is doubled (menu 12 reports duplicates)." | sub
+        info "Sample saved: $f"
+        info "On the Prometheus host:"
         printf '%s\n' "promtool check config /etc/prometheus/prometheus.yml" \
-            "systemctl reload prometheus      # hoac: curl -X POST http://<prom>:9090/-/reload" | sub
+            "systemctl reload prometheus      # or: curl -X POST http://<prom>:9090/-/reload" | sub
         return 0
     fi
     cat > "$f" <<EOF
-# Them vao scrape_configs cua prometheus.yml (CUNG job voi ceph mgr / pve exporter)
+# Add to scrape_configs in prometheus.yml (SAME job as ceph mgr / pve exporter)
   - job_name: $job
     static_configs:
       - targets:
-          - $ip:9283   # ceph mgr prometheus (da co)
-          - $ip:$port   # pve_ceph_extra_exporter (moi)
+          - $ip:9283   # ceph mgr prometheus (existing)
+          - $ip:$port   # pve_ceph_extra_exporter (new)
 EOF
-    info "Them target ${W}$ip:$port${N} vao ${W}CUNG job '$job'${N} voi ceph mgr / pve exporter:"
+    info "Add target ${W}$ip:$port${N} to the ${W}SAME job '$job'${N} as ceph mgr / pve exporter:"
     echo; sed -n '2,$p' "$f" | sed "s/^/${IND}    ${O}/; s/$/${N}/"; echo
-    info "Da luu mau: $f"
-    info "Neu job da ton tai thi chi them dong '$ip:$port' vao danh sach targets."
-    info "Tren may Prometheus:"
+    info "Sample saved: $f"
+    info "If the job already exists, just add '$ip:$port' to its targets."
+    info "On the Prometheus host:"
     printf '%s\n' "promtool check config /etc/prometheus/prometheus.yml" \
-        "systemctl reload prometheus      # hoac: curl -X POST http://<prom>:9090/-/reload" | sub
+        "systemctl reload prometheus      # or: curl -X POST http://<prom>:9090/-/reload" | sub
 }
 
 prom_q() {  # prom_q URL QUERY -> in ket qua dang "{labels} value"
@@ -659,8 +659,8 @@ for s in r:
 
 prom_check() {  # prom_check URL -> 0 neu exporter duoc scrape va job khop
     local url="${1%/}" port out cj ej j rc=0
-    has curl && has python3 || { err "Can curl va python3"; return 1; }
-    curl -sf --max-time 10 "$url/-/ready" >/dev/null || { err "Khong ket noi duoc $url"; return 1; }
+    has curl && has python3 || { err "curl and python3 are required"; return 1; }
+    curl -sf --max-time 10 "$url/-/ready" >/dev/null || { err "Cannot connect to $url"; return 1; }
     save_conf PROM_URL "$url"
     port=$(current_port)
 
@@ -668,7 +668,7 @@ prom_check() {  # prom_check URL -> 0 neu exporter duoc scrape va job khop
     echo; info "Target exporter (up{instance=~\".*:($ports)\"}):"
     out=$(prom_q "$url" "up{instance=~\".*:($ports)\"}")
     if [ -z "$out" ]; then
-        err "Prometheus chua scrape exporter → them target (menu 10) roi reload Prometheus"; rc=1
+        err "Prometheus does not scrape the exporter → add the target (menu 10) and reload Prometheus"; rc=1
     else
         local tip myips; myips=" $(hostname -I 2>/dev/null) "
         while read -r l; do
@@ -676,35 +676,35 @@ prom_check() {  # prom_check URL -> 0 neu exporter duoc scrape va job khop
             # target down vi tro sai may: exporter chay o may nay, target phai la IP may nay
             tip=$(echo "$l" | sed -n 's/.*instance=\([^:,}]*\):.*/\1/p')
             if [ -n "$tip" ] && [ "$myips" != "  " ] && [[ "$myips" != *" $tip "* ]] && [[ "$l" != *" 1" ]]; then
-                warn "  ↑ target tro toi $tip, khong phai may nay ($(echo $myips)) → chay lai menu 10, cau IP chi can Enter"
-                info "  Tren may Prometheus kiem tra: curl -s http://$(local_ip):<port>/metrics | head -3  (khong duoc → menu 22 mo firewall)"
+                warn "  ↑ target points to $tip, not this host ($(echo $myips)) → run menu 10 again, just press Enter at the IP question"
+                info "  On the Prometheus host check: curl -s http://$(local_ip):<port>/metrics | head -3  (fails → menu 22 opens the firewall)"
             fi
         done <<< "$out"
     fi
 
-    echo; info "Cac job cluster (pve_cluster_info):"
+    echo; info "Cluster jobs (pve_cluster_info):"
     prom_q "$url" 'count by (job) (pve_cluster_info)' | sub
 
-    echo; info "Kiem tra trung target (1 cluster bi scrape 2 lan -> so lieu nhan doi):"
+    echo; info "Duplicate target check (1 cluster scraped twice -> doubled values):"
     out=$(prom_q "$url" 'count by (job) (count by (job, instance) (ceph_health_status)) > 1')
     if [ -n "$out" ]; then
-        while read -r l; do err "Trung ceph: $l target → xoa target ceph mgr cu (:9283)"; done <<< "$out"; rc=1
-    else ok "Khong co job nao bi trung metric ceph"; fi
+        while read -r l; do err "Duplicate ceph: $l targets → remove the old ceph mgr target (:9283)"; done <<< "$out"; rc=1
+    else ok "No job has duplicate ceph metrics"; fi
     out=$(prom_q "$url" 'count by (job) (count by (job, instance) (pve_cluster_info)) > 1')
     if [ -n "$out" ]; then
-        while read -r l; do err "Trung Proxmox: $l target → xoa target pve exporter cu (:9221)"; done <<< "$out"; rc=1
-    else ok "Khong co job nao bi trung metric Proxmox"; fi
+        while read -r l; do err "Duplicate Proxmox: $l targets → remove the old pve exporter target (:9221)"; done <<< "$out"; rc=1
+    else ok "No job has duplicate Proxmox metrics"; fi
 
-    echo; info "So sanh job: ceph mgr ↔ exporter:"
+    echo; info "Job comparison: ceph mgr ↔ exporter:"
     cj=$(prom_q "$url" 'count by (job) (ceph_health_status)' | sed 's/{job=\(.*\)} .*/\1/')
     ej=$(prom_q "$url" 'count by (job) (ceph_custom_recovery_info)' | sed 's/{job=\(.*\)} .*/\1/')
-    printf '%s\n' "ceph mgr : $(echo ${cj:-'<khong co>'})" "exporter : $(echo ${ej:-'<khong co>'})" | sub
+    printf '%s\n' "ceph mgr : $(echo ${cj:-'<none>'})" "exporter : $(echo ${ej:-'<none>'})" | sub
     for j in $ej; do
-        if echo "$cj" | grep -qx "$j"; then ok "job '$j' khop"
-        else err "job '$j' cua exporter khong co ceph mgr → dashboard se khong hien Recovery"; rc=1; fi
+        if echo "$cj" | grep -qx "$j"; then ok "job '$j' matches"
+        else err "exporter job '$j' has no ceph mgr → the dashboard will not show Recovery"; rc=1; fi
     done
 
-    echo; info "Trang thai recovery tung cluster:"
+    echo; info "Recovery state per cluster:"
     prom_q "$url" 'ceph_custom_recovery_info' | sub
     echo; info "OSD device class:"
     prom_q "$url" 'count by (job, device_class) (ceph_osd_metadata)' | sub
@@ -716,80 +716,80 @@ prom_check() {  # prom_check URL -> 0 neu exporter duoc scrape va job khop
 # =============================================================================
 ask_dashboard() {  # hoi cac tuy chon dashboard -> bien DASH_*
     dash_defaults
-    DASH_TITLE=$(ask "Tieu de dashboard" "$DASH_TITLE")
-    DASH_UID=$(ask "UID (khong dau, khong cach; trung UID se ghi de)" "$DASH_UID")
+    DASH_TITLE=$(ask "Dashboard title" "$DASH_TITLE")
+    DASH_UID=$(ask "UID (no spaces; same UID overwrites)" "$DASH_UID")
     local u2; u2=$(echo "$DASH_UID" | sed -E 's/[^A-Za-z0-9_-]+/-/g; s/-{2,}/-/g; s/^-+|-+$//g' | cut -c1-40)
-    [ "$u2" != "$DASH_UID" ] && { warn "UID chi duoc chu, so, - va _ (toi da 40) → dung '${u2:=pve-ceph-prom}'"; DASH_UID=$u2; }
-    DASH_SITE=$(ask "Regex loc datasource Site (bo trong = tat ca Prometheus)" "$DASH_SITE")
-    DASH_JOB=$(ask "Regex loc job cluster" "$DASH_JOB")
+    [ "$u2" != "$DASH_UID" ] && { warn "UID allows only letters, digits, - and _ (max 40) → using '${u2:=pve-ceph-prom}'"; DASH_UID=$u2; }
+    DASH_SITE=$(ask "Site datasource regex (empty = all Prometheus)" "$DASH_SITE")
+    DASH_JOB=$(ask "Cluster job regex" "$DASH_JOB")
     if detect_sizes; then
-        info "Doc tu Ceph: ${W}$DN${N} node, ${W}$DP${N} pool, ${W}$DC${N} device class"
+        info "Read from Ceph: ${W}$DN${N} node, ${W}$DP${N} pool, ${W}$DC${N} device class"
     else
         DN=$DASH_NODES; DP=$DASH_POOLS; DC=$DASH_CLASSES
     fi
-    DASH_NODES=$(ask "So node (chieu cao bang HA)" "$DN")
-    DASH_POOLS=$(ask "So pool (chieu cao bang pool)" "$DP")
-    DASH_CLASSES=$(ask "So device class" "$DC")
-    DASH_LAT=$(ask "Nguong latency ms theo class (canh bao:nghiem trong)" "$DASH_LAT")
-    DASH_TIME=$(ask "Khoang thoi gian mac dinh" "$DASH_TIME")
-    if confirm "Dat ten ngan + mau cho HA Groups?"; then ask_aliases; fi
+    DASH_NODES=$(ask "Node count (HA table height)" "$DN")
+    DASH_POOLS=$(ask "Pool count (pool table height)" "$DP")
+    DASH_CLASSES=$(ask "Device class count" "$DC")
+    DASH_LAT=$(ask "Latency thresholds ms per class (warning:critical)" "$DASH_LAT")
+    DASH_TIME=$(ask "Default time range" "$DASH_TIME")
+    if confirm "Set short names + colors for HA Groups?"; then ask_aliases; fi
 }
 
 do_dashboard() {
-    title "SINH DASHBOARD GRAFANA"
-    info "${W}1${N} Noi bo  ${D}- moi cluster, chon Site / Job, co canh bao chi tiet, HA Groups, hang Exporter${N}"
-    info "${W}2${N} Khach hang  ${D}- khoa 1 cluster, an Site / Job va phan noi bo, khong cho sua${N}"
-    if [ "$(ask "Loai dashboard" "1")" = 2 ]; then do_dashboard_customer; return; fi
+    title "GENERATE GRAFANA DASHBOARD"
+    info "${W}1${N} Internal  ${D}- all clusters, Site / Job pickers, detailed alarms, HA Groups, Exporter row${N}"
+    info "${W}2${N} Customer  ${D}- locked to 1 cluster, hides Site / Job and internal panels, read-only${N}"
+    if [ "$(ask "Dashboard type" "1")" = 2 ]; then do_dashboard_customer; return; fi
     ask_dashboard
-    DASH_JSON=$(ask "File xuat" "$DASH_JSON")
+    DASH_JSON=$(ask "Output file" "$DASH_JSON")
     if [ "$(cd "$(dirname "$DASH_JSON")" 2>/dev/null && pwd)/$(basename "$DASH_JSON")" = "$DASH_REPO_JSON" ]; then
-        warn "$DASH_REPO_JSON nam trong git → ghi de se chan cap nhat (menu 14); dung $DIR/dashboard-local.json"
+        warn "$DASH_REPO_JSON is tracked by git → overwriting it blocks updates (menu 14); using $DIR/dashboard-local.json"
         DASH_JSON="$DIR/dashboard-local.json"
     fi
     gen_dashboard || return 1
     save_dash_conf
-    info "Import: Grafana → Dashboards → New → Import → Upload JSON, hoac dung menu 11"
+    info "Import: Grafana → Dashboards → New → Import → Upload JSON, or use menu 11"
 }
 
 # Dashboard khach hang: 1 file / khach (dashboard-kh-<job>.json), khoa job, chi 1 datasource.
 # Import vao folder rieng cua khach roi cap quyen Viewer cho khach tren folder do.
 do_dashboard_customer() {
-    has python3 || { err "Thieu python3"; return 1; }
+    has python3 || { err "python3 missing"; return 1; }
     dash_defaults
     local jobs="" job name ds slug title uid out
     if [ -n "${PROM_URL:-}" ]; then
         jobs=$(curl -sG --max-time 10 "$PROM_URL/api/v1/label/job/values" 2>/dev/null \
             | python3 -c 'import json,sys;print(" ".join(j for j in json.load(sys.stdin).get("data",[]) if "Proxmox-" in j))' 2>/dev/null)
-        [ -n "$jobs" ] && info "Job tren Prometheus: ${W}$jobs${N}"
+        [ -n "$jobs" ] && info "Jobs on Prometheus: ${W}$jobs${N}"
     fi
-    job=$(ask "Job (cluster) cua khach" ""); [ -n "$job" ] || { err "Chua nhap job"; return 1; }
+    job=$(ask "Customer job (cluster)" ""); [ -n "$job" ] || { err "No job entered"; return 1; }
     if [ -n "$jobs" ] && [[ " $jobs " != *" $job "* ]]; then
-        warn "Job '$job' khong co tren $PROM_URL → kiem tra lai ten (phan biet hoa thuong)"
-        confirm "Van tiep tuc?" || return 1
+        warn "Job '$job' not found on $PROM_URL → check the name (case-sensitive)"
+        confirm "Continue anyway?" || return 1
     fi
-    name=$(ask "Ten khach hang (hien tren tieu de)" "${job#Proxmox-}")
-    ds=$(ask "Ten DATASOURCE Prometheus trong Grafana chua job nay (dung y het, vd Prometheus FPT HCM)" "")
-    [ -n "$ds" ] || { err "Can ten datasource (khach chi duoc thay datasource nay)"; return 1; }
+    name=$(ask "Customer name (shown in the title)" "${job#Proxmox-}")
+    ds=$(ask "Grafana Prometheus DATASOURCE name holding this job (exact, e.g. Prometheus FPT HCM)" "")
+    [ -n "$ds" ] || { err "Datasource name required (the customer only sees this datasource)"; return 1; }
     slug=$(echo "$job" | tr 'A-Z' 'a-z' | sed -E 's/[^a-z0-9_-]+/-/g; s/^-+|-+$//g')
-    title=$(ask "Tieu de" "$name - Proxmox Ceph")
-    uid=$(ask "UID (rieng cho khach nay)" "kh-$slug")
+    title=$(ask "Title" "$name - Proxmox Ceph")
+    uid=$(ask "UID (unique for this customer)" "kh-$slug")
     out="$DIR/dashboard-kh-$slug.json"
     # Ten datasource -> regex khop dung 1 ten (escape ky tu dac biet)
     local rx; rx="/^$(printf '%s' "$ds" | sed 's/[][\.^$*+?(){}|/]/\\&/g')\$/"
     python3 "$MAKE_DASH" -o "$out" --customer-job "$job" --site-regex "$rx" --title "$title" --uid "$uid" \
         --nodes "$DASH_NODES" --pools "$DASH_POOLS" --classes "$DASH_CLASSES" \
-        --lat-th "$DASH_LAT" --time-from "$DASH_TIME" >/dev/null || { err "Sinh dashboard loi"; return 1; }
-    ok "Da tao ${W}$out${N} (khoa job ${W}$job${N}, datasource ${W}$ds${N})"
-    info "Phan quyen: tao folder rieng cho khach trong Grafana, import vao do, cap quyen Viewer cho khach tren folder"
+        --lat-th "$DASH_LAT" --time-from "$DASH_TIME" >/dev/null || { err "Dashboard generation failed"; return 1; }
+    ok "Created ${W}$out${N} (locked to job ${W}$job${N}, datasource ${W}$ds${N})"
+    info "Permissions: create a folder for the customer in Grafana, import into it, grant the customer Viewer on that folder"
     DASH_JSON=$out
-    if confirm "Import len Grafana ngay?"; then
+    if confirm "Import to Grafana now?"; then
         local url folder
         url=$(ask "Grafana URL" "${GRAFANA_URL:-}")
-        ask_token; [ -n "$TOKEN" ] || { err "Chua nhap token"; return 1; }
-        folder=$(ask "Folder UID cua khach (bo trong = General)" "")
+        ask_token; [ -n "$TOKEN" ] || { err "No token entered"; return 1; }
+        folder=$(ask "Customer folder UID (empty = General)" "")
         import_dashboard "$url" "$TOKEN" "$folder"
     else
-        info "Import sau: menu 11 → chon $(basename "$out")"
+        info "Import later: menu 11 → pick $(basename "$out")"
     fi
 }
 
@@ -803,33 +803,33 @@ ask_token() {
     TOKEN=""
     if [ -s "$GRAFANA_TOKEN_FILE" ]; then
         TOKEN=$(cat "$GRAFANA_TOKEN_FILE")
-        info "Dung token Grafana da luu ${D}($GRAFANA_TOKEN_FILE; xoa: menu 15)${N}"
+        info "Using the saved Grafana token ${D}($GRAFANA_TOKEN_FILE; delete: menu 15)${N}"
         return 0
     fi
-    info "Tao token: Grafana → Administration → Service accounts → Add token (role Editor)"
-    read -rsp "${IND}  ${C}❯${N} Service account token ${D}(khong hien khi go)${N}: " TOKEN; echo
-    if [ -n "$TOKEN" ] && confirm "Luu token de lan sau khong hoi (file chi root doc)?"; then
-        ( umask 077; printf '%s' "$TOKEN" > "$GRAFANA_TOKEN_FILE" ) && ok "Da luu token → $GRAFANA_TOKEN_FILE"
+    info "Create a token: Grafana → Administration → Service accounts → Add token (role Editor)"
+    read -rsp "${IND}  ${C}❯${N} Service account token ${D}(hidden while typing)${N}: " TOKEN; echo
+    if [ -n "$TOKEN" ] && confirm "Save the token so it is not asked again (root-only file)?"; then
+        ( umask 077; printf '%s' "$TOKEN" > "$GRAFANA_TOKEN_FILE" ) && ok "Token saved → $GRAFANA_TOKEN_FILE"
     fi
 }
-forget_token() { [ -f "$GRAFANA_TOKEN_FILE" ] && rm -f "$GRAFANA_TOKEN_FILE" && warn "Da xoa token da luu (sai / het han) → lan sau go lai"; }
+forget_token() { [ -f "$GRAFANA_TOKEN_FILE" ] && rm -f "$GRAFANA_TOKEN_FILE" && warn "Saved token removed (invalid / expired) → enter it again next time"; }
 
 do_import() {
-    title "IMPORT DASHBOARD LEN GRAFANA"
+    title "IMPORT DASHBOARD TO GRAFANA"
     local url folder f files=() i=1 pick
     # Co dashboard khach hang (dashboard-kh-*.json) -> cho chon file nao
     for f in "$DIR"/dashboard-*.json; do [ -f "$f" ] && files+=("$f"); done
     if [ "${#files[@]}" -gt 1 ]; then
         for f in "${files[@]}"; do info "${W}$i${N} $(basename "$f")"; i=$((i + 1)); done
-        pick=$(ask "Import file nao" "1")
-        [[ "$pick" =~ ^[0-9]+$ ]] && [ "$pick" -ge 1 ] && [ "$pick" -le "${#files[@]}" ] || { err "Chon sai"; return 1; }
+        pick=$(ask "Which file to import" "1")
+        [[ "$pick" =~ ^[0-9]+$ ]] && [ "$pick" -ge 1 ] && [ "$pick" -le "${#files[@]}" ] || { err "Invalid choice"; return 1; }
         DASH_JSON=${files[$((pick - 1))]}
     fi
-    [ -f "$DASH_JSON" ] || { warn "Chua co $DASH_JSON → sinh truoc"; do_dashboard || return 1; }
+    [ -f "$DASH_JSON" ] || { warn "$DASH_JSON not found → generating it first"; do_dashboard || return 1; }
     url=$(ask "Grafana URL" "${GRAFANA_URL:-${ENV_GRAFANA:-http://127.0.0.1:3000}}")
     ask_token
-    [ -n "$TOKEN" ] || { err "Chua nhap token"; return 1; }
-    folder=$(ask "Folder UID (bo trong = General)" "${GRAFANA_FOLDER:-}")
+    [ -n "$TOKEN" ] || { err "No token entered"; return 1; }
+    folder=$(ask "Folder UID (empty = keep current / General)" "${GRAFANA_FOLDER:-}")
     import_dashboard "$url" "$TOKEN" "$folder"
 }
 
@@ -837,11 +837,11 @@ do_import() {
 # 10. Cau hinh Prometheus
 # =============================================================================
 do_prom() {
-    title "CAU HINH PROMETHEUS"
+    title "PROMETHEUS CONFIG"
     local job cn
     if [ -f "$UNIT" ]; then
         cn=$(detect_cluster_name)
-        job=$(ask "Ten job cua cluster nay trong Prometheus (giong job cua ceph mgr)" "${PROM_JOB:-Proxmox-${cn:-CLUSTER}}")
+        job=$(ask "Prometheus job name for this cluster (same as the ceph mgr job)" "${PROM_JOB:-Proxmox-${cn:-CLUSTER}}")
         save_conf PROM_JOB "$job"
         prom_snippet "$job" "$(current_port)"
     fi
@@ -849,7 +849,7 @@ do_prom() {
         [ -f "$UNIT" ] && echo
         prom_all
     elif [ ! -f "$UNIT" ]; then
-        warn "May nay chua co exporter nao → menu 2 (cai tren node Ceph) hoac 17 (theo doi tu xa)"
+        warn "No exporter on this host yet → menu 2 (install on a Ceph node) or 17 (remote monitoring)"
     fi
 }
 
@@ -859,19 +859,19 @@ prom_all() {
     local ip f n p job m bad st jobs="|" cnt=0 skip=0 dn="" cl
     f="$DIR/prometheus-scrape-all.yml"
     while :; do
-        ip=$(ask "IP CUA MAY NAY (may monitor) ma Prometheus scrape toi - thuong chi can Enter" "$(local_ip)")
+        ip=$(ask "IP of THIS host (monitor) that Prometheus scrapes - usually just press Enter" "$(local_ip)")
         # Nhap nham IP may Prometheus -> target tro ve chinh Prometheus, khong co du lieu
         if hostname -I 2>/dev/null | tr ' ' '\n' | grep -qx "$ip"; then break; fi
-        warn "$ip khong phai IP cua may nay ($(hostname -I 2>/dev/null | xargs)) → exporter chay o day, target phai la IP may nay"
-        confirm "Van dung $ip (vd IP NAT / VIP)?" && break
+        warn "$ip is not an IP of this host ($(hostname -I 2>/dev/null | xargs)) → the exporters run here, the target must be this host's IP"
+        confirm "Use $ip anyway (e.g. NAT IP / VIP)?" && break
     done
     {
-        echo "# FIX NHANH - sinh boi menu.sh tren $(hostname) ($ip) luc $(date '+%F %T')"
-        echo "# Dan cac job duoi vao muc scrape_configs: cua prometheus.yml (giu nguyen thut le)."
+        echo "# FIX NHANH - generated by menu.sh on $(hostname) ($ip) at $(date '+%F %T')"
+        echo "# Paste the jobs below under scrape_configs: in prometheus.yml (keep the indentation)."
         echo "scrape_configs:"
     } > "$f"
 
-    printf '%s  %s%-18s %-22s %-20s %s%s\n' "$IND" "$W" "CLUSTER" "JOB" "TARGET" "TRANG THAI" "$N"
+    printf '%s  %s%-18s %-22s %-20s %s%s\n' "$IND" "$W" "CLUSTER" "JOB" "TARGET" "STATUS" "$N"
     local -A MET
     add_job() {  # add_job TEN JOB PORT -> ghi job vao file (metric da lay san trong MET)
         local name="$1" job="$2" port="$3" up col
@@ -879,12 +879,12 @@ prom_all() {
         up=$(echo "$m" | sed -n 's/^pve_ceph_extra_exporter_up{collector="\([^"]*\)"} \(.*\)/\1=\2/p')
         bad=$(echo "$up" | sed -n 's/=0$//p' | paste -sd, -)
         cl=$(echo "$m" | sed -n 's/^pve_cluster_info{id="cluster\/\([^"]*\)".*/\1/p' | head -1)
-        if [ -z "$m" ]; then st="exporter khong tra loi"; col=$R
-        elif [ -n "$bad" ]; then st="loi: $bad"; col=$Y
+        if [ -z "$m" ]; then st="exporter not responding"; col=$R
+        elif [ -n "$bad" ]; then st="failing: $bad"; col=$Y
         else st="OK${cl:+ (cluster $cl)}"; col=$G; fi
         if [[ "$jobs" == *"|$job|"* ]]; then
-            st="TRUNG JOB → bo qua"; col=$R; skip=$((skip + 1))
-            echo "  # BO QUA $name: job '$job' da dung cho cluster khac (Prometheus khong cho trung job_name)" >> "$f"
+            st="DUPLICATE JOB → skipped"; col=$R; skip=$((skip + 1))
+            echo "  # SKIPPED $name: job '$job' is already used by another cluster (Prometheus forbids duplicate job_name)" >> "$f"
         else
             jobs="$jobs$job|"; cnt=$((cnt + 1))
             cat >> "$f" <<EOF
@@ -897,8 +897,8 @@ prom_all() {
 EOF
         fi
         printf '%s  %-18s %-22s %-20s %s%s%s\n' "$IND" "$name" "$job" "$ip:$port" "$col" "$st" "$N"
-        if [ -n "$cl" ] && [[ "$st" != TRUNG* ]]; then
-            [[ "$dn" == *"|$cl|"* ]] && warn "  ↑ cluster ${W}$cl${N} da co o job khac → du lieu trung, nen xoa 1 (menu 20)"
+        if [ -n "$cl" ] && [[ "$st" != DUPLICATE* ]]; then
+            [[ "$dn" == *"|$cl|"* ]] && warn "  ↑ cluster ${W}$cl${N} is already in another job → duplicate data, remove one (menu 20)"
             dn="$dn|$cl|"
         fi
     }
@@ -906,7 +906,7 @@ EOF
     local list="" rank
     if [ -f "$UNIT" ]; then
         if [ -n "$(current_flags)" ]; then
-            warn "Exporter local chay che do khong gop (--no-*) → dung mau rieng o tren, khong dua vao file nay"
+            warn "Local exporter runs in non-merged mode (--no-*) → use the separate sample above, not added to this file"
         else
             list="(local)|${PROM_JOB:-Proxmox-$(detect_cluster_name)}|$(current_port)"$'\n'
         fi
@@ -931,30 +931,30 @@ EOF
     done < <(printf '%s' "$ranked" | sort -t'|' -k1,1n -k2,2)
     {
         echo
-        echo "# Alert rules (tuy chon): chep alerts/pve-ceph-alerts.yml len may Prometheus roi them:"
+        echo "# Alert rules (optional): copy alerts/pve-ceph-alerts.yml to the Prometheus host and add:"
         echo "# rule_files:"
         echo "#   - /etc/prometheus/rules/pve-ceph-alerts.yml"
     } >> "$f"
 
     echo
     if has promtool; then
-        if promtool check config "$f" >/dev/null 2>&1; then ok "promtool: cu phap hop le"
-        else err "promtool bao loi:"; promtool check config "$f" 2>&1 | sub; fi
+        if promtool check config "$f" >/dev/null 2>&1; then ok "promtool: syntax OK"
+        else err "promtool error:"; promtool check config "$f" 2>&1 | sub; fi
     fi
-    info "Da ghi ${W}$cnt job${N} vao ${W}$f${N}$([ "$skip" -gt 0 ] && echo " (bo qua $skip job trung)")"
+    info "Wrote ${W}$cnt jobs${N} to ${W}$f${N}$([ "$skip" -gt 0 ] && echo " ($skip duplicate jobs skipped)")"
     echo; sed -n '4,$p' "$f" | sed "s/^/${IND}    ${O}/; s/$/${N}/"; echo
-    warn "Xoa target cu (:9283 ceph mgr, :9221 pve exporter) cua cac cluster nay khoi Prometheus, neu khong so lieu bi nhan doi"
-    info "Firewall may nay cho IP Prometheus: menu 22."
-    info "${W}Prometheus tach file (scrape_config_files, vd /etc/prometheus/scrape_configs/*.yml):${N}"
-    echo "chep NGUYEN file nay vao thu muc do (file da co san dong scrape_configs:)" | sub
+    warn "Remove these clusters' old targets (:9283 ceph mgr, :9221 pve exporter) from Prometheus, otherwise values are doubled"
+    info "Firewall on this host for the Prometheus IP: menu 22."
+    info "${W}Prometheus with split files (scrape_config_files, e.g. /etc/prometheus/scrape_configs/*.yml):${N}"
+    echo "copy this WHOLE file into that directory (it already starts with scrape_configs:)" | sub
     printf '%s\n' "scp root@$ip:$f /etc/prometheus/scrape_configs/$(prom_file_name)" | sub
-    info "${W}Prometheus 1 file (mac dinh):${N}"
-    echo "dan cac khoi '- job_name:' vao duoi dong scrape_configs: cua prometheus.yml (khong chep dong scrape_configs:)" | sub
-    info "Sau do tren may Prometheus:"
+    info "${W}Prometheus single file (default):${N}"
+    echo "paste the '- job_name:' blocks under scrape_configs: in prometheus.yml (do not copy the scrape_configs: line)" | sub
+    info "Then on the Prometheus host:"
     printf '%s\n' "promtool check config /etc/prometheus/prometheus.yml" \
-        "systemctl reload prometheus      # hoac: curl -X POST http://<prom>:9090/-/reload" | sub
+        "systemctl reload prometheus      # or: curl -X POST http://<prom>:9090/-/reload" | sub
     if [ "$cnt" -gt 0 ] && has ssh && has scp; then
-        echo; confirm "Day file len may Prometheus qua SSH ngay (kiem tra trung, promtool, reload)?" && prom_push "$f"
+        echo; confirm "Push the file to the Prometheus host over SSH now (duplicate check, promtool, reload)?" && prom_push "$f"
     fi
 }
 
@@ -966,13 +966,13 @@ rscp() { scp "${SSH_CM[@]}" "$@"; }
 
 ssh_prepare() {  # ssh_prepare USER@HOST
     ssh -o BatchMode=yes -o ConnectTimeout=8 -o StrictHostKeyChecking=accept-new "$1" true 2>/dev/null && return 0
-    warn "May nay chua SSH vao $1 bang key → moi lenh se hoi mat khau"
-    if has ssh-copy-id && confirm "Tao SSH key va cai len $1 ngay (nhap mat khau 1 lan, lan sau khong hoi)?"; then
+    warn "No SSH key access to $1 yet → every command would ask for a password"
+    if has ssh-copy-id && confirm "Create an SSH key and install it on $1 now (password once, never again)?"; then
         [ -f "$HOME/.ssh/id_ed25519" ] || ssh-keygen -q -t ed25519 -N "" -f "$HOME/.ssh/id_ed25519" || return 1
-        ssh-copy-id -o StrictHostKeyChecking=accept-new "$1" >/dev/null 2>&1 && ok "Da cai key, tu gio khong hoi mat khau" \
-            || warn "ssh-copy-id loi → se hoi mat khau (1 lan)"
+        ssh-copy-id -o StrictHostKeyChecking=accept-new "$1" >/dev/null 2>&1 && ok "Key installed, no more password prompts" \
+            || warn "ssh-copy-id failed → you will be asked for the password (once)"
     else
-        info "Se hoi mat khau 1 lan cho ca lan chay nay"
+        info "The password will be asked once for this run"
     fi
 }
 
@@ -980,9 +980,9 @@ ask_prom_cfg() {  # file prometheus.yml tren may Prometheus (khong phai thu muc 
     case "${PROM_CFG:-}" in *"*"*|*/scrape_configs/*|*/rules/*|*/) PROM_CFG="" ;; esac  # gia tri sai da luu truoc day
     local c
     while :; do
-        c=$(ask "File cau hinh CHINH cua Prometheus (thuong chi can Enter)" "${PROM_CFG:-/etc/prometheus/prometheus.yml}")
+        c=$(ask "MAIN Prometheus config file (usually just press Enter)" "${PROM_CFG:-/etc/prometheus/prometheus.yml}")
         case "$c" in
-            *'*'*|*/scrape_configs/*|*/rules/*|*/) err "'$c' khong phai file chinh → nhap file prometheus.yml (vd /etc/prometheus/prometheus.yml)" >&2 ;;
+            *'*'*|*/scrape_configs/*|*/rules/*|*/) err "'$c' is not the main file → enter the prometheus.yml file (e.g. /etc/prometheus/prometheus.yml)" >&2 ;;
             *) echo "$c"; return ;;
         esac
         PROM_CFG=""
@@ -1016,7 +1016,7 @@ for path in sorted(glob.glob(os.path.join(d, "*.yml")) + glob.glob(os.path.join(
                 break
             j += 1
         block = "\n".join(lines[i:j])
-        why = "trung ten" if name in jobs else ("trung target " + ",".join(t for t in tgs if t in block)
+        why = "same job name" if name in jobs else ("same target " + ",".join(t for t in tgs if t in block)
                                                if any(t in block for t in tgs) else "")
         if why:
             hit.append((name, i + 1, j, why))
@@ -1026,13 +1026,13 @@ for path in sorted(glob.glob(os.path.join(d, "*.yml")) + glob.glob(os.path.join(
     if not hit:
         continue
     for name, a, b, why in hit:
-        print("%s|%s|dong %d-%d|%s" % (os.path.basename(path), name, a, b, why))
+        print("%s|%s|lines %d-%d|%s" % (os.path.basename(path), name, a, b, why))
     if mode == "apply":
         text = "\n".join(keep)
         if "job_name" in text:
             open(path, "w", encoding="utf-8").write(text)
         else:  # file khong con job nao -> bo (da co ban sao luu)
-            os.remove(path); print("%s|(khong con job -> bo file)" % os.path.basename(path))
+            os.remove(path); print("%s|(no jobs left -> file removed)" % os.path.basename(path))
 PY
 }
 
@@ -1044,22 +1044,22 @@ prom_file_old() { echo "proxmox-fixnhanh-$(hostname -s 2>/dev/null || hostname).
 # (Prometheus se khong khoi dong), canh bao target :9283/:9221 cu, promtool loi thi tra lai file cu.
 prom_push() {
     local f="${1:-$DIR/prometheus-scrape-all.yml}" host def dir cfg dst jobs pat out
-    [ -s "$f" ] || { err "Chua co $f → chay menu 10 truoc"; return 1; }
+    [ -s "$f" ] || { err "$f not found → run menu 10 first"; return 1; }
     def=${PROM_SSH:-}
     [ -z "$def" ] && [ -n "${PROM_URL:-}" ] && def="root@$(echo "$PROM_URL" | sed -E 's|^https?://||; s|[:/].*||')"
-    host=$(ask "SSH may Prometheus (user@ip)" "$def")
-    [ -n "$host" ] || { err "Chua nhap may Prometheus"; return 1; }
+    host=$(ask "SSH to the Prometheus host (user@ip)" "$def")
+    [ -n "$host" ] || { err "No Prometheus host entered"; return 1; }
     ssh_prepare "$host"
     cfg=$(ask_prom_cfg)
-    dir=$(ask "Thu muc scrape_config_files" "${PROM_DIR:-/etc/prometheus/scrape_configs}")
+    dir=$(ask "scrape_config_files directory" "${PROM_DIR:-/etc/prometheus/scrape_configs}")
     dst="$dir/$(prom_file_name)"
 
-    info "Kiem tra tren ${W}$host${N}..."
+    info "Checking ${W}$host${N}..."
     out=$(rssh "$host" "echo SSH_OK; test -d '$dir' && echo DIR_OK; grep -q '^scrape_config_files:' '$cfg' && echo CFG_OK; command -v promtool >/dev/null && echo PROMTOOL_OK; true" 2>&1)
-    [[ "$out" == *SSH_OK* ]] || { err "SSH toi $host loi:"; echo "$out" | sub; info "Can dang nhap SSH bang key: ssh-copy-id $host"; return 1; }
-    [[ "$out" == *DIR_OK* ]] || { err "Khong co thu muc $dir tren $host"; return 1; }
-    [[ "$out" == *CFG_OK* ]] || warn "$cfg chua co 'scrape_config_files:' tro toi $dir → Prometheus se khong doc file nay"
-    [[ "$out" == *PROMTOOL_OK* ]] || warn "May Prometheus khong co promtool → bo qua buoc kiem tra cu phap"
+    [[ "$out" == *SSH_OK* ]] || { err "SSH to $host failed:"; echo "$out" | sub; info "Key-based SSH login is required: ssh-copy-id $host"; return 1; }
+    [[ "$out" == *DIR_OK* ]] || { err "Directory $dir does not exist on $host"; return 1; }
+    [[ "$out" == *CFG_OK* ]] || warn "$cfg has no 'scrape_config_files:' pointing to $dir → Prometheus will not read this file"
+    [[ "$out" == *PROMTOOL_OK* ]] || warn "No promtool on the Prometheus host → skipping the syntax check"
     save_conf PROM_SSH "$host"; save_conf PROM_DIR "$dir"; save_conf PROM_CFG "$cfg"
 
     jobs=$(sed -n 's/^  - job_name: //p' "$f" | paste -sd'|' -)
@@ -1070,31 +1070,31 @@ prom_push() {
     tg=$(grep -oE "[0-9.]+:[0-9]+" "$f" | sort -u | paste -sd, -)
     out=$(rssh "$host" "PYTHONIOENCODING=utf-8 python3 - plan '$dir' '$(prom_file_name),$(prom_file_old)' '${jobs//|/,}' '$tg'" < <(prom_jobs_py) 2>&1)
     if [ -n "$out" ]; then
-        warn "Job cu tren Prometheus trung ten / trung target voi exporter:"
+        warn "Existing Prometheus jobs with the same name / target as the exporter:"
         echo "$out" | sed 's/|/  ·  /g' | sub
-        info "Thay the = sao luu toan bo $dir, go cac job tren khoi file cu, dua job exporter vao; promtool loi thi tra lai het"
-        confirm "Thay the cac job cu bang exporter?" || { info "Giu nguyen. Doi JOB o menu 17 neu muon chay song song"; return 1; }
+        info "Replace = back up all of $dir, remove the jobs above from the old files, add the exporter jobs; restore everything if promtool fails"
+        confirm "Replace the old jobs with the exporter?" || { info "Kept as is. Change JOB in menu 17 to run both side by side"; return 1; }
         bak="${PROM_BAK_BASE:-/root}/prom-bak-$(date +%Y%m%d-%H%M%S)"
         out=$(rssh "$host" "cp -a '$dir' '$bak' && PYTHONIOENCODING=utf-8 python3 - apply '$dir' '$(prom_file_name),$(prom_file_old)' '${jobs//|/,}' '$tg'" < <(prom_jobs_py) 2>&1) || {
-            err "Go job cu loi:"; echo "$out" | sub
+            err "Removing old jobs failed:"; echo "$out" | sub
             rssh "$host" "[ -d '$bak' ] && find '$dir' -maxdepth 1 -type f \\( -name '*.yml' -o -name '*.yaml' \\) -delete && cp -a '$bak/.' '$dir/'" \
-                && warn "Da tra lai $dir tu $bak"
+                && warn "Restored $dir from $bak"
             return 1; }
         echo "$out" | sub
-        ok "Sao luu: ${W}$host:$bak${N}"
+        ok "Backup: ${W}$host:$bak${N}"
     fi
     out=$(rssh "$host" "cd '$dir' && grep -HnE ':(9283|9221)\\b' *.yml *.yaml 2>/dev/null | grep -vE '$mine'")
     if [ -n "$out" ]; then
-        warn "Target ceph mgr / pve exporter cu dang co (neu la cung cluster thi XOA, khong se nhan doi so lieu):"
+        warn "Existing ceph mgr / pve exporter targets (REMOVE them if they are the same cluster, otherwise values double):"
         echo "$out" | sub
     fi
 
     restore_bak() {  # tra lai thu muc da sao luu (khi da go job cu ma buoc sau loi)
         [ -n "$bak" ] && rssh "$host" "find '$dir' -maxdepth 1 -type f \\( -name '*.yml' -o -name '*.yaml' \\) -delete; cp -a '$bak/.' '$dir/'" \
-            && warn "Da tra lai $dir tu $bak"
+            && warn "Restored $dir from $bak"
     }
-    confirm "Chep file → ${W}$host:$dst${N} roi reload Prometheus?" || { restore_bak; info "Huy"; return 0; }
-    rscp -q "$f" "$host:$dst.new" || { err "scp loi"; restore_bak; return 1; }
+    confirm "Copy file → ${W}$host:$dst${N} and reload Prometheus?" || { restore_bak; info "Cancelled"; return 0; }
+    rscp -q "$f" "$host:$dst.new" || { err "scp failed"; restore_bak; return 1; }
     # File ten cu (proxmox-fixnhanh-*) cung chua cac job nay -> cat di, loi thi tra lai
     out=$(rssh "$host" "cp -p '$dst' '$dst.bak' 2>/dev/null; mv '$dst.new' '$dst'
         [ -f '$old' ] && mv '$old' '$old.old'
@@ -1108,13 +1108,13 @@ prom_push() {
         systemctl reload prometheus 2>/dev/null || curl -sf -X POST http://127.0.0.1:9090/-/reload || { echo RELOAD_FAIL; exit 1; }
         echo PUSH_OK" 2>&1)
     if [[ "$out" == *PUSH_OK* ]]; then
-        ok "Da chep ${W}$dst${N} va reload Prometheus"
-        info "Kiem tra target: menu 12 (sau ~1 phut)"
-        echo; confirm "Day luon alert rules (alerts/pve-ceph-alerts.yml)?" && prom_rules_push "$host" "$cfg"
+        ok "Copied ${W}$dst${N} and reloaded Prometheus"
+        info "Check the targets: menu 12 (after ~1 minute)"
+        echo; confirm "Also push the alert rules (alerts/pve-ceph-alerts.yml)?" && prom_rules_push "$host" "$cfg"
     elif [[ "$out" == *CHECK_FAIL* ]]; then
-        err "promtool bao loi → da tra lai file cu, Prometheus khong bi anh huong:"; echo "$out" | grep -v CHECK_FAIL | sub; return 1
+        err "promtool error → old files restored, Prometheus unaffected:"; echo "$out" | grep -v CHECK_FAIL | sub; return 1
     else
-        err "Da chep file nhung reload loi → tren may Prometheus: systemctl reload prometheus"; echo "$out" | sub; return 1
+        err "File copied but reload failed → on the Prometheus host: systemctl reload prometheus"; echo "$out" | sub; return 1
     fi
 }
 
@@ -1122,10 +1122,10 @@ prom_push() {
 # (them dong rule_files neu thieu), promtool check rules + config, loi thi tra lai ca 2 file.
 prom_rules_push() {
     local src="$DIR/alerts/pve-ceph-alerts.yml" host="${1:-}" cfg="${2:-}" out e entries="" def dir dst covered="" add=""
-    [ -s "$src" ] || { err "Khong thay $src"; return 1; }
-    has ssh && has scp || { err "Can ssh va scp"; return 1; }
-    [ -n "$host" ] || host=$(ask "SSH may Prometheus (user@ip)" "${PROM_SSH:-}")
-    [ -n "$host" ] || { err "Chua nhap may Prometheus"; return 1; }
+    [ -s "$src" ] || { err "$src not found"; return 1; }
+    has ssh && has scp || { err "ssh and scp are required"; return 1; }
+    [ -n "$host" ] || host=$(ask "SSH to the Prometheus host (user@ip)" "${PROM_SSH:-}")
+    [ -n "$host" ] || { err "No Prometheus host entered"; return 1; }
     ssh_prepare "$host"
     [ -n "$cfg" ] || cfg=$(ask_prom_cfg)
 
@@ -1133,13 +1133,13 @@ prom_rules_push() {
         grep -q '^rule_files:[[:space:]]*\$' '$cfg' && echo RF_BLOCK
         grep -q '^rule_files:' '$cfg' && echo RF_KEY
         sed -n '/^rule_files:/,/^[^[:space:]#-]/p' '$cfg' | sed -n 's/^[[:space:]]*-[[:space:]]*/RF:/p'; true" 2>&1)
-    [[ "$out" == *SSH_OK* ]] || { err "SSH toi $host loi:"; echo "$out" | sub; info "ssh-copy-id $host"; return 1; }
-    [[ "$out" == *PROMTOOL_OK* ]] || warn "May Prometheus khong co promtool → khong kiem tra duoc rule truoc khi reload"
+    [[ "$out" == *SSH_OK* ]] || { err "SSH to $host failed:"; echo "$out" | sub; info "ssh-copy-id $host"; return 1; }
+    [[ "$out" == *PROMTOOL_OK* ]] || warn "No promtool on the Prometheus host → rules cannot be checked before reload"
     entries=$(echo "$out" | sed -n "s/^RF://p" | tr -d "\"'" | sed 's/[[:space:]]*#.*//')
 
     # Mac dinh: thu muc cua dong rule_files dang dung glob (vd /etc/prometheus/rules/*.yml)
     def=$(echo "$entries" | grep '\*' | head -1); def=${def%/*}
-    dir=$(ask "Thu muc chua rule tren may Prometheus" "${PROM_RULES_DIR:-${def:-/etc/prometheus/rules}}")
+    dir=$(ask "Rules directory on the Prometheus host" "${PROM_RULES_DIR:-${def:-/etc/prometheus/rules}}")
     dst="$dir/pve-ceph-alerts.yml"
     while IFS= read -r e; do
         # shellcheck disable=SC2053  # e la glob cua Prometheus, co y de khop mau
@@ -1147,16 +1147,16 @@ prom_rules_push() {
     done <<< "$entries"
     if [ -z "$covered" ]; then
         if [[ "$out" == *RF_BLOCK* ]] || [[ "$out" != *RF_KEY* ]]; then
-            warn "$cfg chua nap $dir → se them dong '  - $dir/*.yml' vao rule_files (giu ban sao $cfg.bak)"
+            warn "$cfg does not load $dir → will add '  - $dir/*.yml' to rule_files (backup $cfg.bak)"
             add=1
         else
-            err "$cfg co rule_files dang 1 dong ([...]) → them tay '$dir/*.yml' vao do roi chay lai"; return 1
+            err "$cfg has a one-line rule_files ([...]) → add '$dir/*.yml' there by hand and run again"; return 1
         fi
     fi
     save_conf PROM_SSH "$host"; save_conf PROM_CFG "$cfg"; save_conf PROM_RULES_DIR "$dir"
 
-    confirm "Chep alert rules → ${W}$host:$dst${N} roi reload Prometheus?" || { info "Huy"; return 0; }
-    rssh "$host" "mkdir -p '$dir'" && rscp -q "$src" "$host:$dst.new" || { err "Chep file loi"; return 1; }
+    confirm "Copy alert rules → ${W}$host:$dst${N} and reload Prometheus?" || { info "Cancelled"; return 0; }
+    rssh "$host" "mkdir -p '$dir'" && rscp -q "$src" "$host:$dst.new" || { err "Copy failed"; return 1; }
     out=$(rssh "$host" "cp -p '$dst' '$dst.bak' 2>/dev/null; mv '$dst.new' '$dst'
         if [ '$add' = 1 ]; then
             cp -p '$cfg' '$cfg.bak'
@@ -1171,12 +1171,12 @@ prom_rules_push() {
         systemctl reload prometheus 2>/dev/null || curl -sf -X POST http://127.0.0.1:9090/-/reload || { echo RELOAD_FAIL; exit 1; }
         echo PUSH_OK" 2>&1)
     if [[ "$out" == *PUSH_OK* ]]; then
-        ok "Da chep ${W}$dst${N}$([ "$add" = 1 ] && echo ", them rule_files vao $cfg") va reload Prometheus"
-        info "Xem alert: ${PROM_URL:-http://<prometheus>:9090}/alerts  (gui Telegram / email: cau hinh Alertmanager)"
+        ok "Copied ${W}$dst${N}$([ "$add" = 1 ] && echo ", added rule_files to $cfg") and reloaded Prometheus"
+        info "View alerts: ${PROM_URL:-http://<prometheus>:9090}/alerts  (Telegram / email delivery: configure Alertmanager)"
     elif [[ "$out" == *CHECK_FAIL* ]]; then
-        err "promtool bao loi → da tra lai file cu, Prometheus khong bi anh huong:"; echo "$out" | grep -v CHECK_FAIL | sub; return 1
+        err "promtool error → old files restored, Prometheus unaffected:"; echo "$out" | grep -v CHECK_FAIL | sub; return 1
     else
-        err "Da chep file nhung reload loi → tren may Prometheus: systemctl reload prometheus"; echo "$out" | sub; return 1
+        err "File copied but reload failed → on the Prometheus host: systemctl reload prometheus"; echo "$out" | sub; return 1
     fi
 }
 
@@ -1184,7 +1184,7 @@ prom_rules_push() {
 # 12. Kiem tra phia Prometheus
 # =============================================================================
 do_prom_check() {
-    title "KIEM TRA DU LIEU TREN PROMETHEUS"
+    title "CHECK DATA ON PROMETHEUS"
     prom_check "$(ask "Prometheus URL" "${PROM_URL:-${ENV_PROM:-http://127.0.0.1:9090}}")"
 }
 
@@ -1193,9 +1193,9 @@ do_prom_check() {
 # =============================================================================
 do_doctor() {
     do_check
-    if [ -f "$UNIT" ]; then do_status; else warn "Exporter chua cai tren may nay"; fi
+    if [ -f "$UNIT" ]; then do_status; else warn "Exporter not installed on this host"; fi
     if [ -n "${PROM_URL:-}" ] && [ "${NONINTERACTIVE:-0}" = 0 ]; then
-        confirm "Kiem tra them Prometheus $PROM_URL?" && prom_check "$PROM_URL"
+        confirm "Also check Prometheus $PROM_URL?" && prom_check "$PROM_URL"
     fi
 }
 
@@ -1238,56 +1238,56 @@ remote_test() {  # remote_test ENVFILE -> chay thu 1 lan, in ket qua tung phan; 
             ceph_mgr) label="Ceph mgr :9283 (OSD, pool, latency)" ;; ha) label="HA groups / rules" ;;
         esac
         if [ "$v" = 1 ]; then ok "$label"
-        else err "$label: ${e:-khong co du lieu}"; [ "$name" = pve ] || [ "$name" = ceph ] && rc=1; fi
+        else err "$label: ${e:-no data}"; [ "$name" = pve ] || [ "$name" = ceph ] && rc=1; fi
     done
-    local cl; cl=$(echo "$out" | sed -n 's/^pve_cluster_info{id="cluster\/\([^"]*\)".*nodes="\([^"]*\)".*/\1 (\2 node)/p')
-    [ -n "$cl" ] && info "Cluster doc duoc: ${W}$cl${N}"
+    local cl; cl=$(echo "$out" | sed -n 's/^pve_cluster_info{id="cluster\/\([^"]*\)".*nodes="\([^"]*\)".*/\1 (\2 nodes)/p')
+    [ -n "$cl" ] && info "Cluster read: ${W}$cl${N}"
     echo "$out" | grep -q 'HTTP Error 401' && \
-        warn "401 = sai token / secret. Kiem tra lai Token ID va secret (menu 17 → nhap lai secret)"
+        warn "401 = wrong token / secret. Check the Token ID and secret (menu 17 → re-enter the secret)"
     if echo "$out" | grep -q 'HTTP Error 403\|Permission'; then
         local tid user; tid=$(env_get "$1" PVE_TOKEN); tid=${tid%%=*}; user=${tid%%!*}
-        warn "403 = token thieu quyen doc (Sys.Audit tren /). Chay tren 1 node cua cluster:"
+        warn "403 = token lacks read access (Sys.Audit on /). Run on one node of the cluster:"
         printf '%s\n' "pveum acl modify / --users '$user' --roles PVEAuditor" \
-            "pveum acl modify / --tokens '$tid' --roles PVEAuditor   # token tao co Privilege Separation" | sub
-        info "Xem token co privsep khong: pveum user token list '$user'  (cot privsep = 1 thi can lenh thu 2)"
+            "pveum acl modify / --tokens '$tid' --roles PVEAuditor   # token created with Privilege Separation" | sub
+        info "Check privsep: pveum user token list '$user'  (privsep = 1 needs the second command)"
     fi
     echo "$out" | grep -q 'CERTIFICATE_VERIFY_FAILED' && \
-        warn "Cert Proxmox tu ky / CA chua tin cay (PVE_VERIFY_TLS=$(env_get "$1" PVE_VERIFY_TLS)) → Enter (N) o cau 'Proxmox da co cert hop le'"
+        warn "Proxmox cert is self-signed / untrusted CA (PVE_VERIFY_TLS=$(env_get "$1" PVE_VERIFY_TLS)) → press Enter (N) at 'Does Proxmox have a valid cert'"
     echo "$out" | grep -q 'standby' && \
-        warn "Mgr da thu deu la standby (chi mgr active tra metric) → nhap TAT CA node o cau IP de tool tu thu tung node; xem mgr active: 'ceph mgr stat'"
+        warn "All mgrs tried are standby (only the active mgr returns metrics) → enter ALL nodes at the IP question so each is tried; active mgr: 'ceph mgr stat'"
     echo "$out" | grep -qi 'refused' && \
-        warn "Connection refused = toi duoc may nhung port dong. :9283 → tren cluster chay 'ceph mgr module enable prometheus', xem dia chi bang 'ceph mgr services'; :8006 → pveproxy"
+        warn "Connection refused = host reachable but port closed. :9283 → on the cluster run 'ceph mgr module enable prometheus', see the address with 'ceph mgr services'; :8006 → pveproxy"
     echo "$out" | grep -qi 'timed out\|unreachable\|No route' && \
-        warn "Khong ket noi duoc → kiem tra may nay toi node:8006 va mgr:9283 (firewall)"
+        warn "Cannot connect → check this host to node:8006 and mgr:9283 (firewall)"
     return $rc
 }
 
 token_help() {
     box_top
-    box_center "${W}${Y}TAO API TOKEN CHI DOC (chay 1 lan tren 1 node bat ky cua cluster)${N}"
+    box_center "${W}${Y}CREATE A READ-ONLY API TOKEN (run once on any node of the cluster)${N}"
     box_sep
     box_row "${O}pveum user add monitor@pve --comment \"FIX NHANH monitor\"${N}"
     box_row "${O}pveum acl modify / --users monitor@pve --roles PVEAuditor${N}"
     box_row "${O}pveum user token add monitor@pve exporter --privsep 0${N}"
     box_sep
-    box_row "${D}PVEAuditor chi XEM duoc, khong sua VM / cau hinh / Ceph.${N}"
-    box_row "${D}Lenh cuoi in 'value' = secret (chi hien 1 lan) → dung o buoc duoi.${N}"
-    box_row "${D}Ceph mgr: ceph mgr module enable prometheus (mo :9283 tren cac mgr).${N}"
+    box_row "${D}PVEAuditor can only READ, it cannot change VMs / config / Ceph.${N}"
+    box_row "${D}The last command prints 'value' = secret (shown once) → used below.${N}"
+    box_row "${D}Ceph mgr: ceph mgr module enable prometheus (opens :9283 on the mgrs).${N}"
     box_bottom
 }
 
 do_remote_add() {  # do_remote_add [TEN] -> them / sua 1 cluster
-    title "THEM / SUA CLUSTER (THEO DOI TU XA)"
+    title "ADD / EDIT CLUSTER (REMOTE MONITORING)"
     need_root || return 1
-    has python3 || { err "Thieu python3 (apt install python3)"; return 1; }
+    has python3 || { err "python3 missing (apt install python3)"; return 1; }
     token_help; echo
     local name="${1:-}" f hosts tid secret verify mgr job port tmp
-    [ -n "$name" ] || name=$(ask "Ten cluster (khong dau, khong cach, vd FPT-HCM)" "")
-    [[ "$name" =~ ^[A-Za-z0-9_.-]+$ ]] || { err "Ten khong hop le: '$name'"; return 1; }
+    [ -n "$name" ] || name=$(ask "Cluster name (no spaces, e.g. FPT-HCM)" "")
+    [[ "$name" =~ ^[A-Za-z0-9_.-]+$ ]] || { err "Invalid name: '$name'"; return 1; }
     f="$REMOTE_DIR/$name.env"
-    [ -f "$f" ] && info "Cluster ${W}$name${N} da co → gia tri cu hien san, Enter de giu"
+    [ -f "$f" ] && info "Cluster ${W}$name${N} exists → current values shown, Enter keeps them"
 
-    hosts=$(ask "IP / ten cac node Proxmox, cach nhau dau phay (nhieu node = tu chuyen khi 1 node chet)" "$(env_get "$f" PVE_API)")
+    hosts=$(ask "Proxmox node IPs / names, comma separated (several nodes = failover when one dies)" "$(env_get "$f" PVE_API)")
     hosts=${hosts// /}  # "a, b" -> "a,b": file .env bi source, dau cach lam hong dong
     local other h oh
     for other in $(remote_names); do  # cung node da theo doi o cluster khac -> du lieu trung 2 job
@@ -1295,52 +1295,52 @@ do_remote_add() {  # do_remote_add [TEN] -> them / sua 1 cluster
         for h in ${hosts//,/ }; do
             for oh in $(env_get "$REMOTE_DIR/$other.env" PVE_API | tr ',' ' '); do
                 [ "${h#*://}" = "${oh#*://}" ] || continue
-                warn "Node ${W}$h${N} da co trong cluster ${W}$other${N} (port $(env_get "$REMOTE_DIR/$other.env" PORT)) → Prometheus se co 2 job trung du lieu"
-                info "Sua cluster do: menu 17 nhap ten ${W}$other${N}; hoac xoa: menu 20"
-                confirm "Van tiep tuc them ${W}$name${N}?" || return 1
+                warn "Node ${W}$h${N} is already in cluster ${W}$other${N} (port $(env_get "$REMOTE_DIR/$other.env" PORT)) → Prometheus would get 2 jobs with the same data"
+                info "Edit that cluster: menu 17 with name ${W}$other${N}; or remove it: menu 20"
+                confirm "Add ${W}$name${N} anyway?" || return 1
                 break 3
             done
         done
     done
-    [ -n "$hosts" ] || { err "Can it nhat 1 node"; return 1; }
+    [ -n "$hosts" ] || { err "At least 1 node is required"; return 1; }
     local oldtok; oldtok=$(env_get "$f" PVE_TOKEN)
     local deftid="monitor@pve!exporter"; [ -n "$oldtok" ] && deftid=${oldtok%%=*}
     tid=$(ask "Token ID" "$deftid")
-    [[ "$tid" == root@pam!* ]] && warn "Token cua root@pam: tao tren web mac dinh bat Privilege Separation → khong co quyen (403). Nen dung monitor@pve!exporter + PVEAuditor (hop tren)"
+    [[ "$tid" == root@pam!* ]] && warn "root@pam token: created in the web UI with Privilege Separation by default → no permissions (403). Prefer monitor@pve!exporter + PVEAuditor (box above)"
     if [ -n "$oldtok" ] && [ "$tid" = "${oldtok%%=*}" ]; then
-        read -rsp "${IND}  ${C}❯${N} Token secret ${D}(khong hien; Enter = giu secret cu)${N}: " secret; echo
+        read -rsp "${IND}  ${C}❯${N} Token secret ${D}(hidden; Enter = keep the old secret)${N}: " secret; echo
         [ -n "$secret" ] || secret=${oldtok#*=}
     else  # token moi / doi Token ID: secret cu thuoc token khac -> bat buoc nhap
-        read -rsp "${IND}  ${C}❯${N} Token secret cua ${W}$tid${N} ${D}(khong hien)${N}: " secret; echo
+        read -rsp "${IND}  ${C}❯${N} Token secret of ${W}$tid${N} ${D}(hidden)${N}: " secret; echo
     fi
-    [ -n "$secret" ] || { err "Chua nhap token secret"; return 1; }
-    verify=$(ask "Proxmox da co cert hop le (Let's Encrypt / CA noi bo)? (y/N - cert mac dinh cua Proxmox: Enter)" \
+    [ -n "$secret" ] || { err "No token secret entered"; return 1; }
+    verify=$(ask "Does Proxmox have a valid cert (Let's Encrypt / internal CA)? (y/N - default Proxmox cert: Enter)" \
         "$([ "$(env_get "$f" PVE_VERIFY_TLS)" = 1 ] && echo y || echo N)")
     # CEPH_MGR trong = exporter tu thu moi node cua cluster de tim mgr active.
     # File cu ghi san "cac node PVE_API:9283" -> coi nhu trong de duoc tu do.
     local oldmgr; oldmgr=$(env_get "$f" CEPH_MGR)
     mgrdef() { echo "$1" | tr ',' '\n' | sed 's|^ *https\?://||; s|:.*||; s|$|:9283|' | paste -sd,; }
     [ "$oldmgr" = "$(mgrdef "$hosts")" ] || [ "$oldmgr" = "$(mgrdef "$(env_get "$f" PVE_API)")" ] && oldmgr=""
-    mgr=$(ask "Ceph mgr host:9283, cach nhau dau phay (Enter = tu tim mgr active tren moi node)" "$oldmgr")
+    mgr=$(ask "Ceph mgr host:9283, comma separated (Enter = auto-find the active mgr on every node)" "$oldmgr")
     mgr=${mgr// /}
     # Nhap nham so port (vd 9831 = port exporter) vao day -> exporter coi "9831" la ten may
     while [ -n "$mgr" ] && echo "$mgr" | tr ',' '\n' | grep -qE '^[0-9]+$'; do
-        err "'$mgr': moi muc phai la IP / ten may (vd 10.2.50.11:9283), khong phai so port. Port exporter hoi o cau sau"
-        mgr=$(ask "Ceph mgr host:9283 (Enter = tu tim)" ""); mgr=${mgr// /}
+        err "'$mgr': each entry must be an IP / hostname (e.g. 10.2.50.11:9283), not a port number. The exporter port is asked next"
+        mgr=$(ask "Ceph mgr host:9283 (Enter = auto-find)" ""); mgr=${mgr// /}
     done
-    job=$(ask "Ten job Prometheus (phai chua 'Proxmox-' de dashboard thay)" "$(env_get "$f" JOB)")
+    job=$(ask "Prometheus job name (must contain 'Proxmox-' for the dashboard)" "$(env_get "$f" JOB)")
     job=${job:-$(default_job "$name")}
-    port=$(ask "Port exporter tren may nay" "$(env_get "$f" PORT)")
+    port=$(ask "Exporter port on this host" "$(env_get "$f" PORT)")
     port=${port:-$(next_free_port)}
-    [[ "$port" =~ ^[0-9]+$ ]] && [ "$port" -ge 1024 ] && [ "$port" -le 65535 ] || { err "Port khong hop le: $port"; return 1; }
+    [[ "$port" =~ ^[0-9]+$ ]] && [ "$port" -ge 1024 ] && [ "$port" -le 65535 ] || { err "Invalid port: $port"; return 1; }
     case "$port" in 9283|9221)
-        warn "Port $port trung port mac dinh cua $([ "$port" = 9283 ] && echo "ceph mgr" || echo "pve exporter") → de nham target trong prometheus.yml (goi y: $(next_free_port))" ;;
+        warn "Port $port is the default port of $([ "$port" = 9283 ] && echo "ceph mgr" || echo "pve exporter") → easy to confuse targets in prometheus.yml (suggested: $(next_free_port))" ;;
     esac
 
     install -d -m 0700 "$REMOTE_DIR"
     tmp=$(mktemp "$REMOTE_DIR/.new.XXXX")
     cat > "$tmp" <<EOF
-# FIX NHANH - cluster $name (sinh boi menu.sh $(date '+%F %T'))
+# FIX NHANH - cluster $name (generated by menu.sh $(date '+%F %T'))
 JOB=$job
 PORT=$port
 PVE_API=$hosts
@@ -1351,36 +1351,36 @@ INTERVAL=30
 EOF
     chmod 600 "$tmp"
 
-    echo; info "Chay thu ket noi toi cluster ${W}$name${N}..."
+    echo; info "Testing the connection to cluster ${W}$name${N}..."
     while ! remote_test "$tmp"; do
         if [ "$(env_get "$tmp" PVE_VERIFY_TLS)" = 1 ] && [[ "$REMOTE_TEST_OUT" == *CERTIFICATE_VERIFY_FAILED* ]] \
-            && confirm "Tat kiem tra TLS (PVE_VERIFY_TLS=0) roi chay thu lai?"; then
+            && confirm "Disable TLS verification (PVE_VERIFY_TLS=0) and test again?"; then
             sed -i 's/^PVE_VERIFY_TLS=1$/PVE_VERIFY_TLS=0/' "$tmp"
-            echo; info "Chay thu lai voi PVE_VERIFY_TLS=0..."
+            echo; info "Testing again with PVE_VERIFY_TLS=0..."
             continue
         fi
-        confirm "Ket noi chua dat. Van luu va chay service?" || { rm -f "$tmp"; info "Huy - chua luu gi"; return 1; }
+        confirm "Connection not OK. Save and start the service anyway?" || { rm -f "$tmp"; info "Cancelled - nothing saved"; return 1; }
         break
     done
     mv -f "$tmp" "$f"
-    remote_install_files || { err "Cai file loi"; return 1; }
+    remote_install_files || { err "Installing files failed"; return 1; }
     systemctl enable "$SERVICE@$name" >/dev/null 2>&1
     systemctl restart "$SERVICE@$name"
     sleep 3
     if curl -sf --max-time 60 "http://127.0.0.1:$port/metrics" | grep -q '^pve_ceph_extra_exporter_up'; then
-        ok "Service ${W}$SERVICE@$name${N} chay tai ${W}http://$(local_ip):$port/metrics${N}"
+        ok "Service ${W}$SERVICE@$name${N} running at ${W}http://$(local_ip):$port/metrics${N}"
     else
-        err "Service chua tra metric → journalctl -u $SERVICE@$name -n 30"; return 1
+        err "Service returns no metrics yet → journalctl -u $SERVICE@$name -n 30"; return 1
     fi
     echo; prom_snippet "$job" "$port" ""
 }
 
 do_remote_list() {
-    title "CAC CLUSTER THEO DOI TU XA"
+    title "REMOTE CLUSTERS"
     local names; names=$(remote_names)
-    if [ -z "$names" ]; then info "Chua co cluster nao (menu 17 de them)"; return 0; fi
+    if [ -z "$names" ]; then info "No cluster yet (menu 17 to add)"; return 0; fi
     printf '%s  %s%-16s %-6s %-10s %-22s %-16s %-6s %-5s %-5s %s%s\n' "$IND" "$W" "CLUSTER" "PORT" "SERVICE" \
-        "JOB" "CLUSTER THAT" "PVE" "CEPH" "MGR" "HA" "$N"
+        "JOB" "REAL CLUSTER" "PVE" "CEPH" "MGR" "HA" "$N"
     local n f p st m c real dup=""
     local -A MET REAL CNT JOBN
     for n in $names; do  # lay metric truoc de biet 2 cau hinh nao cung doc 1 cluster / trung job
@@ -1407,37 +1407,37 @@ do_remote_list() {
     done
     echo
     if [ -n "$dup" ]; then
-        warn "Cau hinh do: 2 cau hinh cung doc 1 cluster (CLUSTER THAT) hoac trung JOB → so lieu nhan doi tren dashboard"
-        info "Giu 1 cai dang ✔, xoa cai con lai: menu 20"
+        warn "Red rows: 2 configs read the same cluster (REAL CLUSTER) or share a JOB → doubled values on the dashboard"
+        info "Keep the one that is ✔, remove the other: menu 20"
     fi
-    info "Chi tiet loi: curl -s http://127.0.0.1:<port>/metrics | grep last_error"
+    info "Error details: curl -s http://127.0.0.1:<port>/metrics | grep last_error"
     info "Log: journalctl -u $SERVICE@<cluster> -n 30"
 }
 
 pick_remote() {  # chon 1 cluster -> in ten
     local names; names=$(remote_names)
-    [ -n "$names" ] || { err "Chua co cluster nao"; return 1; }
-    info "Cluster dang co: ${W}$(echo $names)${N}" >&2
-    ask "Ten cluster" "$(echo "$names" | head -1)"
+    [ -n "$names" ] || { err "No cluster yet"; return 1; }
+    info "Clusters: ${W}$(echo $names)${N}" >&2
+    ask "Cluster name" "$(echo "$names" | head -1)"
 }
 
 do_remote_test() {
-    title "KIEM TRA KET NOI CLUSTER"
+    title "TEST CLUSTER CONNECTION"
     local n; n=$(pick_remote) || return 1
-    [ -f "$REMOTE_DIR/$n.env" ] || { err "Khong co cluster '$n'"; return 1; }
+    [ -f "$REMOTE_DIR/$n.env" ] || { err "No cluster '$n'"; return 1; }
     remote_test "$REMOTE_DIR/$n.env"
 }
 
 do_remote_remove() {
-    title "XOA CLUSTER THEO DOI TU XA"
+    title "REMOVE REMOTE CLUSTER"
     need_root || return 1
     local n; n=$(pick_remote) || return 1
-    [ -f "$REMOTE_DIR/$n.env" ] || { err "Khong co cluster '$n'"; return 1; }
-    confirm "Dung service va xoa cau hinh cluster '$n' (token cung bi xoa)?" || { info "Huy"; return 0; }
+    [ -f "$REMOTE_DIR/$n.env" ] || { err "No cluster '$n'"; return 1; }
+    confirm "Stop the service and delete the config of cluster '$n' (the token is deleted too)?" || { info "Cancelled"; return 0; }
     systemctl disable --now "$SERVICE@$n" >/dev/null 2>&1
     has docker && docker rm -f "$(container_of "$n")" >/dev/null 2>&1
     rm -f "$REMOTE_DIR/$n.env"
-    ok "Da xoa $n - nho bo target cua no khoi prometheus.yml"
+    ok "Removed $n - remember to drop its target from Prometheus"
 }
 
 # =============================================================================
@@ -1449,16 +1449,16 @@ pkg_manager() {
 }
 
 do_deps() {
-    title "CAI GOI CAN THIET"
+    title "INSTALL REQUIRED PACKAGES"
     need_root || return 1
     local pm pk missing="" c
     pm=$(pkg_manager)
-    [ -n "$pm" ] || { err "Khong nhan ra trinh quan ly goi (apt/dnf/yum/zypper/pacman/apk)"; return 1; }
-    info "He dieu hanh: ${W}${ENV_OS:-?}${N} · trinh quan ly goi: ${W}$pm${N}"
+    [ -n "$pm" ] || { err "No known package manager found (apt/dnf/yum/zypper/pacman/apk)"; return 1; }
+    info "OS: ${W}${ENV_OS:-?}${N} · package manager: ${W}$pm${N}"
     for c in git python3 curl ss; do
-        if has "$c"; then ok "$c"; else warn "Thieu $c"; missing+=" $c"; fi
+        if has "$c"; then ok "$c"; else warn "Missing $c"; missing+=" $c"; fi
     done
-    [ -n "$missing" ] || { ok "Da du goi, khong can cai them"; return 0; }
+    [ -n "$missing" ] || { ok "All packages present, nothing to install"; return 0; }
     case "$pm" in
         apt-get) pk="git python3 curl iproute2" ;;
         dnf|yum) pk="git python3 curl iproute" ;;
@@ -1466,27 +1466,27 @@ do_deps() {
         pacman)  pk="git python curl iproute2" ;;
         apk)     pk="bash git python3 curl iproute2" ;;
     esac
-    confirm "Cai bang $pm: $pk ?" || { info "Huy"; return 0; }
+    confirm "Install with $pm: $pk ?" || { info "Cancelled"; return 0; }
     case "$pm" in
-        apt-get) { apt-get update -qq || warn "apt update co loi (repo enterprise?), van thu cai"; }
+        apt-get) { apt-get update -qq || warn "apt update failed (enterprise repo?), trying to install anyway"; }
                  DEBIAN_FRONTEND=noninteractive apt-get install -y $pk ;;
         dnf|yum) $pm install -y $pk ;;
         zypper)  zypper -n install $pk ;;
         pacman)  pacman -Sy --noconfirm --needed $pk ;;
         apk)     apk add $pk ;;
     esac 2>&1 | tail -5 | sub
-    for c in git python3 curl; do has "$c" && ok "$c" || err "Van thieu $c"; done
+    for c in git python3 curl; do has "$c" && ok "$c" || err "Still missing $c"; done
 }
 
 do_firewall() {
-    title "MO FIREWALL CHO PROMETHEUS"
+    title "OPEN FIREWALL FOR PROMETHEUS"
     need_root || return 1
     local ports src p fw=""
     ports=$(all_ports | tr '|' ' ')
     [ -n "$ports" ] || ports=$(current_port)
-    info "Port exporter tren may nay: ${W}$ports${N}"
-    src=$(ask "IP may Prometheus duoc phep truy cap (vd 10.16.16.38)" "${PROM_IP:-}")
-    [[ "$src" =~ ^[0-9a-fA-F.:/]+$ ]] || { err "IP khong hop le: $src"; return 1; }
+    info "Exporter ports on this host: ${W}$ports${N}"
+    src=$(ask "Prometheus host IP allowed to connect (e.g. 10.16.16.24)" "${PROM_IP:-}")
+    [[ "$src" =~ ^[0-9a-fA-F.:/]+$ ]] || { err "Invalid IP: $src"; return 1; }
     save_conf PROM_IP "$src"
 
     if has ufw && ufw status 2>/dev/null | grep -q "Status: active"; then
@@ -1498,56 +1498,56 @@ do_firewall() {
         for p in $ports; do
             firewall-cmd -q --permanent --add-rich-rule="rule family=ipv4 source address=$src port port=$p protocol=tcp accept"
         done
-        firewall-cmd -q --reload && ok "firewalld: da mo $ports cho $src"
+        firewall-cmd -q --reload && ok "firewalld: opened $ports for $src"
     fi
     if has pve-firewall && pve-firewall status 2>/dev/null | grep -q "enabled/running"; then
         fw="$fw pve-firewall"
         for p in $ports; do
             pvesh create /cluster/firewall/rules --action ACCEPT --type in --proto tcp --dport "$p" \
                 --source "$src" --enable 1 --comment "FIX NHANH exporter" >/dev/null 2>&1 \
-                && ok "pve-firewall: mo $p cho $src" || err "pve-firewall: khong them duoc rule port $p"
+                && ok "pve-firewall: opened $p for $src" || err "pve-firewall: cannot add a rule for port $p"
         done
     fi
     if [ -z "$fw" ]; then
-        info "Khong co ufw / firewalld / pve-firewall dang bat → khong can mo gi them"
+        info "No active ufw / firewalld / pve-firewall → nothing to open"
     else
-        ok "Da xu ly firewall:${W}$fw${N}"
+        ok "Firewall updated:${W}$fw${N}"
     fi
-    info "Neu giua 2 may con firewall mang (pfSense, FortiGate...) thi mo tcp $ports tu $src"
+    info "If a network firewall sits between the hosts (pfSense, FortiGate...), open tcp $ports from $src"
 }
 
 DOCKER_IMAGE=fixnhanh/pve-ceph-exporter
 docker_ok() {
-    has docker || { err "Chua cai Docker → curl -fsSL https://get.docker.com | sh"; return 1; }
-    docker info >/dev/null 2>&1 || { err "Docker chua chay → systemctl enable --now docker"; return 1; }
+    has docker || { err "Docker not installed → curl -fsSL https://get.docker.com | sh"; return 1; }
+    docker info >/dev/null 2>&1 || { err "Docker is not running → systemctl enable --now docker"; return 1; }
 }
 container_of() { echo "fixnhanh-pve-$1"; }
 container_state() { docker inspect -f '{{.State.Status}}' "$(container_of "$1")" 2>/dev/null; }
 
 do_docker_run() {
-    title "CHAY CLUSTER BANG DOCKER"
+    title "RUN CLUSTERS IN DOCKER"
     need_root || return 1
     docker_ok || return 1
     local names sel list n f p ver c
     names=$(remote_names)
-    [ -n "$names" ] || { err "Chua co cluster nao → them o menu 17 truoc (Docker dung lai file cau hinh do)"; return 1; }
-    info "Cluster dang co: ${W}$(echo $names)${N}"
-    sel=$(ask "Chay cluster nao bang Docker (ten, cach nhau dau cach, hoac all)" "all")
+    [ -n "$names" ] || { err "No cluster yet → add one in menu 17 first (Docker reuses that config file)"; return 1; }
+    info "Clusters: ${W}$(echo $names)${N}"
+    sel=$(ask "Which clusters to run in Docker (names separated by spaces, or all)" "all")
     if [ "$sel" = all ]; then list=$names; else list=$sel; fi
 
     ver=$(docker_build_image) || return 1
     for n in $list; do docker_run_cluster "$n" "$ver"; done
-    info "Target Prometheus khong doi: $(local_ip):<port> nhu khi chay systemd"
+    info "Prometheus target unchanged: $(local_ip):<port> as with systemd"
 }
 
 docker_build_image() {  # build image theo VERSION cua exporter -> in version (da co thi bo qua)
     local ver; ver=$(sed -n 's/^VERSION = "\(.*\)"/\1/p' "$EXPORTER_SRC")
     if docker image inspect "$DOCKER_IMAGE:$ver" >/dev/null 2>&1; then
-        info "Image ${W}$DOCKER_IMAGE:$ver${N} da co" >&2
+        info "Image ${W}$DOCKER_IMAGE:$ver${N} already exists" >&2
     else
         info "Build image ${W}$DOCKER_IMAGE:$ver${N}..." >&2
         docker build -q -t "$DOCKER_IMAGE:$ver" -t "$DOCKER_IMAGE:latest" "$DIR/exporter" 2>&1 | sub >&2
-        docker image inspect "$DOCKER_IMAGE:$ver" >/dev/null 2>&1 || { err "Build image loi" >&2; return 1; }
+        docker image inspect "$DOCKER_IMAGE:$ver" >/dev/null 2>&1 || { err "Image build failed" >&2; return 1; }
     fi
     echo "$ver"
 }
@@ -1555,23 +1555,23 @@ docker_build_image() {  # build image theo VERSION cua exporter -> in version (d
 docker_run_cluster() {  # docker_run_cluster TEN VERSION -> (tao lai) container cua cluster, kiem tra metric
     local n="$1" ver="$2" f p c
     f="$REMOTE_DIR/$n.env"
-    [ -f "$f" ] || { err "Khong co cluster '$n'"; return 1; }
+    [ -f "$f" ] || { err "No cluster '$n'"; return 1; }
     p=$(env_get "$f" PORT); c=$(container_of "$n")
     if [ "$(systemctl is-active "$SERVICE@$n" 2>/dev/null)" = active ]; then
-        info "$n: dung service systemd de chuyen sang Docker (cung port $p)"
+        info "$n: stopping the systemd service to move to Docker (same port $p)"
         systemctl disable --now "$SERVICE@$n" >/dev/null 2>&1
     fi
     docker rm -f "$c" >/dev/null 2>&1
     if ! docker run -d --name "$c" --restart unless-stopped -p "$p:$p" --env-file "$f" \
             --memory 256m --cpus 0.25 --read-only --cap-drop ALL \
             --security-opt no-new-privileges "$DOCKER_IMAGE:$ver" >/dev/null; then
-        err "$n: docker run loi"; return 1
+        err "$n: docker run failed"; return 1
     fi
     sleep 5
     if curl -sf --max-time 60 "http://127.0.0.1:$p/metrics" | grep -q '^pve_ceph_extra_exporter_up'; then
-        ok "$n: container ${W}$c${N} ($ver) chay tai ${W}http://$(local_ip):$p/metrics${N}"
+        ok "$n: container ${W}$c${N} ($ver) running at ${W}http://$(local_ip):$p/metrics${N}"
     else
-        err "$n: container chua tra metric → docker logs $c"; return 1
+        err "$n: container returns no metrics yet → docker logs $c"; return 1
     fi
 }
 
@@ -1580,14 +1580,14 @@ docker_run_cluster() {  # docker_run_cluster TEN VERSION -> (tao lai) container 
 #   cd /root/monitor-grafana-proxmox-full && git pull && bash menu.sh refresh
 # =============================================================================
 do_refresh() {
-    title "CAP NHAT TOAN BO ($(tool_rev))"
+    title "UPDATE EVERYTHING ($(tool_rev))"
     local fail=()
     echo "${IND}  ${W}[1/4] Exporter${N}"
-    if [ "$(id -u)" != 0 ]; then warn "Can root de cai lai exporter → bo qua"
+    if [ "$(id -u)" != 0 ]; then warn "Root is required to reinstall the exporter → skipped"
     else
         if [ -f "$UNIT" ]; then
             install -m 0755 "$EXPORTER_SRC" "$BIN" && systemctl restart "$SERVICE" \
-                && ok "Exporter local: ban $(sed -n 's/^VERSION = "\(.*\)"/\1/p' "$BIN")" || fail+=("exporter local")
+                && ok "Local exporter: version $(sed -n 's/^VERSION = "\(.*\)"/\1/p' "$BIN")" || fail+=("exporter local")
         fi
         if [ -n "$(remote_names)" ]; then
             remote_refresh_after_update >/dev/null || fail+=("exporter remote")
@@ -1598,16 +1598,16 @@ do_refresh() {
                 if ver=$(docker_build_image); then
                     for n in "${dk[@]}"; do
                         cur=$(docker inspect -f '{{.Config.Image}}' "$(container_of "$n")" 2>/dev/null)
-                        if [ "$cur" = "$DOCKER_IMAGE:$ver" ]; then ok "$n: container da la ban $ver"
+                        if [ "$cur" = "$DOCKER_IMAGE:$ver" ]; then ok "$n: container already on $ver"
                         else docker_run_cluster "$n" "$ver" || fail+=("container $n"); fi
                     done
                 else fail+=("build image"); fi
             fi
             for n in $(remote_names); do
-                [ "$(systemctl is-active "$SERVICE@$n" 2>/dev/null)" = active ] && ok "$n: service systemd da chay lai ban moi"
+                [ "$(systemctl is-active "$SERVICE@$n" 2>/dev/null)" = active ] && ok "$n: systemd service restarted on the new version"
             done
         fi
-        [ -f "$UNIT" ] || [ -n "$(remote_names)" ] || info "May nay chua co exporter"
+        [ -f "$UNIT" ] || [ -n "$(remote_names)" ] || info "No exporter on this host"
     fi
 
     echo; echo "${IND}  ${W}[2/4] Dashboard${N}"
@@ -1615,37 +1615,37 @@ do_refresh() {
         if [ -n "${GRAFANA_URL:-}" ] && [ -s "$GRAFANA_TOKEN_FILE" ]; then
             import_dashboard "$GRAFANA_URL" "$(cat "$GRAFANA_TOKEN_FILE")" "${GRAFANA_FOLDER:-}" </dev/null || fail+=("import Grafana")
         else
-            warn "Chua co Grafana URL / token da luu → import tay: menu 11 (luu token 1 lan)"
+            warn "No saved Grafana URL / token → import manually: menu 11 (save the token once)"
         fi
-    else fail+=("sinh dashboard"); fi
+    else fail+=("generate dashboard"); fi
     # Cac dashboard khac (dashboard-*.json: khach hang, ban rieng CMC / FPT ...): sinh lai bang
     # tham so luu trong chinh file (fixnhanhArgs), import giu nguyen folder tren Grafana
     local f main=$DASH_JSON
     for f in "$DIR"/dashboard-*.json; do
         [ -f "$f" ] && [ "$f" != "$main" ] || continue
         if ! grep -q '"fixnhanhArgs"' "$f"; then
-            warn "$(basename "$f"): sinh tu ban cu (chua luu tham so) → tao lai 1 lan bang make_dashboard.py (README: Nhieu dashboard)"
+            warn "$(basename "$f"): generated by an old version (no saved args) → recreate it once with make_dashboard.py (README: Multiple dashboards)"
             continue
         fi
         if python3 "$MAKE_DASH" --regen "$f" >/dev/null; then
-            ok "Sinh lai $(basename "$f")"
+            ok "Regenerated $(basename "$f")"
             if [ -n "${GRAFANA_URL:-}" ] && [ -s "$GRAFANA_TOKEN_FILE" ]; then
                 DASH_JSON=$f import_dashboard "$GRAFANA_URL" "$(cat "$GRAFANA_TOKEN_FILE")" "" </dev/null || fail+=("import $(basename "$f")")
             fi
-        else fail+=("sinh $(basename "$f")"); fi
+        else fail+=("generate $(basename "$f")"); fi
     done
     DASH_JSON=$main
 
-    echo; echo "${IND}  ${W}[3/4] Dich vu${N}"
+    echo; echo "${IND}  ${W}[3/4] Services${N}"
     svc_table || true
 
     echo; echo "${IND}  ${W}[4/4] Prometheus${N}"
     if [ -n "${PROM_URL:-}" ]; then prom_check "$PROM_URL" || fail+=("Prometheus")
-    else info "Chua dat Prometheus URL (menu 15)"; fi
+    else info "Prometheus URL not set (menu 15)"; fi
 
     echo
-    if [ "${#fail[@]}" = 0 ]; then ok "${W}Xong, khong co loi${N}"
-    else err "Can xem lai: ${fail[*]}"; return 1; fi
+    if [ "${#fail[@]}" = 0 ]; then ok "${W}Done, no errors${N}"
+    else err "Needs attention: ${fail[*]}"; return 1; fi
 }
 
 # =============================================================================
@@ -1682,7 +1682,7 @@ svc_boot_of() {  # tu chay khi khoi dong may?
 svc_health_of() {  # svc_health_of PORT -> ok / treo / - ; exporter cu khong co /health tra trang chu 200 = ok
     [ -n "$1" ] || { echo "-"; return; }
     case "$(curl -s -o /dev/null -w '%{http_code}' --max-time 5 "http://127.0.0.1:$1/health" 2>/dev/null)" in
-        200) echo "ok" ;; 503) echo "treo" ;; *) echo "khong tra loi" ;;
+        200) echo "ok" ;; 503) echo "hung" ;; *) echo "no answer" ;;
     esac
 }
 
@@ -1693,7 +1693,7 @@ svc_verify() {  # svc_verify KIND UNIT PORT -> doi toi 40s cho active + /health 
         [ "$st" = active ] && { [ -z "$3" ] || [ "$h" = ok ]; } && { ok "$2: active${3:+, /health ok}"; return 0; }
         sleep 2
     done
-    err "$2: $st${3:+, /health $h} sau 40s"
+    err "$2: $st${3:+, /health $h} after 40s"
     case "$1" in docker) docker logs --tail 15 "$2" 2>&1 | sub ;; *) journalctl -u "$2" -n 15 --no-pager 2>/dev/null | sub ;; esac
     return 1
 }
@@ -1703,34 +1703,34 @@ svc_do() {  # svc_do ACTION KIND UNIT PORT ; ACTION = restart / stop / start / b
     case "$k:$a" in
         daemon:restart|daemon:stop)
             before=$(docker ps --format '{{.Names}}' 2>/dev/null)
-            [ -n "$before" ] && warn "Restart Docker → tat ca container tat vai giay: $(echo $before)" ;;
+            [ -n "$before" ] && warn "Restarting Docker → all containers stop for a few seconds: $(echo $before)" ;;
     esac
     case "$k:$a" in
-        docker:boot-on)  docker update --restart unless-stopped "$u" >/dev/null && ok "$u: tu chay khi khoi dong may" ;;
-        docker:boot-off) docker update --restart no "$u" >/dev/null && ok "$u: khong tu chay khi khoi dong may" ;;
-        docker:*)        docker "$a" "$u" >/dev/null 2>&1 || { err "docker $a $u loi"; return 1; } ;;
+        docker:boot-on)  docker update --restart unless-stopped "$u" >/dev/null && ok "$u: starts on boot" ;;
+        docker:boot-off) docker update --restart no "$u" >/dev/null && ok "$u: does not start on boot" ;;
+        docker:*)        docker "$a" "$u" >/dev/null 2>&1 || { err "docker $a $u failed"; return 1; } ;;
         *:boot-on)       systemctl enable "$u" >/dev/null 2>&1 && ok "$u: enabled" ;;
         *:boot-off)      systemctl disable "$u" >/dev/null 2>&1 && ok "$u: disabled" ;;
-        *)               systemctl "$a" "$u" || { err "systemctl $a $u loi"; return 1; } ;;
+        *)               systemctl "$a" "$u" || { err "systemctl $a $u failed"; return 1; } ;;
     esac
     case "$a" in
         restart|start) svc_verify "$k" "$u" "$p" || return 1 ;;
         stop) sleep 1; ok "$u: $(svc_state_of "$k" "$u")"
               [ "$k" != daemon ] && systemctl is-active -q "$WD_UNIT.timer" 2>/dev/null \
-                  && info "Watchdog chi kiem tra dich vu dang chay → khong tu bat lai cai vua dung" ;;
+                  && info "Watchdog only checks running services → it will not restart what you just stopped" ;;
     esac
     if [ "$k" = daemon ] && [ "$a" = restart ] && [ -n "$before" ]; then
         sleep 3; local c miss=""
         for c in $before; do docker ps --format '{{.Names}}' | grep -qx "$c" || miss+=" $c"; done
-        if [ -n "$miss" ]; then warn "Container chua chay lai:$miss"; confirm "Khoi dong lai?" && docker start $miss | sub
-        else ok "Tat ca container da chay lai"; fi
+        if [ -n "$miss" ]; then warn "Containers not back up:$miss"; confirm "Start them?" && docker start $miss | sub
+        else ok "All containers are back up"; fi
     fi
 }
 
 svc_table() {  # in bang, luu danh sach vao SVC_ROWS
     mapfile -t SVC_ROWS < <(svc_list)
-    if [ "${#SVC_ROWS[@]}" = 0 ]; then warn "May nay chua co dich vu nao (menu 2 / 17)"; return 1; fi
-    printf '%s  %s%-3s %-26s %-8s %-10s %-14s %-6s %s%s\n' "$IND" "$W" "#" "TEN" "LOAI" "TRANG THAI" "/HEALTH" "PORT" "KHOI DONG CUNG MAY" "$N"
+    if [ "${#SVC_ROWS[@]}" = 0 ]; then warn "No services on this host yet (menu 2 / 17)"; return 1; fi
+    printf '%s  %s%-3s %-26s %-8s %-10s %-14s %-6s %s%s\n' "$IND" "$W" "#" "NAME" "TYPE" "STATE" "/HEALTH" "PORT" "START ON BOOT" "$N"
     local i=1 r k nm u p st h bt c
     for r in "${SVC_ROWS[@]}"; do
         IFS='|' read -r k nm u p <<< "$r"
@@ -1744,15 +1744,15 @@ svc_table() {  # in bang, luu danh sach vao SVC_ROWS
 }
 
 do_services() {
-    title "DICH VU & SUC KHOE"
+    title "SERVICES & HEALTH"
     need_root || return 1
     local cmd a sel idx r k nm u p targets
     while :; do
         svc_table || return 1
         echo
-        info "${W}r${N} khoi dong lai  ${W}s${N} dung  ${W}t${N} chay  ${W}l${N} log  ${W}b${N}/${W}B${N} bat/tat chay khi khoi dong may  ${W}w${N} watchdog"
-        info "Vd: ${W}r 2${N} · ${W}r a${N} (tat ca exporter) · ${W}l 1${N} · Enter = quay lai"
-        cmd=$(ask "Lenh" ""); [ -n "$cmd" ] || return 0
+        info "${W}r${N} restart  ${W}s${N} stop  ${W}t${N} start  ${W}l${N} logs  ${W}b${N}/${W}B${N} enable/disable start on boot  ${W}w${N} watchdog"
+        info "E.g. ${W}r 2${N} · ${W}r a${N} (all exporters) · ${W}l 1${N} · Enter = back"
+        cmd=$(ask "Command" ""); [ -n "$cmd" ] || return 0
         a=${cmd%% *}; sel=${cmd#* }; [ "$sel" = "$cmd" ] && sel=""
         if [ "$a" = w ]; then do_watchdog; echo; continue; fi
         targets=()
@@ -1760,18 +1760,18 @@ do_services() {
             for r in "${SVC_ROWS[@]}"; do case "$r" in systemd\|*|docker\|*) targets+=("$r") ;; esac; done
         elif [[ "$sel" =~ ^[0-9]+$ ]] && [ "$sel" -ge 1 ] && [ "$sel" -le "${#SVC_ROWS[@]}" ]; then
             targets=("${SVC_ROWS[$((sel - 1))]}")
-        else err "Chon so trong bang hoac 'a'"; continue; fi
+        else err "Pick a number from the table or 'a'"; continue; fi
         for r in "${targets[@]}"; do
             IFS='|' read -r k nm u p <<< "$r"
             case "$a" in
                 r) svc_do restart "$k" "$u" "$p" ;;
-                s) confirm "Dung $u?" && svc_do stop "$k" "$u" "$p" ;;
+                s) confirm "Stop $u?" && svc_do stop "$k" "$u" "$p" ;;
                 t) svc_do start "$k" "$u" "$p" ;;
                 l) case "$k" in docker) docker logs --tail 40 "$u" 2>&1 | sub ;;
                                 *) journalctl -u "$u" -n 40 --no-pager 2>/dev/null | sub ;; esac ;;
                 b) svc_do boot-on "$k" "$u" "$p" ;;
                 B) svc_do boot-off "$k" "$u" "$p" ;;
-                *) err "Lenh '$a' khong co"; break ;;
+                *) err "Unknown command '$a'"; break ;;
             esac
         done
         echo
@@ -1782,26 +1782,26 @@ do_services() {
 # khoi dong lai dung cai do (systemd restart / docker restart), ghi log vao journal.
 do_watchdog() {
     if systemctl is-active -q "$WD_UNIT.timer" 2>/dev/null; then
-        ok "Watchdog dang bat (2 phut / lan). Lan restart gan nhat:"
+        ok "Watchdog is on (every 2 minutes). Recent restarts:"
         journalctl -t pve-ceph-watchdog -n 10 --no-pager 2>/dev/null | sub
-        confirm "Tat watchdog?" || return 0
+        confirm "Turn the watchdog off?" || return 0
         systemctl disable --now "$WD_UNIT.timer" >/dev/null 2>&1
         rm -f "${SYSTEMD_DIR:-/etc/systemd/system}/$WD_UNIT.timer" "${SYSTEMD_DIR:-/etc/systemd/system}/$WD_UNIT.service" "$WD_BIN"
-        systemctl daemon-reload; ok "Da tat va go watchdog"; return 0
+        systemctl daemon-reload; ok "Watchdog turned off and removed"; return 0
     fi
-    info "Watchdog: moi 2 phut kiem tra /health cua exporter dang chay; treo / khong tra loi 2 lan lien tiep → tu khoi dong lai"
-    confirm "Bat watchdog?" || return 0
+    info "Watchdog: every 2 minutes checks /health of running exporters; hung / no answer twice in a row → restart it"
+    confirm "Turn the watchdog on?" || return 0
     cat > "$WD_BIN" <<EOF
 #!/bin/bash
-# FIX NHANH - watchdog exporter (sinh boi menu.sh). /health loi 2 lan lien tiep -> restart.
+# FIX NHANH - watchdog exporter (generated by menu.sh). /health failing twice in a row -> restart.
 S=/run/pve-ceph-watchdog; mkdir -p "\$S"
 chk() {  # chk TEN PORT LENH_RESTART...
     local name=\$1 port=\$2 code n; shift 2
     code=\$(curl -s -o /dev/null -w '%{http_code}' --max-time 15 "http://127.0.0.1:\$port/health")
     if [ "\$code" = 200 ]; then rm -f "\$S/\$name"; return; fi
     n=\$(( \$(cat "\$S/\$name" 2>/dev/null || echo 0) + 1 )); echo "\$n" > "\$S/\$name"
-    logger -t pve-ceph-watchdog "\$name :\$port /health=\$code (lan \$n)"
-    if [ "\$n" -ge 2 ]; then logger -t pve-ceph-watchdog "khoi dong lai \$name"; "\$@"; rm -f "\$S/\$name"; fi
+    logger -t pve-ceph-watchdog "\$name :\$port /health=\$code (attempt \$n)"
+    if [ "\$n" -ge 2 ]; then logger -t pve-ceph-watchdog "restarting \$name"; "\$@"; rm -f "\$S/\$name"; fi
 }
 if systemctl is-active -q $SERVICE; then
     chk local "\$(sed -n 's/.*--port \([0-9]\+\).*/\1/p' $UNIT | head -1)" systemctl restart $SERVICE
@@ -1819,28 +1819,28 @@ EOF
     chmod 755 "$WD_BIN"
     printf '[Unit]\nDescription=FIX NHANH watchdog exporter Proxmox Ceph\n\n[Service]\nType=oneshot\nExecStart=%s\n' "$WD_BIN" \
         > "${SYSTEMD_DIR:-/etc/systemd/system}/$WD_UNIT.service"
-    printf '[Unit]\nDescription=FIX NHANH watchdog exporter (2 phut / lan)\n\n[Timer]\nOnBootSec=3min\nOnUnitActiveSec=2min\n\n[Install]\nWantedBy=timers.target\n' \
+    printf '[Unit]\nDescription=FIX NHANH watchdog exporter (every 2 minutes)\n\n[Timer]\nOnBootSec=3min\nOnUnitActiveSec=2min\n\n[Install]\nWantedBy=timers.target\n' \
         > "${SYSTEMD_DIR:-/etc/systemd/system}/$WD_UNIT.timer"
     systemctl daemon-reload && systemctl enable --now "$WD_UNIT.timer" >/dev/null 2>&1 \
-        && ok "Da bat watchdog. Xem: journalctl -t pve-ceph-watchdog" || err "Bat timer loi"
+        && ok "Watchdog on. View: journalctl -t pve-ceph-watchdog" || err "Enabling the timer failed"
 }
 
 # =============================================================================
 # 25. Doi dai IP Docker (docker0 + mang moi): tranh trung dai IP noi bo / VPN
 # =============================================================================
 do_docker_net() {
-    title "DOI DAI IP DOCKER"
+    title "CHANGE DOCKER IP RANGE"
     need_root || return 1
-    has docker && has python3 || { err "Can docker va python3"; return 1; }
+    has docker && has python3 || { err "docker and python3 are required"; return 1; }
     local f=${DOCKER_DAEMON_JSON:-/etc/docker/daemon.json} bak cur bip pool before after n miss="" out
     cur=$(ip -4 addr show docker0 2>/dev/null | awk '/inet /{print $2}')
-    info "docker0 hien tai: ${W}${cur:-chua co}${N}"
+    info "docker0 now: ${W}${cur:-none}${N}"
     docker network ls -q 2>/dev/null | xargs -r docker network inspect -f '{{.Name}} {{range .IPAM.Config}}{{.Subnet}} {{end}}' 2>/dev/null | sub
-    info "Service systemd (exporter @cluster) ${G}khong anh huong${N}; container Docker ${Y}tat vai giay${N} khi restart Docker roi tu chay lai"
-    info "Mang tao bang 'docker network create' tu truoc giu dai cu (phai xoa / tao lai neu muon doi)"
+    info "systemd services (exporter @cluster) ${G}are not affected${N}; Docker containers ${Y}stop for a few seconds${N} while Docker restarts, then come back"
+    info "Networks made earlier with 'docker network create' keep their old range (delete / recreate to change them)"
 
-    bip=$(ask "IP cho docker0 (IP/prefix)" "192.168.20.1/24")
-    pool=$(ask "Dai cap cho mang Docker moi sau nay (vd 192.168.21.0/24; Enter = bo qua)" "")
+    bip=$(ask "IP for docker0 (IP/prefix)" "192.168.20.1/24")
+    pool=$(ask "Range for future Docker networks (e.g. 192.168.21.0/24; Enter = skip)" "")
     # Kiem tra: dung dinh dang, thuoc dai noi bo, khong trung route dang co tren may
     if ! out=$(python3 - "$bip" "$pool" "$(ip -4 route 2>/dev/null | grep -v 'docker0\|br-')" <<'PY'
 import ipaddress, sys
@@ -1848,10 +1848,10 @@ bip, pool, routes = sys.argv[1], sys.argv[2], sys.argv[3]
 try:
     nets = [ipaddress.ip_interface(bip).network] + ([ipaddress.ip_network(pool)] if pool else [])
 except ValueError as e:
-    print("ERR sai dinh dang: %s" % e); sys.exit(1)
+    print("ERR invalid format: %s" % e); sys.exit(1)
 for n in nets:
     if not n.is_private:
-        print("PUBLIC %s la dai IP public tren Internet -> may nay se khong toi duoc cac may that trong dai do" % n)
+        print("PUBLIC %s is a public Internet range -> this host could no longer reach real hosts in it" % n)
     for line in routes.splitlines():
         dst = line.split()[0] if line.split() else ""
         if dst in ("default", ""):
@@ -1861,21 +1861,21 @@ for n in nets:
         except ValueError:
             continue
         if n.overlaps(r):
-            print("OVERLAP %s trung route dang co: %s" % (n, line.strip()))
+            print("OVERLAP %s overlaps an existing route: %s" % (n, line.strip()))
 PY
     ); then err "${out#ERR }"; return 1; fi
     if [ -n "$out" ]; then
         echo "$out" | sed 's/^PUBLIC /▲ /; s/^OVERLAP /▲ /' | sub
-        confirm "Van dung dai nay?" || return 1
+        confirm "Use this range anyway?" || return 1
     fi
 
     before=$(docker ps --format '{{.Names}}' | sort)
-    [ -n "$before" ] && info "Container dang chay: ${W}$(echo $before)${N}"
-    confirm "Ghi $f va restart Docker?" || { info "Huy"; return 0; }
+    [ -n "$before" ] && info "Running containers: ${W}$(echo $before)${N}"
+    confirm "Write $f and restart Docker?" || { info "Cancelled"; return 0; }
     bak="$f.bak-$(date +%Y%m%d-%H%M%S)"
     [ -f "$f" ] && cp -p "$f" "$bak"
     mkdir -p "$(dirname "$f")"
-    python3 - "$f" "$bip" "$pool" <<'PY' || { err "Ghi $f loi (file cu khong phai JSON hop le?)"; return 1; }
+    python3 - "$f" "$bip" "$pool" <<'PY' || { err "Writing $f failed (old file is not valid JSON?)"; return 1; }
 import json, os, sys
 f, bip, pool = sys.argv[1:4]
 d = json.load(open(f)) if os.path.exists(f) and os.path.getsize(f) else {}
@@ -1885,61 +1885,61 @@ if pool:
 json.dump(d, open(f, "w"), indent=2)
 PY
     if ! systemctl restart docker; then
-        err "Docker khong khoi dong voi cau hinh moi → tra lai file cu"
+        err "Docker does not start with the new config → old file restored"
         if [ -f "$bak" ]; then cp -p "$bak" "$f"; else rm -f "$f"; fi
         systemctl restart docker; journalctl -u docker -n 10 --no-pager | sub; return 1
     fi
     sleep 5
-    ok "docker0: ${W}$(ip -4 addr show docker0 | awk '/inet /{print $2}')${N} ${D}(file cu: ${bak:-khong co})${N}"
+    ok "docker0: ${W}$(ip -4 addr show docker0 | awk '/inet /{print $2}')${N} ${D}(old file: ${bak:-none})${N}"
     after=$(docker ps --format '{{.Names}}' | sort)
     for n in $before; do grep -qx "$n" <<< "$after" || miss+=" $n"; done
     if [ -n "$miss" ]; then
-        warn "Container chua chay lai:${W}$miss${N}"
-        confirm "Khoi dong cac container nay?" && docker start $miss | sub
+        warn "Containers not back up:${W}$miss${N}"
+        confirm "Start these containers?" && docker start $miss | sub
     elif [ -n "$before" ]; then
-        ok "Tat ca container da chay lai"
+        ok "All containers are back up"
     fi
 }
 
 do_docker_manage() {
-    title "QUAN LY CONTAINER"
+    title "MANAGE CONTAINERS"
     docker_ok || return 1
     local out a n c
     out=$(docker ps -a --filter name=fixnhanh-pve- --format '{{.Names}}|{{.Status}}|{{.Ports}}')
-    if [ -z "$out" ]; then info "Chua co container nao (menu 23 de tao)"; return 0; fi
-    printf '%s  %s%-28s %-28s %s%s\n' "$IND" "$W" "CONTAINER" "TRANG THAI" "PORT" "$N"
+    if [ -z "$out" ]; then info "No container yet (menu 23 to create)"; return 0; fi
+    printf '%s  %s%-28s %-28s %s%s\n' "$IND" "$W" "CONTAINER" "STATUS" "PORT" "$N"
     while IFS='|' read -r c st pt; do
         printf '%s  %-28s %s%-28s%s %s\n' "$IND" "$c" "$([[ "$st" == Up* ]] && echo "$G" || echo "$R")" \
             "$(echo "$st" | cut -c1-28)" "$N" "$(echo "$pt" | sed 's/0.0.0.0://; s/, .*//' | cut -c1-20)"
     done <<< "$out"
     echo
-    a=$(ask "Thao tac: l=log  r=khoi dong lai  x=xoa (quay ve systemd)  Enter=thoat" "")
+    a=$(ask "Action: l=logs  r=restart  x=remove (back to systemd)  Enter=exit" "")
     [ -n "$a" ] || return 0
     n=$(pick_remote) || return 1; c=$(container_of "$n")
     case "$a" in
         l|L) docker logs --tail 40 "$c" 2>&1 | sub ;;
-        r|R) docker restart "$c" >/dev/null && ok "Da khoi dong lai $c" ;;
+        r|R) docker restart "$c" >/dev/null && ok "Restarted $c" ;;
         x|X) need_root || return 1
-             confirm "Xoa container $c va chay lai bang systemd?" || return 0
-             docker rm -f "$c" >/dev/null && ok "Da xoa $c"
+             confirm "Remove container $c and run it with systemd again?" || return 0
+             docker rm -f "$c" >/dev/null && ok "Removed $c"
              remote_install_files && systemctl enable --now "$SERVICE@$n" >/dev/null 2>&1 \
-                 && ok "Da chay lai $n bang systemd" ;;
-        *) warn "Thao tac khong hop le: $a" ;;
+                 && ok "$n running with systemd again" ;;
+        *) warn "Invalid action: $a" ;;
     esac
 }
 
 remote_refresh_after_update() {  # sau cap nhat: chay lai cac service remote bang ban exporter moi
     local names; names=$(remote_names)
     [ -n "$names" ] || return 0
-    if [ "$(id -u)" != 0 ]; then warn "Can root de cap nhat ${W}$(echo $names)${N} → chay lai menu 14 bang root"; return 0; fi
+    if [ "$(id -u)" != 0 ]; then warn "Root is required to update ${W}$(echo $names)${N} → run menu 14 again as root"; return 0; fi
     local n sd="" dk=""
     remote_install_files || return 1
     for n in $names; do
         if has docker && [ "$(container_state "$n")" = running ]; then dk+=" $n"
         else systemctl restart "$SERVICE@$n"; sd+=" $n"; fi
     done
-    [ -n "$sd" ] && ok "Da chay lai exporter remote (systemd):${W}$sd${N}"
-    [ -n "$dk" ] && info "Cluster chay Docker:${W}$dk${N} → menu 23 de build lai image ban moi"
+    [ -n "$sd" ] && ok "Remote exporters restarted (systemd):${W}$sd${N}"
+    [ -n "$dk" ] && info "Clusters in Docker:${W}$dk${N} → refresh / menu 23 rebuilds the new image"
     return 0
 }
 
@@ -1947,26 +1947,26 @@ remote_refresh_after_update() {  # sau cap nhat: chay lai cac service remote ban
 # 14. Cap nhat tool / 15. Cau hinh da luu / 16. Gioi thieu & ban quyen
 # =============================================================================
 do_update() {
-    title "CAP NHAT TOOL"
+    title "UPDATE TOOL"
     if [ ! -d "$DIR/.git" ]; then
         if has git; then
-            info "Thu muc tai bang curl → chuyen thanh ban git clone (giu .menu.conf)"
+            info "Folder was downloaded with curl → converting to a git clone (keeps .menu.conf)"
             git -C "$DIR" init -q && git -C "$DIR" remote add origin "$REPO_URL.git" 2>/dev/null
             git -C "$DIR" fetch -q origin main && git -C "$DIR" reset -q --hard origin/main \
                 && git -C "$DIR" checkout -q -B main --track origin/main 2>/dev/null \
-                || { err "Chuyen sang git loi"; return 1; }
-            ok "Da chuyen sang git, ban $(git -C "$DIR" rev-parse --short HEAD)"
+                || { err "Converting to git failed"; return 1; }
+            ok "Converted to git, version $(git -C "$DIR" rev-parse --short HEAD)"
             remote_refresh_after_update
-            [ "${NONINTERACTIVE:-0}" = 0 ] && { info "Mo lai menu voi ban moi..."; sleep 1; exec bash "$DIR/menu.sh"; }
+            [ "${NONINTERACTIVE:-0}" = 0 ] && { info "Reopening the menu with the new version..."; sleep 1; exec bash "$DIR/menu.sh"; }
             return 0
         fi
-        has curl || { err "Can git hoac curl de cap nhat"; return 1; }
-        info "Khong co git → tai ban moi bang curl"
+        has curl || { err "git or curl is required to update"; return 1; }
+        info "No git → downloading the new version with curl"
         curl -sfL "$REPO_URL/archive/refs/heads/main.tar.gz" | tar xz --strip-components=1 -C "$DIR" \
-            || { err "Tai ban moi loi"; return 1; }
-        ok "Da tai ban moi nhat"
+            || { err "Download failed"; return 1; }
+        ok "Downloaded the latest version"
         remote_refresh_after_update
-        [ "${NONINTERACTIVE:-0}" = 0 ] && { info "Mo lai menu voi ban moi..."; sleep 1; exec bash "$DIR/menu.sh"; }
+        [ "${NONINTERACTIVE:-0}" = 0 ] && { info "Reopening the menu with the new version..."; sleep 1; exec bash "$DIR/menu.sh"; }
         return 0
     fi
     local before after out
@@ -1975,33 +1975,33 @@ do_update() {
     # thanh dashboard-local.json (file menu 9 / 11 dung tu gio) roi tra file repo ve goc.
     if ! git -C "$DIR" diff --quiet -- "$DASH_REPO_JSON" 2>/dev/null; then
         if [ ! -f "$DASH_JSON" ]; then
-            cp -p "$DASH_REPO_JSON" "$DASH_JSON" && info "Giu dashboard da sinh → ${W}$DASH_JSON${N}"
+            cp -p "$DASH_REPO_JSON" "$DASH_JSON" && info "Keeping the generated dashboard → ${W}$DASH_JSON${N}"
         else
-            cp -p "$DASH_REPO_JSON" "$DASH_JSON.bak" && info "Ban sao dashboard cu → $DASH_JSON.bak"
+            cp -p "$DASH_REPO_JSON" "$DASH_JSON.bak" && info "Old dashboard copy → $DASH_JSON.bak"
         fi
         git -C "$DIR" checkout -- "$DASH_REPO_JSON"
     fi
     if ! out=$(git -C "$DIR" pull --ff-only 2>&1); then
         echo "$out" | sub
-        err "Cap nhat loi (van o ban ${W}$before${N})"
+        err "Update failed (still on ${W}$before${N})"
         git -C "$DIR" status --short | grep -v '^??' | sub
-        info "File tren bi sua tay → luu ra ngoai roi: git -C $DIR checkout -- <file> ; chay lai menu 14"
+        info "Files above were edited by hand → save them elsewhere, then: git -C $DIR checkout -- <file> ; run menu 14 again"
         return 1
     fi
     echo "$out" | sub
     after=$(git -C "$DIR" rev-parse --short HEAD)
     if [ "$before" = "$after" ]; then
-        ok "Dang la ban moi nhat (${W}$after${N})"; return 0
+        ok "Already up to date (${W}$after${N})"; return 0
     fi
-    ok "Da cap nhat ${W}$before → $after${N}:"
+    ok "Updated ${W}$before → $after${N}:"
     git -C "$DIR" log --oneline "$before..$after" | sub
     if [ -f "$UNIT" ] && ! git -C "$DIR" diff --quiet "$before" "$after" -- exporter/; then
-        warn "Exporter co thay doi"
-        confirm "Cai lai exporter ban moi (giu port $(current_port))?" && do_install "$(current_port)"
+        warn "The exporter changed"
+        confirm "Reinstall the new exporter (keep port $(current_port))?" && do_install "$(current_port)"
     fi
     git -C "$DIR" diff --quiet "$before" "$after" -- exporter/ || remote_refresh_after_update
     if [ "${NONINTERACTIVE:-0}" = 0 ]; then
-        info "Mo lai menu voi ban moi..."; sleep 1
+        info "Reopening the menu with the new version..."; sleep 1
         exec bash "$DIR/menu.sh"
     fi
 }
@@ -2014,7 +2014,7 @@ ask_url() {  # ask_url "Cau hoi" "mac dinh" -> URL chuan (them http:// neu thieu
         [ -z "$u" ] && { echo ""; return; }
         [[ "$u" == *://* ]] || u="http://$u"
         [[ "$u" =~ ^https?://[^/:]+(:[0-9]+)?(/.*)?$ ]] && { echo "$u"; return; }
-        err "URL sai: '$u' → phai dang http://IP:port hoac https://IP:port" >&2
+        err "Invalid URL: '$u' → must look like http://IP:port or https://IP:port" >&2
     done
 }
 
@@ -2025,51 +2025,51 @@ url_probe() {  # url_probe URL PATH GREP -> in URL dung duoc (thu ca http <-> ht
         curl -sf --max-time 8 "$x$2" 2>/dev/null | grep -q "$3" && { echo "$x"; return 0; }
     done
     curl -s --max-time 8 -o /dev/null "$u$2" 2>/dev/null; rc=$?
-    [ "$rc" = 60 ] && warn "Cert TLS cua $u khong duoc tin (tu ky?) → dung http://, hoac cai CA vao may nay (update-ca-certificates)" >&2
+    [ "$rc" = 60 ] && warn "TLS cert of $u is not trusted (self-signed?) → use http://, or install the CA on this host (update-ca-certificates)" >&2
     return 1
 }
 
 set_urls() {
     local u w
-    u=$(ask_url "Prometheus URL (vd http://10.16.16.x:9090; Enter = giu)" "${PROM_URL:-}")
+    u=$(ask_url "Prometheus URL (e.g. http://10.16.16.x:9090; Enter = keep)" "${PROM_URL:-}")
     if [ -n "$u" ]; then
         if w=$(url_probe "$u" "/-/ready" "Ready"); then
-            [ "$w" != "$u" ] && warn "Dung $w (khong phai $u)"; u=$w; ok "Prometheus tra loi: $u"
-        else warn "Khong ket noi duoc $u/-/ready → kiem tra IP/port, firewall may Prometheus (port 9090)"; fi
+            [ "$w" != "$u" ] && warn "Using $w (not $u)"; u=$w; ok "Prometheus answers: $u"
+        else warn "Cannot reach $u/-/ready → check IP/port, firewall of the Prometheus host (port 9090)"; fi
         save_conf PROM_URL "$u"; PROM_URL=$u
     fi
-    u=$(ask_url "Grafana URL (vd http://10.16.16.x:3000; Enter = giu)" "${GRAFANA_URL:-}")
+    u=$(ask_url "Grafana URL (e.g. http://10.16.16.x:3000; Enter = keep)" "${GRAFANA_URL:-}")
     if [ -n "$u" ]; then
         if w=$(url_probe "$u" "/api/health" '"database"'); then
-            [ "$w" != "$u" ] && warn "Dung $w (khong phai $u)"; u=$w; ok "Grafana tra loi: $u"
-        else warn "Khong ket noi duoc $u/api/health → kiem tra IP/port, firewall may Grafana (port 3000)"; fi
+            [ "$w" != "$u" ] && warn "Using $w (not $u)"; u=$w; ok "Grafana answers: $u"
+        else warn "Cannot reach $u/api/health → check IP/port, firewall of the Grafana host (port 3000)"; fi
         save_conf GRAFANA_URL "$u"; GRAFANA_URL=$u
     fi
-    info "Token Grafana: nhap o menu 11, co the luu 1 lan (.grafana-token, chi root doc)"
+    info "Grafana token: entered in menu 11, can be saved once (.grafana-token, root-only)"
 }
 
 do_config() {
-    title "CAU HINH DA LUU"
+    title "SAVED CONFIG"
     if [ ! -s "$CONF" ]; then
-        info "Chua co cau hinh da luu ($CONF)"
-        confirm "Dat Prometheus / Grafana URL ngay?" && set_urls
+        info "No saved config ($CONF)"
+        confirm "Set the Prometheus / Grafana URLs now?" && set_urls
         return 0
     fi
     info "File: $CONF"; echo
     local k v
     while IFS= read -r l; do
         k=${l%%=*}; v=$(. "$CONF"; printf '%s' "${!k-}")
-        printf '%s    %s%-14s%s %s\n' "$IND" "$C" "$k" "$N" "${v:-${D}<trong>${N}}"
+        printf '%s    %s%-14s%s %s\n' "$IND" "$C" "$k" "$N" "${v:-${D}<empty>${N}}"
     done < "$CONF"
     echo
-    info "Sua: chay lai ${W}S${N} (gia tri cu hien san) hoac sua truc tiep file tren"
+    info "Edit: run ${W}S${N} again (current values prefilled) or edit the file above"
     if [ -s "$GRAFANA_TOKEN_FILE" ]; then
-        info "Token Grafana da luu: $GRAFANA_TOKEN_FILE"
-        confirm "Xoa token Grafana da luu (lan import sau go lai)?" && { rm -f "$GRAFANA_TOKEN_FILE"; ok "Da xoa token"; }
+        info "Saved Grafana token: $GRAFANA_TOKEN_FILE"
+        confirm "Delete the saved Grafana token (enter it again on next import)?" && { rm -f "$GRAFANA_TOKEN_FILE"; ok "Token deleted"; }
     fi
-    if confirm "Dat / doi Prometheus, Grafana URL?"; then set_urls; return 0; fi
-    if confirm "Xoa toan bo cau hinh da luu?"; then
-        rm -f "$CONF" "$GRAFANA_TOKEN_FILE"; ok "Da xoa (ca token Grafana) - lan chay sau se hoi lai tu dau"
+    if confirm "Set / change the Prometheus, Grafana URLs?"; then set_urls; return 0; fi
+    if confirm "Delete all saved config?"; then
+        rm -f "$CONF" "$GRAFANA_TOKEN_FILE"; ok "Deleted (Grafana token too) - the next run asks everything again"
         unset "${!DASH_@}" GRAFANA_URL GRAFANA_FOLDER PROM_URL PROM_JOB SETUP_ROLE 2>/dev/null || true
     fi
 }
@@ -2078,16 +2078,16 @@ do_about() {
     echo
     box_top
     box_center "${W}${C}$TOOL_NAME${N}"
-    box_center "${D}phien ban $TOOL_VERSION${N}${D}$(tool_rev | sed 's/^/ · /')${N}"
+    box_center "${D}version $TOOL_VERSION${N}${D}$(tool_rev | sed 's/^/ · /')${N}"
     box_sep
-    box_row "$(kv "Phat trien" "${W}FIX NHANH${N}")"
+    box_row "$(kv "Developer" "${W}FIX NHANH${N}")"
     box_row "$(kv "Repo" "${REPO_URL#https://}")"
-    box_row "$(kv "Thanh phan" "menu.sh · make_dashboard.py · pve_ceph_extra_exporter")"
-    box_row "$(kv "Yeu cau" "bash, python3 >= 3.5, curl")"
-    box_row "$(kv "Che do" "local (tren node Ceph) · remote (API token)")"
-    box_row "$(kv "Giay phep" "xem file LICENSE")"
+    box_row "$(kv "Parts" "menu.sh · make_dashboard.py · pve_ceph_extra_exporter")"
+    box_row "$(kv "Requires" "bash, python3 >= 3.5, curl")"
+    box_row "$(kv "Modes" "local (on a Ceph node) · remote (API token)")"
+    box_row "$(kv "License" "see the LICENSE file")"
     box_sep
-    box_center "${Y}Ban quyen © 2026 FIX NHANH. Bao luu moi quyen.${N}"
+    box_center "${Y}Copyright © 2026 FIX NHANH. All rights reserved.${N}"
     box_bottom
 }
 
@@ -2100,92 +2100,92 @@ progress() {  # progress STEP TOTAL -> thanh tien do
 }
 
 do_setup() {
-    title "CAI DAT TRON GOI"
-    info "Tra loi cac cau hoi ben duoi (Enter = dung gia tri trong ${D}[ ]${N})."
-    info "Cau tra loi duoc nho trong .menu.conf cho lan chay sau (khong luu token)."
+    title "FULL SETUP"
+    info "Answer the questions below (Enter = use the value in ${D}[ ]${N})."
+    info "Answers are kept in .menu.conf for the next run (tokens are stored separately)."
     dash_defaults
     [ -n "${ENV_ROLE:-}" ] || detect_env
     local role port="" job="" cn gurl="" gfolder="" prom="" TOKEN="" flags=""
     local do_ex=0 do_dash=0 do_imp=0 do_chk=0
 
-    echo; echo "${IND}  ${W}${M}[1/5] May nay lam gi?${N}"
-    echo "${IND}     ${C}1${N}  Node Ceph: cai exporter + sinh/import dashboard (day du)"
-    echo "${IND}     ${C}2${N}  Chi cai exporter (node Ceph)"
-    echo "${IND}     ${C}3${N}  Chi sinh / import dashboard (may Grafana / may quan tri)"
-    echo "${IND}     ${C}4${N}  May monitor: theo doi cluster TU XA qua API (khong cai gi len node) + dashboard"
-    if [ "$ENV_CEPH" = 1 ]; then info "May nay co Ceph → goi y ${W}1${N}"
-    else info "May nay khong co Ceph → goi y ${W}4${N} (theo doi tu xa) hoac ${W}3${N} (chi dashboard)"; fi
-    role=$(ask "Chon" "${SETUP_ROLE:-$ENV_ROLE}")
+    echo; echo "${IND}  ${W}${M}[1/5] What is this host for?${N}"
+    echo "${IND}     ${C}1${N}  Ceph node: install the exporter + generate/import the dashboard (full)"
+    echo "${IND}     ${C}2${N}  Exporter only (Ceph node)"
+    echo "${IND}     ${C}3${N}  Dashboard only (Grafana / admin host)"
+    echo "${IND}     ${C}4${N}  Monitor host: watch clusters REMOTELY over the API (nothing installed on nodes) + dashboard"
+    if [ "$ENV_CEPH" = 1 ]; then info "This host runs Ceph → suggested ${W}1${N}"
+    else info "No Ceph on this host → suggested ${W}4${N} (remote) or ${W}3${N} (dashboard only)"; fi
+    role=$(ask "Choice" "${SETUP_ROLE:-$ENV_ROLE}")
     case "$role" in
         1) do_ex=1; do_dash=1 ;;
         2) do_ex=1 ;;
         3) do_dash=1 ;;
         4) do_dash=1
-           echo; echo "${IND}  ${W}${M}[2/5] Cluster theo doi tu xa${N}"
+           echo; echo "${IND}  ${W}${M}[2/5] Remote clusters${N}"
            while true; do
-               do_remote_add || warn "Cluster vua roi chua them duoc"
-               confirm "Them cluster khac?" || break
+               do_remote_add || warn "That cluster was not added"
+               confirm "Add another cluster?" || break
            done ;;
-        *) err "Lua chon khong hop le: $role"; return 1 ;;
+        *) err "Invalid choice: $role"; return 1 ;;
     esac
     if [ $do_ex = 1 ] && [ "$ENV_CEPH" != 1 ]; then
-        warn "Chon cai exporter nhung may nay khong chay duoc 'ceph status' → buoc kiem tra se dung lai"
-        confirm "Van tiep tuc?" || { info "Huy - chay lai va chon 3, hoac chay tren node Ceph"; return 1; }
+        warn "Exporter install chosen but 'ceph status' fails here → the check step will stop"
+        confirm "Continue anyway?" || { info "Cancelled - run again and pick 3, or run on a Ceph node"; return 1; }
     fi
 
     if [ $do_ex = 1 ]; then
         need_root || return 1
         echo; echo "${IND}  ${W}${M}[2/5] Exporter${N}"
-        port=$(ask "Port exporter" "$(current_port)")
+        port=$(ask "Exporter port" "$(current_port)")
         [[ "$port" =~ ^[0-9]+$ ]] && [ "$port" -ge 1024 ] && [ "$port" -le 65535 ] \
-            || { err "Port khong hop le: $port"; return 1; }
-        info "Gop: exporter phat lai metric ceph mgr + Proxmox (pvesh) → Prometheus chi can 1 target"
-        local allin; allin=$(ask "Gop tat ca metric ra 1 port? (Y/n)" "$([ -z "$(current_flags)" ] && echo Y || echo n)")
+            || { err "Invalid port: $port"; return 1; }
+        info "Merged: the exporter re-serves ceph mgr + Proxmox (pvesh) metrics → Prometheus needs only 1 target"
+        local allin; allin=$(ask "Serve all metrics on 1 port? (Y/n)" "$([ -z "$(current_flags)" ] && echo Y || echo n)")
         if [[ "$allin" =~ ^[Nn] ]]; then flags="--no-ceph-mgr --no-pve"; else flags=""; fi
         cn=$(detect_cluster_name)
-        [ -n "$cn" ] && info "Ten cluster Proxmox (corosync): ${W}$cn${N}"
-        job=$(ask "Ten job Prometheus cua cluster (phai trung job cua ceph mgr)" "${PROM_JOB:-Proxmox-${cn:-CLUSTER}}")
+        [ -n "$cn" ] && info "Proxmox cluster name (corosync): ${W}$cn${N}"
+        job=$(ask "Prometheus job name for the cluster (must match the ceph mgr job)" "${PROM_JOB:-Proxmox-${cn:-CLUSTER}}")
     fi
 
     if [ $do_dash = 1 ]; then
         echo; echo "${IND}  ${W}${M}[3/5] Dashboard${N}"
         ask_dashboard
         echo; echo "${IND}  ${W}${M}[4/5] Grafana${N}"
-        [ -n "${ENV_GRAFANA:-}" ] && info "Phat hien Grafana tren may nay: ${W}$ENV_GRAFANA${N}"
-        gurl=$(ask "Grafana URL (bo trong = khong import, chi xuat file JSON)" "${GRAFANA_URL:-${ENV_GRAFANA:-}}")
+        [ -n "${ENV_GRAFANA:-}" ] && info "Grafana found on this host: ${W}$ENV_GRAFANA${N}"
+        gurl=$(ask "Grafana URL (empty = no import, JSON file only)" "${GRAFANA_URL:-${ENV_GRAFANA:-}}")
         if [ -n "$gurl" ]; then
             ask_token
-            gfolder=$(ask "Folder UID (bo trong = General)" "${GRAFANA_FOLDER:-}")
-            if [ -n "$TOKEN" ]; then do_imp=1; else warn "Khong co token → chi xuat file JSON"; fi
+            gfolder=$(ask "Folder UID (empty = General)" "${GRAFANA_FOLDER:-}")
+            if [ -n "$TOKEN" ]; then do_imp=1; else warn "No token → JSON file only"; fi
         fi
     fi
 
     echo; echo "${IND}  ${W}${M}[5/5] Prometheus${N}"
-    [ -n "${ENV_PROM:-}" ] && info "Phat hien Prometheus tren may nay: ${W}$ENV_PROM${N}"
-    prom=$(ask "Prometheus URL de kiem tra sau khi cai (bo trong = bo qua)" "${PROM_URL:-${ENV_PROM:-}}")
+    [ -n "${ENV_PROM:-}" ] && info "Prometheus found on this host: ${W}$ENV_PROM${N}"
+    prom=$(ask "Prometheus URL to check after install (empty = skip)" "${PROM_URL:-${ENV_PROM:-}}")
     [ -n "$prom" ] && do_chk=1
 
     echo; box_top
-    box_center "${W}${Y}TOM TAT${N}"
+    box_center "${W}${Y}SUMMARY${N}"
     box_sep
     if [ $do_ex = 1 ]; then
         box_row "$(kv "Exporter" "service $SERVICE · $(hostname) · port ${W}$port${N}")"
-        box_row "$(kv "Che do" "$(mode_text "$flags")")"
+        box_row "$(kv "Mode" "$(mode_text "$flags")")"
         box_row "$(kv "Job Prom" "${W}$job${N} (target $(local_ip):$port)")"
     fi
     if [ $do_dash = 1 ]; then
         box_row "$(kv "Dashboard" "\"$DASH_TITLE\" · uid ${W}$DASH_UID${N}")"
-        box_row "$(kv "Loc" "Site ${DASH_SITE:-<tat ca>} · job $DASH_JOB")"
-        box_row "$(kv "Kich thuoc" "$DASH_NODES node · $DASH_POOLS pool · $DASH_CLASSES class · $DASH_TIME")"
+        box_row "$(kv "Filter" "Site ${DASH_SITE:-<all>} · job $DASH_JOB")"
+        box_row "$(kv "Size" "$DASH_NODES nodes · $DASH_POOLS pools · $DASH_CLASSES classes · $DASH_TIME")"
         box_row "$(kv "Latency" "$DASH_LAT")"
-        box_row "$(kv "HA alias" "$(echo "${DASH_ALIASES:-<khong>}" | sed 's/;;/ | /g' | cut -c1-55)")"
+        box_row "$(kv "HA alias" "$(echo "${DASH_ALIASES:-<none>}" | sed 's/;;/ | /g' | cut -c1-55)")"
         if [ $do_imp = 1 ]; then box_row "$(kv "Grafana" "import → $gurl · folder ${gfolder:-General}")"
-        else box_row "$(kv "Grafana" "khong import (import tay file JSON)")"; fi
+        else box_row "$(kv "Grafana" "no import (import the JSON file by hand)")"; fi
     fi
-    [ "$role" = 4 ] && box_row "$(kv "Tu xa" "$(remote_names | paste -sd' ' | cut -c1-60)")"
-    if [ $do_chk = 1 ]; then box_row "$(kv "Kiem tra" "$prom")"; else box_row "$(kv "Kiem tra" "bo qua")"; fi
+    [ "$role" = 4 ] && box_row "$(kv "Remote" "$(remote_names | paste -sd' ' | cut -c1-60)")"
+    if [ $do_chk = 1 ]; then box_row "$(kv "Check" "$prom")"; else box_row "$(kv "Check" "skipped")"; fi
     box_bottom; echo
-    confirm "Bat dau thuc hien?" || { info "Huy - chua thay doi gi"; return 1; }
+    confirm "Start?" || { info "Cancelled - nothing changed"; return 1; }
 
     save_conf SETUP_ROLE "$role"
     [ -n "$job" ] && save_conf PROM_JOB "$job"
@@ -2200,35 +2200,35 @@ do_setup() {
     }
 
     if [ $do_ex = 1 ]; then
-        next "Kiem tra moi truong"
-        do_check || { err "Dung lai: sua cac loi tren roi chay lai (menu S)"; return 1; }
-        next "Cai exporter (port $port)"
+        next "Environment check"
+        do_check || { err "Stopped: fix the errors above and run again (menu S)"; return 1; }
+        next "Install exporter (port $port)"
         do_install "$port" "$flags" || return 1
-        next "Cau hinh Prometheus"
+        next "Prometheus config"
         prom_snippet "$job" "$port" "$flags"
     fi
     if [ $do_dash = 1 ]; then
-        next "Sinh dashboard"
-        gen_dashboard || failed+=("sinh dashboard")
+        next "Generate dashboard"
+        gen_dashboard || failed+=("generate dashboard")
     fi
     if [ $do_imp = 1 ]; then
-        next "Import dashboard len Grafana"
+        next "Import dashboard to Grafana"
         import_dashboard "$gurl" "$TOKEN" "$gfolder" || failed+=("import Grafana")
     fi
     if [ $do_chk = 1 ]; then
-        next "Kiem tra Prometheus"
-        prom_check "$prom" || failed+=("kiem tra Prometheus")
+        next "Check Prometheus"
+        prom_check "$prom" || failed+=("check Prometheus")
     fi
 
     echo; box_top
-    if [ ${#failed[@]} = 0 ]; then box_center "${G}${W}✔ HOAN TAT $total BUOC${N}"
-    else box_center "${R}${W}✘ LOI O: ${failed[*]}${N}"; fi
+    if [ ${#failed[@]} = 0 ]; then box_center "${G}${W}✔ DONE, $total STEPS${N}"
+    else box_center "${R}${W}✘ FAILED: ${failed[*]}${N}"; fi
     box_bottom
     [ $do_ex = 1 ] && [ $do_chk = 0 ] && \
-        info "Nho them target vao Prometheus roi chay: bash menu.sh prom-check"
+        info "Remember to add the target to Prometheus, then run: proxmox-menu prom-check"
     [ $do_dash = 1 ] && [ $do_imp = 0 ] && \
-        info "Import tay: Grafana → Dashboards → New → Import → $DASH_JSON"
-    info "Muon doi cau tra loi: chay lai menu S (gia tri cu hien san), hoac menu 15"
+        info "Manual import: Grafana → Dashboards → New → Import → $DASH_JSON"
+    info "To change answers: run menu S again (current values prefilled), or menu 15"
     [ ${#failed[@]} = 0 ]
 }
 
@@ -2275,60 +2275,60 @@ header() {
     setup_ui
     local st port ex grafana prom pve
     port=$(current_port)
-    if [ -f "$UNIT" ]; then st=$(svc_state); else st="chua cai"; fi
-    case "$st" in active) ex="${G}${W}● dang chay${N} :$port" ;; "chua cai") ex="${D}○ chua cai${N}" ;; *) ex="${R}● $st${N}" ;; esac
+    if [ -f "$UNIT" ]; then st=$(svc_state); else st="not installed"; fi
+    case "$st" in active) ex="${G}${W}● running${N} :$port" ;; "not installed") ex="${D}○ not installed${N}" ;; *) ex="${R}● $st${N}" ;; esac
     # May monitor: khong cai local nhung co exporter tu xa -> dem so dang chay (systemd + docker)
-    if [ "$st" = "chua cai" ] && [ -n "$(remote_names)" ]; then
+    if [ "$st" = "not installed" ] && [ -n "$(remote_names)" ]; then
         local n run=0 tot=0
         for n in $(remote_names); do
             tot=$((tot + 1))
             { systemctl is-active -q "$SERVICE@$n" 2>/dev/null || { has docker && [ "$(container_state "$n")" = running ]; }; } && run=$((run + 1))
         done
-        ex="$([ "$run" = "$tot" ] && echo "$G" || echo "$Y")${W}● $run/$tot tu xa dang chay${N}"
+        ex="$([ "$run" = "$tot" ] && echo "$G" || echo "$Y")${W}● $run/$tot remote running${N}"
     fi
-    pve="${ENV_PVE:+${G}PVE $ENV_PVE${N}}"; pve="${pve:-${D}khong phai node PVE${N}}"
-    grafana="${GRAFANA_URL:-${ENV_GRAFANA:-}}"; grafana="${grafana:-${D}chua cau hinh (menu 15)${N}}"
-    prom="${PROM_URL:-${ENV_PROM:-}}"; prom="${prom:-${D}chua cau hinh (menu 15)${N}}"
+    pve="${ENV_PVE:+${G}PVE $ENV_PVE${N}}"; pve="${pve:-${D}not a PVE node${N}}"
+    grafana="${GRAFANA_URL:-${ENV_GRAFANA:-}}"; grafana="${grafana:-${D}not set (menu 15)${N}}"
+    prom="${PROM_URL:-${ENV_PROM:-}}"; prom="${prom:-${D}not set (menu 15)${N}}"
 
     echo
     box_top
     banner
     box_center "${W}MONITOR PROXMOX + CEPH${N}  ${D}·${N}  ${B}Prometheus${N} ${D}→${N} ${O}Grafana${N}"
     local rev; rev=$(tool_rev)
-    box_center "${D}phien ban $TOOL_VERSION${rev:+ · $rev}${N}"
-    [ -n "$NEWVER" ] && box_center "${Y}${W}▲ Co ban moi $NEWVER tren GitHub → chon 14 de cap nhat${N}"
-    box_title "THONG TIN MAY" "$C"
-    box_row2 "$(kv "May" "${W}$(hostname)${N}")" "$(kv "IP" "$(local_ip)")"
+    box_center "${D}version $TOOL_VERSION${rev:+ · $rev}${N}"
+    [ -n "$NEWVER" ] && box_center "${Y}${W}▲ New version $NEWVER on GitHub → pick 14 to update${N}"
+    box_title "HOST INFO" "$C"
+    box_row2 "$(kv "Host" "${W}$(hostname)${N}")" "$(kv "IP" "$(local_ip)")"
     box_row2 "$(kv "Proxmox" "$pve")" "$(kv "Ceph" "$(ceph_health_short)")"
     box_row2 "$(kv "Exporter" "$ex")" "$(kv "OS" "$(echo "$ENV_OS" | cut -c1-24)")"
     box_row "$(kv "Grafana" "$grafana")"
     box_row "$(kv "Prometheus" "$prom")"
     local rn; rn=$(remote_names | wc -l)
-    [ "$rn" -gt 0 ] && box_row "$(kv "Tu xa" "${W}$rn${N} cluster: $(remote_names | paste -sd' ' | cut -c1-55)")"
+    [ "$rn" -gt 0 ] && box_row "$(kv "Remote" "${W}$rn${N} clusters: $(remote_names | paste -sd' ' | cut -c1-55)")"
 }
 
 menu_body() {
-    box_title "CAI DAT NHANH" "$G"
-    box_row "$(mi S "${W}Cai dat tron goi${N} ${D}- hoi 1 lan, tu lam het cac buoc ben duoi${N}" "$G")"
-    box_title "EXPORTER  ${D}(chay tren node Ceph)${N}" "$M"
-    box_row2 "$(mi 1 "Kiem tra moi truong" "$M")"   "$(mi 5 "Xem log" "$M")"
-    box_row2 "$(mi 2 "Cai dat / cap nhat" "$M")"    "$(mi 6 "Khoi dong lai" "$M")"
-    box_row2 "$(mi 3 "Trang thai exporter" "$M")"   "$(mi 7 "Doi port" "$M")"
-    box_row2 "$(mi 4 "Xem metric hien tai" "$M")"   "$(mi 8 "Go cai dat" "$M")"
+    box_title "QUICK SETUP" "$G"
+    box_row "$(mi S "${W}Full setup${N} ${D}- asks once, then runs every step below${N}" "$G")"
+    box_title "EXPORTER  ${D}(runs on a Ceph node)${N}" "$M"
+    box_row2 "$(mi 1 "Environment check" "$M")"   "$(mi 5 "View logs" "$M")"
+    box_row2 "$(mi 2 "Install / update" "$M")"    "$(mi 6 "Restart" "$M")"
+    box_row2 "$(mi 3 "Exporter status" "$M")"   "$(mi 7 "Change port" "$M")"
+    box_row2 "$(mi 4 "Current metrics" "$M")"   "$(mi 8 "Uninstall" "$M")"
     box_title "DASHBOARD & PROMETHEUS" "$O"
-    box_row2 "$(mi 9 "Sinh dashboard JSON" "$O")"   "$(mi 11 "Import len Grafana" "$O")"
-    box_row2 "$(mi 10 "Mau prometheus.yml" "$O")"   "$(mi 12 "Kiem tra Prometheus" "$O")"
-    box_row  "$(mi 13 "Kiem tra tong the (moi truong + exporter + Prometheus)" "$O")"
-    box_title "THEO DOI TU XA  ${D}(qua API, khong cai len node)${N}" "$G"
-    box_row2 "$(mi 17 "Them / sua cluster" "$G")"    "$(mi 19 "Kiem tra ket noi" "$G")"
-    box_row2 "$(mi 18 "Danh sach cluster" "$G")"     "$(mi 20 "Xoa cluster" "$G")"
-    box_title "HE THONG & DOCKER" "$Y"
-    box_row2 "$(mi 21 "Cai goi can thiet" "$Y")"     "$(mi 23 "Chay cluster bang Docker" "$Y")"
-    box_row2 "$(mi 22 "Mo firewall cho Prometheus" "$Y")" "$(mi 24 "Quan ly container" "$Y")"
-    box_row2 "$(mi 25 "Doi dai IP Docker" "$Y")"        "$(mi 26 "Dich vu & suc khoe, watchdog" "$Y")"
-    box_title "TIEN ICH" "$B"
-    box_row2 "$(mi 14 "Cap nhat tool (git pull)" "$B")" "$(mi 16 "Gioi thieu & ban quyen" "$B")"
-    box_row2 "$(mi 15 "Cau hinh da luu" "$B")"         "$(mi 0 "Thoat" "$R")"
+    box_row2 "$(mi 9 "Generate dashboard" "$O")"   "$(mi 11 "Import to Grafana" "$O")"
+    box_row2 "$(mi 10 "Prometheus config / push" "$O")"   "$(mi 12 "Check Prometheus" "$O")"
+    box_row  "$(mi 13 "Full check (environment + exporter + Prometheus)" "$O")"
+    box_title "REMOTE MONITORING  ${D}(over the API, nothing on the nodes)${N}" "$G"
+    box_row2 "$(mi 17 "Add / edit cluster" "$G")"    "$(mi 19 "Test connection" "$G")"
+    box_row2 "$(mi 18 "List clusters" "$G")"     "$(mi 20 "Remove cluster" "$G")"
+    box_title "SYSTEM & DOCKER" "$Y"
+    box_row2 "$(mi 21 "Install packages" "$Y")"     "$(mi 23 "Run clusters in Docker" "$Y")"
+    box_row2 "$(mi 22 "Open firewall for Prometheus" "$Y")" "$(mi 24 "Manage containers" "$Y")"
+    box_row2 "$(mi 25 "Change Docker IP range" "$Y")"        "$(mi 26 "Services & health, watchdog" "$Y")"
+    box_title "TOOLS" "$B"
+    box_row2 "$(mi 14 "Update tool (git pull)" "$B")" "$(mi 16 "About & license" "$B")"
+    box_row2 "$(mi 15 "Saved config / URLs" "$B")"         "$(mi 0 "Exit" "$R")"
     box_sep
     box_center "${D}$COPYRIGHT${N}"
     box_bottom
@@ -2339,7 +2339,7 @@ menu() {
     while true; do
         header
         menu_body
-        local c; echo; read -rp "${IND}  ${C}❯${N} ${W}Chon chuc nang:${N} " c
+        local c; echo; read -rp "${IND}  ${C}❯${N} ${W}Select:${N} " c
         case "$c" in
             1) do_check ;;      2) do_install ;;   3) do_status ;;
             4) do_metrics ;;    5) do_logs ;;      6) do_restart ;;
@@ -2350,9 +2350,9 @@ menu() {
             17) do_remote_add ;; 18) do_remote_list ;; 19) do_remote_test ;; 20) do_remote_remove ;;
             21) do_deps ;; 22) do_firewall ;; 23) do_docker_run ;; 24) do_docker_manage ;; 25) do_docker_net ;; 26) do_services ;;
             s|S) do_setup ;;
-            0|q|Q) echo; echo "${IND}  ${D}Tam biet! $COPYRIGHT${N}"; echo; exit 0 ;;
+            0|q|Q) echo; echo "${IND}  ${D}Bye! $COPYRIGHT${N}"; echo; exit 0 ;;
             "") continue ;;
-            *) warn "Lua chon khong hop le: $c" ;;
+            *) warn "Invalid choice: $c" ;;
         esac
         pause
     done
@@ -2364,8 +2364,8 @@ CMD_BIN=${CMD_BIN:-/usr/local/bin/proxmox-menu}
 install_cmd() {
     [ "$(id -u)" = 0 ] && [ -d "$(dirname "$CMD_BIN")" ] || return 0
     grep -qF "\"$DIR/menu.sh\"" "$CMD_BIN" 2>/dev/null && return 0
-    printf '#!/bin/bash\n# FIX NHANH - lenh tat cho menu Monitor Proxmox + Ceph\nexec bash "%s/menu.sh" "$@"\n' "$DIR" > "$CMD_BIN" \
-        && chmod 755 "$CMD_BIN" && [ -t 1 ] && ok "Tu gio go ${W}proxmox-menu${N} o bat ky dau de mo menu"
+    printf '#!/bin/bash\n# FIX NHANH - shortcut for the Monitor Proxmox + Ceph menu\nexec bash "%s/menu.sh" "$@"\n' "$DIR" > "$CMD_BIN" \
+        && chmod 755 "$CMD_BIN" && [ -t 1 ] && ok "From now on type ${W}proxmox-menu${N} anywhere to open the menu"
     return 0
 }
 install_cmd
@@ -2379,7 +2379,7 @@ if [ $# -gt 0 ]; then
         check) do_check ;;           install) do_install "${1:-$(current_port)}" ;;
         status) do_status ;;         metrics) do_metrics ;;
         logs) do_logs ;;             restart) do_restart ;;
-        port) [ -n "${1:-}" ] || { err "Dung: menu.sh port <so>"; exit 1; }; do_port "$1" ;;
+        port) [ -n "${1:-}" ] || { err "Usage: proxmox-menu port <number>"; exit 1; }; do_port "$1" ;;
         uninstall) do_uninstall ;;   dashboard) NONINTERACTIVE=0; detect_env; do_dashboard ;;
         import) NONINTERACTIVE=0; detect_env; do_import ;;
         prom) NONINTERACTIVE=0; do_prom ;;
@@ -2388,10 +2388,10 @@ if [ $# -gt 0 ]; then
         about) do_about ;;
         remote-add) NONINTERACTIVE=0; do_remote_add "${1:-}" ;;
         remote-list) do_remote_list ;;
-        prom-all) NONINTERACTIVE=0; title "PROMETHEUS: GOP MOI CLUSTER"; prom_all ;;
+        prom-all) NONINTERACTIVE=0; title "PROMETHEUS: ALL CLUSTERS"; prom_all ;;
         urls) NONINTERACTIVE=0; title "PROMETHEUS / GRAFANA URL"; set_urls ;;
-        prom-rules) NONINTERACTIVE=0; title "DAY ALERT RULES LEN PROMETHEUS"; prom_rules_push ;;
-        prom-push) NONINTERACTIVE=0; title "DAY FILE SCRAPE LEN PROMETHEUS"; prom_push ;;
+        prom-rules) NONINTERACTIVE=0; title "PUSH ALERT RULES TO PROMETHEUS"; prom_rules_push ;;
+        prom-push) NONINTERACTIVE=0; title "PUSH SCRAPE FILE TO PROMETHEUS"; prom_push ;;
         remote-test) NONINTERACTIVE=0; do_remote_test ;;
         remote-remove) NONINTERACTIVE=0; do_remote_remove ;;
         deps) NONINTERACTIVE=0; detect_env; do_deps ;;
@@ -2408,7 +2408,7 @@ if [ $# -gt 0 ]; then
             NONINTERACTIVE=1; detect_env; do_refresh ;;
         watchdog) NONINTERACTIVE=0; title "WATCHDOG EXPORTER"; need_root && do_watchdog ;;
         help|-h|--help) show_help ;;
-        *) err "Lenh khong ro: $cmd"; show_help; exit 1 ;;
+        *) err "Unknown command: $cmd"; show_help; exit 1 ;;
     esac
     exit $?
 fi

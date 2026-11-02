@@ -1,5 +1,5 @@
 <svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" viewBox="0 0 1400 880" width="1400" height="880" font-family="Segoe UI, Roboto, Helvetica, Arial, sans-serif">
-  <title>So do giam sat Proxmox + Ceph (Prometheus / Grafana)</title>
+  <title>Proxmox + Ceph monitoring (Prometheus / Grafana)</title>
   <defs>
     <style>
       .bg      { fill: #0b1220; }
@@ -38,13 +38,13 @@
   </defs>
 
   <rect class="bg" x="0" y="0" width="1400" height="880" rx="18"/>
-  <text class="h1" x="30" y="50">So do giam sat Proxmox + Ceph  ·  Prometheus → Grafana</text>
-  <text class="s" x="30" y="70">Mui ten chay = chieu du lieu. Prometheus chu dong keo (scrape) /metrics tu cac exporter.</text>
+  <text class="h1" x="30" y="50">Proxmox + Ceph monitoring  ·  Prometheus → Grafana</text>
+  <text class="s" x="30" y="70">Moving arrows = data flow. Prometheus pulls (scrapes) /metrics from the exporters.</text>
 
   <!-- ===================== COT 1: CLUSTER ===================== -->
   <rect class="panel" x="30" y="90" width="430" height="570" rx="16"/>
   <text class="h2" x="50" y="120">CLUSTER PROXMOX + CEPH</text>
-  <text class="s" x="50" y="138">moi cluster · exporter chay tren 1 node Ceph</text>
+  <text class="s" x="50" y="138">per cluster · exporter on one Ceph node (or a remote monitor host)</text>
 
   <!-- nguon -->
   <rect class="card" x="50" y="160" width="150" height="90" rx="10" stroke="#22c55e"/>
@@ -75,7 +75,7 @@
 
   <rect class="card" x="250" y="290" width="190" height="150" rx="10" stroke="#a855f7" stroke-width="2.4" filter="url(#glow)"/>
   <rect class="badge" x="392" y="298" width="40" height="18" rx="9"/>
-  <text class="badgeT" x="412" y="311" text-anchor="middle">MOI</text>
+  <text class="badgeT" x="412" y="311" text-anchor="middle">NEW</text>
   <text class="t" x="262" y="316">pve_ceph_extra</text>
   <text class="t" x="262" y="333">_exporter</text>
   <text class="m" x="262" y="352" fill="#c084fc">:9830/metrics</text>
@@ -101,7 +101,7 @@
   <!-- systemd -->
   <rect class="card" x="50" y="600" width="390" height="44" rx="10" stroke="#eab308" stroke-dasharray="5 4"/>
   <text class="t" x="64" y="619" style="font-size:12.5px">systemd: pve-ceph-extra-exporter.service</text>
-  <text class="s" x="64" y="636">cai bang menu.sh (2) hoac exporter/install_exporter.sh</text>
+  <text class="s" x="64" y="636">installed with menu.sh (2) or exporter/install_exporter.sh</text>
   <path class="dashed tool" d="M420 600 L420 444" marker-end="url(#aTool)"/>
 
   <!-- ===================== COT 2: PROMETHEUS ===================== -->
@@ -110,7 +110,7 @@
 
   <rect class="panel" x="530" y="190" width="300" height="420" rx="16" stroke="#f97316"/>
   <text class="h2" x="550" y="220">PROMETHEUS</text>
-  <text class="s" x="550" y="238">moi Site: FPT HCM · FPT HN · CMC-Q7</text>
+  <text class="s" x="550" y="238">one per Site: FPT HCM · FPT HN · CMC-Q7</text>
   <text class="s" x="550" y="254">VIETTEL HCM · CMC HN</text>
 
   <rect x="548" y="270" width="264" height="214" rx="12" fill="#1a1f33" stroke="#f97316" stroke-dasharray="6 5"/>
@@ -122,12 +122,12 @@
   <text class="m" x="578" y="381">node:9830   extra exporter</text>
   <rect class="card" x="565" y="406" width="230" height="40" rx="8" stroke="#3b82f6"/>
   <text class="m" x="578" y="431">host:9221   pve exporter</text>
-  <text class="warn pulse" x="562" y="470">⚠ 3 target phai CUNG 1 job</text>
+  <text class="warn pulse" x="562" y="470">⚠ the 3 targets must be in the SAME job</text>
 
   <text class="s" x="550" y="512">TSDB · scrape 30s</text>
-  <text class="s" x="550" y="530">dashboard loc theo job=~"$job"</text>
+  <text class="s" x="550" y="530">dashboard filters on job=~"$job"</text>
   <text class="m" x="550" y="556" fill="#fb923c">PromQL API :9090</text>
-  <text class="s" x="550" y="590">menu.sh (10) in mau prometheus.yml</text>
+  <text class="s" x="550" y="590">menu.sh (10) prometheus.yml sample / push</text>
 
   <!-- exporter → prometheus -->
   <path id="pE1" class="flow ceph"  d="M440 205 C495 205 505 326 561 326" marker-end="url(#aCeph)"/>
@@ -164,7 +164,7 @@
     <text class="t" x="948" y="312">2 · OSD State</text>
     <text class="m" x="948" y="333">OUT · DOWN · UP · IN · Low/High · Used Class</text>
     <rect x="1258" y="298" width="82" height="18" rx="9" fill="#78350f"/>
-    <text class="badgeT" x="1299" y="311" text-anchor="middle" fill="#fde68a">lap $class</text>
+    <text class="badgeT" x="1299" y="311" text-anchor="middle" fill="#fde68a">repeats per $class</text>
 
     <rect class="card" x="930" y="354" width="420" height="58" rx="10" stroke="#2a3a5c"/>
     <rect x="930" y="354" width="6" height="29" rx="3" fill="#3b82f6"/>
@@ -182,14 +182,14 @@
     <text class="t" x="948" y="510">5 · Latency All OSD (High → Low)</text>
     <text class="m" x="948" y="531">nvme 15/25 · ssd 50/100 · hdd 100/200 ms</text>
     <rect x="1258" y="496" width="82" height="18" rx="9" fill="#78350f"/>
-    <text class="badgeT" x="1299" y="509" text-anchor="middle" fill="#fde68a">lap $class</text>
+    <text class="badgeT" x="1299" y="509" text-anchor="middle" fill="#fde68a">repeats per $class</text>
 
     <rect class="card" x="930" y="552" width="420" height="58" rx="10" stroke="#a855f7" stroke-width="2"/>
     <rect x="930" y="552" width="6" height="58" rx="3" fill="#a855f7"/>
     <text class="t" x="948" y="576">6 · Ceph Recovery &amp; Rebalance</text>
     <text class="m" x="948" y="597">Ceph Status · Total Health % · Recovery Speed</text>
   </g>
-  <text class="s" x="930" y="640">Mau vach trai = nguon metric cua row</text>
+  <text class="s" x="930" y="640">Left bar color = metric source of the row</text>
 
   <!-- prometheus → grafana -->
   <text class="lbl" x="870" y="372" text-anchor="middle">PromQL</text>
@@ -197,7 +197,7 @@
 
   <!-- ===================== BO TOOL ===================== -->
   <rect class="panel" x="30" y="690" width="1340" height="170" rx="16"/>
-  <text class="h2" x="50" y="720">BO TOOL · repo monitor-grafana-proxmox-full</text>
+  <text class="h2" x="50" y="720">TOOLKIT · repo monitor-grafana-proxmox-full</text>
 
   <rect class="card" x="50" y="740" width="230" height="90" rx="10" stroke="#eab308"/>
   <text class="t" x="64" y="766">make_dashboard.py</text>
@@ -208,7 +208,7 @@
   <rect class="card" x="330" y="740" width="230" height="90" rx="10" stroke="#eab308"/>
   <text class="t" x="344" y="766">proxmox_ceph_dashboard</text>
   <text class="t" x="344" y="783">.json</text>
-  <text class="s" x="344" y="806">26 panel · bien Site/job/class</text>
+  <text class="s" x="344" y="806">panels · variables Site/job/class</text>
 
   <rect class="card" x="610" y="740" width="260" height="90" rx="10" stroke="#eab308"/>
   <text class="t" x="624" y="766">Import Grafana API</text>
@@ -216,8 +216,8 @@
   <text class="s" x="624" y="806">menu.sh (11) · service token</text>
 
   <rect class="card" x="920" y="740" width="220" height="90" rx="10" stroke="#f97316" stroke-dasharray="5 4"/>
-  <text class="t" x="934" y="766">Kiem tra Prometheus</text>
-  <text class="s" x="934" y="787">target up · job khop ceph mgr</text>
+  <text class="t" x="934" y="766">Check Prometheus</text>
+  <text class="s" x="934" y="787">target up · job matches ceph mgr</text>
   <text class="s" x="934" y="806">menu.sh (12) / (13)</text>
 
   <path id="pT1" class="flow tool" d="M280 785 L326 785" marker-end="url(#aTool)"/>
@@ -227,12 +227,12 @@
 
   <!-- chu thich -->
   <g transform="translate(1170 735)">
-    <text class="t" x="0" y="0" style="font-size:12.5px">Chu thich</text>
+    <text class="t" x="0" y="0" style="font-size:12.5px">Legend</text>
     <line x1="0" y1="18" x2="34" y2="18" class="flow ceph"/>  <text class="s" x="42" y="22">Ceph (mgr)</text>
     <line x1="0" y1="38" x2="34" y2="38" class="flow extra"/> <text class="s" x="42" y="42">extra exporter</text>
     <line x1="0" y1="58" x2="34" y2="58" class="flow pve"/>   <text class="s" x="42" y="62">Proxmox API</text>
     <line x1="0" y1="78" x2="34" y2="78" class="flow prom"/>  <text class="s" x="42" y="82">PromQL</text>
-    <line x1="0" y1="98" x2="34" y2="98" class="flow tool"/>  <text class="s" x="42" y="102">tool / cai dat</text>
+    <line x1="0" y1="98" x2="34" y2="98" class="flow tool"/>  <text class="s" x="42" y="102">tool / install</text>
   </g>
 
   <!-- goi du lieu chay doc mui ten -->

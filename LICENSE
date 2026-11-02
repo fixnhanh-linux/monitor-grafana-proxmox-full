@@ -1,11 +1,10 @@
-Ban quyen © 2026 FIX NHANH. Bao luu moi quyen.
 Copyright (c) 2026 FIX NHANH. All rights reserved.
 
-Bo cong cu "Monitor Proxmox + Ceph" (menu.sh, make_dashboard.py,
-exporter/pve_ceph_extra_exporter.py, exporter/install_exporter.sh va tai lieu
-kem theo) thuoc quyen so huu cua FIX NHANH.
+The "Monitor Proxmox + Ceph" toolkit (menu.sh, make_dashboard.py,
+exporter/pve_ceph_extra_exporter.py, exporter/install_exporter.sh and the
+accompanying documentation) is the property of FIX NHANH.
 
-Khong duoc sao chep, phan phoi lai, ban hoac sua doi de phat hanh
-khi chua co su dong y bang van ban cua FIX NHANH.
+Copying, redistributing, selling or modifying it for release is not allowed
+without the written permission of FIX NHANH.
 
-PHAN MEM DUOC CUNG CAP "NHU HIEN CO", KHONG KEM BAT KY BAO DAM NAO.
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND.
