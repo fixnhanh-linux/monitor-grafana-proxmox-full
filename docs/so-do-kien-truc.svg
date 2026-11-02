@@ -2,66 +2,66 @@
   <title>Proxmox + Ceph monitoring: Prometheus / Grafana and Zabbix</title>
   <desc>Proxmox + Ceph clusters are read by pve_ceph_extra_exporter on a monitor host; Prometheus scrapes it and Grafana shows it, Zabbix reads the same exporter over HTTP and polls zabbix-agent2 on the nodes. Bottom: how to check each part on the servers and which values must match.</desc>
   <defs>
-    <marker id="a" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#475569"/></marker>
-    <marker id="az" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#c2410c"/></marker>
-    <marker id="ag" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#15803d"/></marker>
-    <linearGradient id="hd" x1="0" y1="0" x2="1" y2="0"><stop offset="0" stop-color="#1e3a8a"/><stop offset="1" stop-color="#0f766e"/></linearGradient>
-    <filter id="sh" x="-5%" y="-5%" width="110%" height="115%"><feDropShadow dx="0" dy="1.5" stdDeviation="2" flood-color="#0f172a" flood-opacity=".12"/></filter>
+    <marker id="a" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#94a3b8"/></marker>
+    <marker id="az" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#f97316"/></marker>
+    <marker id="ag" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#22c55e"/></marker>
+    <linearGradient id="hd" x1="0" y1="0" x2="1" y2="0"><stop offset="0" stop-color="#172554"/><stop offset="1" stop-color="#134e4a"/></linearGradient>
+    <filter id="sh" x="-5%" y="-5%" width="110%" height="115%"><feDropShadow dx="0" dy="2" stdDeviation="4" flood-color="#000000" flood-opacity=".45"/></filter>
     <style>
-      .t  { font-size: 13px; font-weight: 600; fill: #0f172a; }
-      .s  { font-size: 11px; fill: #334155; }
-      .m  { font-size: 11px; fill: #1e293b; font-family: Consolas, Menlo, monospace; }
+      .t  { font-size: 13px; font-weight: 600; fill: #e2e8f0; }
+      .s  { font-size: 11px; fill: #94a3b8; }
+      .m  { font-size: 11px; fill: #cbd5e1; font-family: Consolas, Menlo, monospace; }
       .mo { font-size: 10.5px; fill: #64748b; font-family: Consolas, Menlo, monospace; }
       .h  { font-size: 14px; font-weight: 700; letter-spacing: .5px; }
-      .lb { font-size: 11px; fill: #475569; font-weight: 600; }
-      .lz { font-size: 11px; fill: #c2410c; font-weight: 600; }
-      .lg { font-size: 11px; fill: #15803d; font-weight: 600; }
+      .lb { font-size: 11px; fill: #cbd5e1; font-weight: 600; font-style: italic; }
+      .lz { font-size: 11px; fill: #fb923c; font-weight: 600; font-style: italic; }
+      .lg { font-size: 11px; fill: #4ade80; font-weight: 600; font-style: italic; }
       .th { font-size: 11.5px; font-weight: 700; fill: #ffffff; }
-      .flow  { stroke: #475569; stroke-width: 1.7; fill: none; marker-end: url(#a);  stroke-dasharray: 6 4; animation: f 1.2s linear infinite; }
-      .zflow { stroke: #c2410c; stroke-width: 1.7; fill: none; marker-end: url(#az); stroke-dasharray: 6 4; animation: f 1.2s linear infinite; }
-      .gflow { stroke: #15803d; stroke-width: 1.7; fill: none; marker-end: url(#ag); stroke-dasharray: 6 4; animation: f 1.2s linear infinite; }
-      @keyframes f { to { stroke-dashoffset: -20; } }
+      .flow  { stroke: #94a3b8; stroke-width: 2.2; stroke-linecap: round; fill: none; marker-end: url(#a);  stroke-dasharray: 9 7; animation: f 1.1s linear infinite; }
+      .zflow { stroke: #f97316; stroke-width: 2.2; stroke-linecap: round; fill: none; marker-end: url(#az); stroke-dasharray: 9 7; animation: f 1.1s linear infinite; }
+      .gflow { stroke: #22c55e; stroke-width: 2.2; stroke-linecap: round; fill: none; marker-end: url(#ag); stroke-dasharray: 9 7; animation: f 1.1s linear infinite; }
+      @keyframes f { to { stroke-dashoffset: -32; } }
     </style>
   </defs>
 
-  <rect width="1340" height="1290" fill="#f8fafc"/>
+  <rect width="1340" height="1290" rx="18" fill="#0b1220"/>
 
   <!-- ===================== HEADER ===================== -->
-  <rect x="0" y="0" width="1340" height="72" fill="url(#hd)"/>
+  <rect x="0" y="0" width="1340" height="72" rx="18" fill="url(#hd)"/><rect x="0" y="40" width="1340" height="32" fill="url(#hd)"/>
   <text x="670" y="32" text-anchor="middle" style="font-size:21px;font-weight:700;fill:#ffffff">Proxmox + Ceph monitoring  ·  Prometheus → Grafana  ·  Zabbix</text>
-  <text x="670" y="55" text-anchor="middle" style="font-size:12px;fill:#ccfbf1">Moving arrows = data flow. Prometheus and Zabbix pull; the monitor host pushes config (SSH) and dashboards (Grafana API). Bottom: how to check it on the servers.</text>
+  <text x="670" y="55" text-anchor="middle" style="font-size:12px;fill:#99f6e4">Moving arrows = data flow. Prometheus and Zabbix pull; the monitor host pushes config (SSH) and dashboards (Grafana API). Bottom: how to check it on the servers.</text>
 
   <!-- ===================== PROXMOX + CEPH CLUSTER ===================== -->
-  <rect x="20" y="90" width="360" height="600" rx="14" fill="#eff6ff" stroke="#3b82f6" stroke-width="1.5" filter="url(#sh)"/>
-  <text x="200" y="116" text-anchor="middle" class="h" fill="#1d4ed8">PROXMOX + CEPH CLUSTER</text>
+  <rect x="20" y="90" width="360" height="600" rx="14" fill="#111a2e" stroke="#3b82f6" stroke-width="1.5" filter="url(#sh)"/>
+  <text x="200" y="116" text-anchor="middle" class="h" fill="#60a5fa">PROXMOX + CEPH CLUSTER</text>
   <text x="200" y="134" text-anchor="middle" class="s">one per site (P1-XD, FPT01-FPT02, Deco ...)</text>
 
-  <rect x="38" y="150" width="324" height="62" rx="9" fill="#fff7ed" stroke="#f97316"/>
+  <rect x="38" y="150" width="324" height="62" rx="9" fill="#16223b" stroke="#f97316"/>
   <text x="200" y="171" text-anchor="middle" class="t">Ceph  MON · MGR (active / standby) · OSD</text>
   <text x="200" y="189" text-anchor="middle" class="s">health · pgmap · OSD · pools · latency</text>
   <text x="200" y="204" text-anchor="middle" class="s">nvme / ssd / hdd device classes</text>
 
-  <rect x="38" y="224" width="324" height="50" rx="9" fill="#fff7ed" stroke="#f97316"/>
+  <rect x="38" y="224" width="324" height="50" rx="9" fill="#16223b" stroke="#f97316"/>
   <text x="200" y="244" text-anchor="middle" class="t">ceph-mgr prometheus  :9283/metrics</text>
   <text x="200" y="262" text-anchor="middle" class="m">ceph_health_status · ceph_osd_* · ceph_pool_*</text>
 
-  <rect x="38" y="286" width="324" height="66" rx="9" fill="#dbeafe" stroke="#3b82f6"/>
+  <rect x="38" y="286" width="324" height="66" rx="9" fill="#16223b" stroke="#3b82f6"/>
   <text x="200" y="306" text-anchor="middle" class="t">Proxmox API  :8006</text>
   <text x="200" y="323" text-anchor="middle" class="s">read-only token monitor@pve!exporter (PVEAuditor)</text>
   <text x="200" y="340" text-anchor="middle" class="m">/cluster/status · resources · ha · ceph</text>
 
-  <rect x="38" y="364" width="324" height="50" rx="9" fill="#fff7ed" stroke="#f97316"/>
+  <rect x="38" y="364" width="324" height="50" rx="9" fill="#16223b" stroke="#f97316"/>
   <text x="200" y="384" text-anchor="middle" class="t">ceph-mgr restful  :8003</text>
   <text x="200" y="402" text-anchor="middle" class="s">API key zabbix-monitor · self-signed cert</text>
 
-  <rect x="38" y="426" width="324" height="104" rx="9" fill="#fef2f2" stroke="#dc2626"/>
+  <rect x="38" y="426" width="324" height="104" rx="9" fill="#16223b" stroke="#ef4444"/>
   <text x="200" y="447" text-anchor="middle" class="t">every node: zabbix-agent2  :10050</text>
   <text x="200" y="465" text-anchor="middle" class="s">Ceph plugin → restful :8003</text>
   <text x="200" y="483" text-anchor="middle" class="s">cron every minute: ceph health →</text>
   <text x="200" y="500" text-anchor="middle" class="m">/etc/zabbix/cephstatus.txt</text>
   <text x="200" y="517" text-anchor="middle" class="s">(fallback, read with vfs.file.contents)</text>
 
-  <rect x="38" y="544" width="324" height="128" rx="9" fill="#ffffff" stroke="#94a3b8" stroke-dasharray="5 4"/>
+  <rect x="38" y="544" width="324" height="128" rx="9" fill="#16223b" stroke="#64748b" stroke-dasharray="5 4"/>
   <text x="200" y="565" text-anchor="middle" class="t">optional local mode (on a Ceph node)</text>
   <text x="200" y="584" text-anchor="middle" class="s">pve-ceph-extra-exporter.service :9830</text>
   <text x="200" y="601" text-anchor="middle" class="s">reads ceph status, pvesh, /etc/pve/ha</text>
@@ -70,15 +70,15 @@
   <text x="200" y="656" text-anchor="middle" class="s">only a read-only API token (menu 17)</text>
 
   <!-- ===================== MONITOR HOST ===================== -->
-  <rect x="440" y="90" width="400" height="600" rx="14" fill="#f0fdf4" stroke="#16a34a" stroke-width="1.5" filter="url(#sh)"/>
-  <text x="640" y="116" text-anchor="middle" class="h" fill="#15803d">MONITOR HOST</text>
+  <rect x="440" y="90" width="400" height="600" rx="14" fill="#111a2e" stroke="#22c55e" stroke-width="1.5" filter="url(#sh)"/>
+  <text x="640" y="116" text-anchor="middle" class="h" fill="#4ade80">MONITOR HOST</text>
   <text x="640" y="134" text-anchor="middle" class="s">e.g. 10.16.16.38 (Ubuntu) · git repo monitor-grafana-proxmox-full</text>
 
-  <rect x="458" y="150" width="364" height="52" rx="9" fill="#ffffff" stroke="#64748b"/>
+  <rect x="458" y="150" width="364" height="52" rx="9" fill="#16223b" stroke="#475569"/>
   <text x="640" y="171" text-anchor="middle" class="t">proxmox-menu  (menu.sh)</text>
   <text x="640" y="190" text-anchor="middle" class="m">setup · refresh · services · ha-sync · zabbix-ceph</text>
 
-  <rect x="458" y="214" width="364" height="122" rx="9" fill="#dcfce7" stroke="#16a34a"/>
+  <rect x="458" y="214" width="364" height="122" rx="9" fill="#16223b" stroke="#22c55e"/>
   <text x="640" y="235" text-anchor="middle" class="t">pve_ceph_extra_exporter  (exporter/)</text>
   <text x="640" y="253" text-anchor="middle" class="s">one per cluster, every metric on one port:</text>
   <text x="640" y="270" text-anchor="middle" class="m">:9830 P1-XD · :9831 FPT01-FPT02 · :9832 Deco</text>
@@ -86,22 +86,22 @@
   <text x="640" y="304" text-anchor="middle" class="s">mgr metrics + Proxmox + recovery % + HA groups</text>
   <text x="640" y="323" text-anchor="middle" class="m">/metrics · /health</text>
 
-  <rect x="458" y="348" width="364" height="66" rx="9" fill="#ffffff" stroke="#64748b"/>
+  <rect x="458" y="348" width="364" height="66" rx="9" fill="#16223b" stroke="#475569"/>
   <text x="640" y="368" text-anchor="middle" class="t">systemd timers</text>
   <text x="640" y="386" text-anchor="middle" class="s">watchdog · 2 min: /health failing twice → restart it</text>
   <text x="640" y="403" text-anchor="middle" class="s">ha-colors · 5 min: new HA group → regenerate + import</text>
 
-  <rect x="458" y="426" width="364" height="82" rx="9" fill="#ffffff" stroke="#64748b"/>
+  <rect x="458" y="426" width="364" height="82" rx="9" fill="#16223b" stroke="#475569"/>
   <text x="640" y="446" text-anchor="middle" class="t">dashboard-grafana/make_dashboard.py</text>
   <text x="640" y="464" text-anchor="middle" class="m">dashboard-local.json · dashboard-&lt;name&gt;.json</text>
   <text x="640" y="481" text-anchor="middle" class="s">HA Groups: one color per CPU type (.ha-colors.json)</text>
   <text x="640" y="498" text-anchor="middle" class="s">internal / customer · saved args (fixnhanhArgs)</text>
 
-  <rect x="458" y="520" width="364" height="48" rx="9" fill="#ffffff" stroke="#64748b"/>
+  <rect x="458" y="520" width="364" height="48" rx="9" fill="#16223b" stroke="#475569"/>
   <text x="640" y="540" text-anchor="middle" class="t">prometheus/pve-ceph-alerts.yml</text>
   <text x="640" y="557" text-anchor="middle" class="s">19 alert rules: exporter · Ceph · Proxmox</text>
 
-  <rect x="458" y="580" width="364" height="96" rx="9" fill="#fef2f2" stroke="#dc2626"/>
+  <rect x="458" y="580" width="364" height="96" rx="9" fill="#16223b" stroke="#ef4444"/>
   <text x="640" y="600" text-anchor="middle" class="t">template-zabbix/</text>
   <text x="640" y="618" text-anchor="middle" class="m">pve-ceph-exporter-by-http.yaml</text>
   <text x="640" y="634" text-anchor="middle" class="m">ceph-health-fallback.yaml</text>
@@ -109,38 +109,38 @@
   <text x="640" y="667" text-anchor="middle" class="s">menu 27: agent2 + cron + restful key on every node</text>
 
   <!-- ===================== PROMETHEUS ===================== -->
-  <rect x="920" y="90" width="400" height="190" rx="14" fill="#fff1f2" stroke="#e11d48" stroke-width="1.5" filter="url(#sh)"/>
-  <text x="1120" y="116" text-anchor="middle" class="h" fill="#be123c">PROMETHEUS</text>
+  <rect x="920" y="90" width="400" height="190" rx="14" fill="#111a2e" stroke="#f97316" stroke-width="1.5" filter="url(#sh)"/>
+  <text x="1120" y="116" text-anchor="middle" class="h" fill="#fb923c">PROMETHEUS</text>
   <text x="1120" y="134" text-anchor="middle" class="s">e.g. 10.16.16.24:9090 · one per site</text>
-  <rect x="938" y="148" width="364" height="48" rx="9" fill="#ffffff" stroke="#e11d48"/>
+  <rect x="938" y="148" width="364" height="48" rx="9" fill="#16223b" stroke="#f97316"/>
   <text x="1120" y="168" text-anchor="middle" class="m">scrape_configs/proxmox-ceph-&lt;host&gt;.yml</text>
   <text x="1120" y="185" text-anchor="middle" class="s">job Proxmox-&lt;cluster&gt; → 1 target monitor:port</text>
-  <rect x="938" y="206" width="364" height="62" rx="9" fill="#ffffff" stroke="#e11d48"/>
+  <rect x="938" y="206" width="364" height="62" rx="9" fill="#16223b" stroke="#f97316"/>
   <text x="1120" y="226" text-anchor="middle" class="m">rules/pve-ceph-alerts.yml</text>
   <text x="1120" y="243" text-anchor="middle" class="s">promtool checked, restored on error</text>
   <text x="1120" y="259" text-anchor="middle" class="s">→ Alertmanager (Telegram / email)</text>
 
   <!-- ===================== GRAFANA ===================== -->
-  <rect x="920" y="300" width="400" height="192" rx="14" fill="#fffbeb" stroke="#d97706" stroke-width="1.5" filter="url(#sh)"/>
-  <text x="1120" y="326" text-anchor="middle" class="h" fill="#b45309">GRAFANA</text>
+  <rect x="920" y="300" width="400" height="192" rx="14" fill="#111a2e" stroke="#eab308" stroke-width="1.5" filter="url(#sh)"/>
+  <text x="1120" y="326" text-anchor="middle" class="h" fill="#facc15">GRAFANA</text>
   <text x="1120" y="344" text-anchor="middle" class="s">one Prometheus datasource per site → variable $Site</text>
-  <rect x="938" y="356" width="364" height="48" rx="9" fill="#ffffff" stroke="#d97706"/>
+  <rect x="938" y="356" width="364" height="48" rx="9" fill="#16223b" stroke="#eab308"/>
   <text x="1120" y="376" text-anchor="middle" class="t">Internal dashboard</text>
   <text x="1120" y="393" text-anchor="middle" class="s">$Site · $job · $class · Exporter row · alarms</text>
-  <rect x="938" y="412" width="364" height="48" rx="9" fill="#ffffff" stroke="#d97706"/>
+  <rect x="938" y="412" width="364" height="48" rx="9" fill="#16223b" stroke="#eab308"/>
   <text x="1120" y="432" text-anchor="middle" class="t">Customer dashboards</text>
   <text x="1120" y="449" text-anchor="middle" class="s">locked job + datasource · read-only · own folder</text>
   <text x="1120" y="479" text-anchor="middle" class="s">Total Health % · OSD · pools · latency · nodes · HA Groups</text>
 
   <!-- ===================== ZABBIX ===================== -->
-  <rect x="920" y="510" width="400" height="180" rx="14" fill="#fef2f2" stroke="#dc2626" stroke-width="1.5" filter="url(#sh)"/>
-  <text x="1120" y="536" text-anchor="middle" class="h" fill="#b91c1c">ZABBIX SERVER / PROXY</text>
+  <rect x="920" y="510" width="400" height="180" rx="14" fill="#111a2e" stroke="#ef4444" stroke-width="1.5" filter="url(#sh)"/>
+  <text x="1120" y="536" text-anchor="middle" class="h" fill="#f87171">ZABBIX SERVER / PROXY</text>
   <text x="1120" y="554" text-anchor="middle" class="s">e.g. 10.8.10.201 · Zabbix 6.0 / 6.2 / 7.0</text>
-  <rect x="938" y="566" width="364" height="56" rx="9" fill="#ffffff" stroke="#dc2626"/>
+  <rect x="938" y="566" width="364" height="56" rx="9" fill="#16223b" stroke="#ef4444"/>
   <text x="1120" y="585" text-anchor="middle" class="t">Proxmox Ceph by FIX NHANH exporter</text>
   <text x="1120" y="602" text-anchor="middle" class="s">HTTP, no agent · LLD nodes / OSDs / pools / collectors</text>
   <text x="1120" y="616" text-anchor="middle" class="mo">{$PVE.EXPORTER.PORT} = 9830 (port of the cluster)</text>
-  <rect x="938" y="630" width="364" height="48" rx="9" fill="#ffffff" stroke="#dc2626"/>
+  <rect x="938" y="630" width="364" height="48" rx="9" fill="#16223b" stroke="#ef4444"/>
   <text x="1120" y="650" text-anchor="middle" class="t">Ceph by Zabbix agent 2  +  health fallback</text>
   <text x="1120" y="667" text-anchor="middle" class="mo">{$CEPH.API.KEY} {$CEPH.USER} {$CEPH.API.URL}</text>
 
@@ -167,11 +167,11 @@
   <text x="414" y="610" text-anchor="middle" class="lg">SSH</text>
 
   <!-- ===================== CHECK ON THE SERVERS ===================== -->
-  <rect x="20" y="752" width="1300" height="262" rx="14" fill="#ffffff" stroke="#cbd5e1" stroke-width="1.5" filter="url(#sh)"/>
-  <text x="40" y="778" class="h" fill="#0f172a">HOW TO CHECK IT ON THE SERVERS</text>
+  <rect x="20" y="752" width="1300" height="262" rx="14" fill="#111a2e" stroke="#2a3a5c" stroke-width="1.5" filter="url(#sh)"/>
+  <text x="40" y="778" class="h" fill="#f1f5f9">HOW TO CHECK IT ON THE SERVERS</text>
   <text x="1300" y="778" text-anchor="end" class="s">top to bottom: a step fails → fix it before looking further</text>
 
-  <rect x="36" y="792" width="302" height="208" rx="10" fill="#f0fdf4" stroke="#16a34a"/>
+  <rect x="36" y="792" width="302" height="208" rx="10" fill="#16223b" stroke="#22c55e"/>
   <circle cx="58" cy="814" r="12" fill="#16a34a"/><text x="58" y="818" text-anchor="middle" class="th">1</text>
   <text x="78" y="819" class="t">Monitor host (ssh root)</text>
   <text x="50" y="844" class="m">proxmox-menu doctor</text><text x="324" y="844" text-anchor="end" class="mo">all ✔</text>
@@ -182,8 +182,8 @@
   <text x="50" y="954" class="m">journalctl -t pve-ceph-ha-colors</text>
   <text x="50" y="976" class="s">2 timers listed: watchdog + ha-colors</text>
 
-  <rect x="354" y="792" width="302" height="208" rx="10" fill="#fff1f2" stroke="#e11d48"/>
-  <circle cx="376" cy="814" r="12" fill="#e11d48"/><text x="376" y="818" text-anchor="middle" class="th">2</text>
+  <rect x="354" y="792" width="302" height="208" rx="10" fill="#16223b" stroke="#f97316"/>
+  <circle cx="376" cy="814" r="12" fill="#f97316"/><text x="376" y="818" text-anchor="middle" class="th">2</text>
   <text x="396" y="819" class="t">Prometheus</text>
   <text x="368" y="844" class="m">proxmox-menu prom-check</text><text x="642" y="844" text-anchor="end" class="mo">up</text>
   <text x="368" y="866" class="s">Status → Targets: Proxmox-* all UP</text>
@@ -193,8 +193,8 @@
   <text x="368" y="954" class="s">Alerts tab: group pve-ceph loaded</text>
   <text x="368" y="976" class="m">promtool check rules &lt;file&gt;</text>
 
-  <rect x="672" y="792" width="302" height="208" rx="10" fill="#fffbeb" stroke="#d97706"/>
-  <circle cx="694" cy="814" r="12" fill="#d97706"/><text x="694" y="818" text-anchor="middle" class="th">3</text>
+  <rect x="672" y="792" width="302" height="208" rx="10" fill="#16223b" stroke="#eab308"/>
+  <circle cx="694" cy="814" r="12" fill="#ca8a04"/><text x="694" y="818" text-anchor="middle" class="th">3</text>
   <text x="714" y="819" class="t">Grafana</text>
   <text x="686" y="844" class="s">open /d/&lt;DASH_UID&gt; (proxmox-menu 15)</text>
   <text x="686" y="866" class="s">Total Health 100% · Ceph Status OK</text>
@@ -204,7 +204,7 @@
   <text x="686" y="954" class="s">new host → its color within 5 minutes</text>
   <text x="686" y="976" class="s">old copy /d/pve-ceph-prom is not updated</text>
 
-  <rect x="990" y="792" width="302" height="208" rx="10" fill="#fef2f2" stroke="#dc2626"/>
+  <rect x="990" y="792" width="302" height="208" rx="10" fill="#16223b" stroke="#ef4444"/>
   <circle cx="1012" cy="814" r="12" fill="#dc2626"/><text x="1012" y="818" text-anchor="middle" class="th">4</text>
   <text x="1032" y="819" class="t">Zabbix</text>
   <text x="1004" y="844" class="s">Latest data → host → tag component</text>
@@ -216,15 +216,15 @@
   <text x="1004" y="976" class="s">zabbix_get: on Zabbix · cat: on a node</text>
 
   <!-- ===================== COMPARE ===================== -->
-  <rect x="20" y="1030" width="1300" height="196" rx="14" fill="#ffffff" stroke="#cbd5e1" stroke-width="1.5" filter="url(#sh)"/>
-  <text x="40" y="1056" class="h" fill="#0f172a">COMPARE: THE SAME VALUE IN EVERY PLACE</text>
+  <rect x="20" y="1030" width="1300" height="196" rx="14" fill="#111a2e" stroke="#2a3a5c" stroke-width="1.5" filter="url(#sh)"/>
+  <text x="40" y="1056" class="h" fill="#f1f5f9">COMPARE: THE SAME VALUE IN EVERY PLACE</text>
   <text x="1300" y="1056" text-anchor="end" class="s">equal within ~1 minute; different → stale exporter, wrong job / port, or wrong Zabbix host</text>
-  <rect x="36" y="1066" width="1268" height="24" rx="5" fill="#334155"/>
+  <rect x="36" y="1066" width="1268" height="24" rx="5" fill="#1e293b"/>
   <text x="48" y="1082" class="th">What</text>
   <text x="262" y="1082" class="th">Grafana panel (Prometheus)</text>
   <text x="600" y="1082" class="th">Zabbix item (exporter by HTTP)</text>
   <text x="960" y="1082" class="th">On a Proxmox node (CLI)</text>
-  <rect x="36" y="1092" width="1268" height="22" fill="#f1f5f9"/>
+  <rect x="36" y="1092" width="1268" height="22" fill="#16223b"/>
   <text x="48" y="1107" class="t">Ceph health</text>
   <text x="262" y="1107" class="s">Ceph Status</text>
   <text x="600" y="1107" class="m">Ceph: health</text>
@@ -233,7 +233,7 @@
   <text x="262" y="1129" class="s">Total Health gauge (100% when clean)</text>
   <text x="600" y="1129" class="m">Ceph: total health (data stable)</text>
   <text x="960" y="1129" class="m">ceph -s  (degraded / misplaced %)</text>
-  <rect x="36" y="1136" width="1268" height="22" fill="#f1f5f9"/>
+  <rect x="36" y="1136" width="1268" height="22" fill="#16223b"/>
   <text x="48" y="1151" class="t">OSDs up / in</text>
   <text x="262" y="1151" class="s">OSDs UP · OSDs IN · OSDs DOWN</text>
   <text x="600" y="1151" class="m">Ceph: OSDs up · Ceph: OSDs in</text>
@@ -242,7 +242,7 @@
   <text x="262" y="1173" class="s">Resource Cluster table</text>
   <text x="600" y="1173" class="m">Proxmox: nodes online · quorate</text>
   <text x="960" y="1173" class="m">pvecm status</text>
-  <rect x="36" y="1180" width="1268" height="22" fill="#f1f5f9"/>
+  <rect x="36" y="1180" width="1268" height="22" fill="#16223b"/>
   <text x="48" y="1195" class="t">HA state / HA groups</text>
   <text x="262" y="1195" class="s">HA · HA Groups columns</text>
   <text x="600" y="1195" class="m">node &lt;name&gt; HA state · HA groups</text>
@@ -250,12 +250,12 @@
   <text x="48" y="1217" class="s">Recovery: Grafana Recovery Speed = Zabbix "Ceph: recovery speed" = "recovery: … MiB/s" in ceph -s</text>
 
   <!-- ===================== LEGEND ===================== -->
-  <rect x="40" y="1242" width="16" height="12" rx="2" fill="#fff7ed" stroke="#f97316"/><text x="62" y="1252" class="s">Ceph</text>
-  <rect x="110" y="1242" width="16" height="12" rx="2" fill="#dbeafe" stroke="#3b82f6"/><text x="132" y="1252" class="s">Proxmox API</text>
-  <rect x="220" y="1242" width="16" height="12" rx="2" fill="#dcfce7" stroke="#16a34a"/><text x="242" y="1252" class="s">exporter</text>
-  <rect x="310" y="1242" width="16" height="12" rx="2" fill="#fff1f2" stroke="#e11d48"/><text x="332" y="1252" class="s">Prometheus</text>
-  <rect x="410" y="1242" width="16" height="12" rx="2" fill="#fffbeb" stroke="#d97706"/><text x="432" y="1252" class="s">Grafana</text>
-  <rect x="496" y="1242" width="16" height="12" rx="2" fill="#fef2f2" stroke="#dc2626"/><text x="518" y="1252" class="s">Zabbix</text>
+  <rect x="40" y="1242" width="16" height="12" rx="2" fill="#16223b" stroke="#f97316"/><text x="62" y="1252" class="s">Ceph</text>
+  <rect x="110" y="1242" width="16" height="12" rx="2" fill="#16223b" stroke="#3b82f6"/><text x="132" y="1252" class="s">Proxmox API</text>
+  <rect x="220" y="1242" width="16" height="12" rx="2" fill="#16223b" stroke="#22c55e"/><text x="242" y="1252" class="s">exporter</text>
+  <rect x="310" y="1242" width="16" height="12" rx="2" fill="#16223b" stroke="#f97316"/><text x="332" y="1252" class="s">Prometheus</text>
+  <rect x="410" y="1242" width="16" height="12" rx="2" fill="#16223b" stroke="#eab308"/><text x="432" y="1252" class="s">Grafana</text>
+  <rect x="496" y="1242" width="16" height="12" rx="2" fill="#16223b" stroke="#ef4444"/><text x="518" y="1252" class="s">Zabbix</text>
   <line x1="580" y1="1248" x2="610" y2="1248" class="flow"/><text x="616" y="1252" class="s">reads data</text>
   <line x1="690" y1="1248" x2="720" y2="1248" class="gflow"/><text x="726" y="1252" class="s">pushes config / dashboards</text>
   <line x1="880" y1="1248" x2="910" y2="1248" class="zflow"/><text x="916" y="1252" class="s">Zabbix</text>
