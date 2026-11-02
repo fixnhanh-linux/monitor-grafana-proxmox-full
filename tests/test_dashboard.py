@@ -35,6 +35,19 @@ class Dashboard(unittest.TestCase):
         job = [v for v in d["templating"]["list"] if v["name"] == "job"][0]
         self.assertEqual(job["type"], "query")
 
+    def test_ha_groups_status_colors(self):
+        d = md.build(args(ha_alias=["A,B=AB:orange"]))
+        p = [p for p in d["panels"] if p["title"] == "Resource Cluster with HA Groups"][0]
+        expr = [t["expr"] for t in p["targets"] if t["refId"] == "Group"][0]
+        for pre, _, _ in md.HA_STATUS:
+            self.assertIn('"%s: $1"' % pre, expr)
+        self.assertEqual(expr.count("("), expr.count(")"))
+        ov = [o for o in p["fieldConfig"]["overrides"] if o["matcher"]["options"] == "HA Groups"][0]
+        maps = [x["value"] for x in ov["properties"] if x["id"] == "mappings"][0]
+        self.assertEqual(maps[0]["options"], {"pattern": "^OFFLINE: .*", "result": {"color": "red", "index": 0}})
+        # mau ":orange" cu bi bo qua -> nhom OK luon xanh
+        self.assertEqual(maps[len(md.HA_STATUS)]["options"]["A,B"], {"text": "AB", "color": "green", "index": 10})
+
     def test_customer_locked(self):
         d = md.build(args(customer_job="Proxmox-P1-XD", site_regex="/^Prometheus FPT HCM$/"))
         self.assertFalse(d["editable"])

@@ -162,13 +162,34 @@ def parse_lat_th(text):
 
 
 def parse_ha_alias(items):
-    """['A,B=Text:purple', ...] -> mapping options cho cot HA Groups."""
+    """['A,B=Text:purple', ...] -> mapping options cho cot HA Groups.
+    Mau theo trang thai node (HA_STATUS) -> ":mau" cu bo qua, nhom OK luon xanh."""
     opts = {}
     for i, item in enumerate(items or []):
         raw, _, rest = item.rpartition("=")
-        text, _, color = rest.partition(":")
-        opts[raw] = {"text": text, "color": color or "blue", "index": i}
+        opts[raw] = {"text": rest.partition(":")[0], "color": "green", "index": 10 + i}
     return opts
+
+
+# Trang thai node trong cot HA Groups: (tien to, mau, dieu kien PromQL).
+# Dong dau khop truoc (or on(host)) -> node offline khong hien them MAINTENANCE.
+HA_STATUS = [("OFFLINE", "red", "pve_up{%(nj)s} == 0"),
+             ("FENCE", "red", 'pve_ha_state{state=~"fence|lost|gone", %(nj)s} == 1'),
+             ("MAINTENANCE", "orange", 'pve_ha_state{state="maintenance", %(nj)s} == 1'),
+             ("HA UNKNOWN", "orange", 'pve_ha_state{state="unknown", %(nj)s} == 1')]
+
+
+def ha_status_q(groups_q, nj):
+    """groups_q (max by (host, groups)) -> them tien to "OFFLINE: " ... cho node co van de."""
+    parts = ['label_replace((%s) and on(host) %s, "groups", "%s: $1", "groups", "(.*)")'
+             % (groups_q, node_q(cond % {"nj": nj}), pre) for pre, _, cond in HA_STATUS]
+    return "\nor on(host) ".join(parts + ["(%s)" % groups_q])
+
+
+def ha_status_mappings():
+    return [{"type": "regex", "options": {"pattern": "^%s: .*" % pre,
+                                          "result": {"color": color, "index": i}}}
+            for i, (pre, color, _) in enumerate(HA_STATUS)]
 
 
 def safe_uid(uid):
@@ -289,9 +310,9 @@ def build(args):
         # Cot HA / HA Groups luon hien; node khong co nhom (hoac cluster khong co nhom nao)
         # -> groups="-" lay tu danh sach node (pve_up), "or on(host)" de khong trung dong
         res_t += [tgt(node_q('pve_ha_state{state="online", %s}' % nj), "HA", fmt="table"),
-                  tgt('max by (host, groups) (pve_ha_groups_custom_info{%s})\nor on(host) max by (host, groups) '
-                      '(label_replace(label_replace(pve_up{%s}, "host", "$1", "id", "node/(.*)"), '
-                      '"groups", "-", "", ""))' % (J, nj), "Group", fmt="table")]
+                  tgt(ha_status_q('max by (host, groups) (pve_ha_groups_custom_info{%s})\nor on(host) max by (host, groups) '
+                                  '(label_replace(label_replace(pve_up{%s}, "host", "$1", "id", "node/(.*)"), '
+                                  '"groups", "-", "", ""))' % (J, nj), nj), "Group", fmt="table")]
     ha = table("Resource Cluster" if cust else "Resource Cluster with HA Groups", res_t,
                [{"id": "joinByField", "options": {"byField": "host", "mode": "outer"}},
                 drop_extra_fields(HIDE),
@@ -302,7 +323,7 @@ def build(args):
                                 "Value #RAM_Pct": 4, "Value #RAM_Total": 5, "Value #Uptime": 6}),
                 {"id": "sortBy", "options": {"sort": [{"field": "Node Proxmox"}]}}],
                cell="auto", filterable=True,
-               desc="CPU, RAM, uptime per Proxmox node." if cust else "HA Groups: HA group (PVE 8) / node-affinity rule (PVE 9) of the node; nodes in no group show \"-\". Rules covering every node or disabled rules do not count as groups.",
+               desc="CPU, RAM, uptime per Proxmox node." if cust else "HA Groups: HA group (PVE 8) / node-affinity rule (PVE 9) of the node; nodes in no group show \"-\". Rules covering every node or disabled rules do not count as groups. Color = node state: green OK, orange MAINTENANCE / HA UNKNOWN, red OFFLINE / FENCE (prefix in the cell).",
                overrides=[
                    override("HA", ("mappings", [
                        {"type": "value", "options": {
@@ -312,11 +333,13 @@ def build(args):
                                                        "result": {"text": "-", "color": "text"}}}]),
                        ("custom.cellOptions", {"type": "color-text"})),
                    # Chuoi HA Groups dai (vd HIGH-MEMORY,INTEL-HIGH-CPU,P1-XD,Platinum-8260) bi cat
-                   # -> xuong dong trong o, rong hon, can giua (ca dau "-"); bam o de xem day du
+                   # -> xuong dong trong o, rong hon, can giua (ca dau "-"); bam o de xem day du.
+                   # Mau theo trang thai node: regex tien to (do / cam), con lai xanh.
                    override("HA Groups", ("custom.width", 380), ("custom.align", "center"),
+                            ("color", {"mode": "fixed", "fixedColor": "green"}),
                             ("custom.cellOptions", {"type": "color-text", "wrapText": True}),
                             ("custom.inspect", True),
-                            ("mappings", [
+                            ("mappings", ha_status_mappings() + [
                                 {"type": "value", "options": dict(parse_ha_alias(args.ha_alias), **{
                                     "-": {"text": "-", "color": "text", "index": 99}})},
                                 {"type": "special", "options": {"match": "null",
@@ -552,7 +575,8 @@ def main():
     ap.add_argument("--lat-th", default="nvme=15:25,ssd=50:100,default=100:200",
                     help="latency thresholds (ms) warning:critical per class")
     ap.add_argument("--ha-alias", action="append", default=[], metavar="GROUPS=TEXT[:color]",
-                    help='short name for an HA Groups string, e.g. "Gold-6146,HIGH-FREQUENCY,P1-XD=Gold+HIGH+P1-XD:orange"')
+                    help='short name for an HA Groups string, e.g. "Gold-6146,HIGH-FREQUENCY,P1-XD=Gold+HIGH+P1-XD" '
+                         '(color follows the node state; an old ":color" suffix is ignored)')
     ap.add_argument("--time-from", default="now-15m", help="default time range")
     ap.add_argument("--customer-job", default="", metavar="JOB",
                     help="CUSTOMER dashboard: locked to this job, hides Site/Job, drops Detailed Alarms, "

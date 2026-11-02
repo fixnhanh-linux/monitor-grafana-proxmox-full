@@ -1295,7 +1295,7 @@
             "type": "prometheus",
             "uid": "${Site}"
           },
-          "expr": "max by (host, groups) (pve_ha_groups_custom_info{job=~\"$job\"})\nor on(host) max by (host, groups) (label_replace(label_replace(pve_up{id=~\"node/.*\", job=~\"$job\"}, \"host\", \"$1\", \"id\", \"node/(.*)\"), \"groups\", \"-\", \"\", \"\"))",
+          "expr": "label_replace((max by (host, groups) (pve_ha_groups_custom_info{job=~\"$job\"})\nor on(host) max by (host, groups) (label_replace(label_replace(pve_up{id=~\"node/.*\", job=~\"$job\"}, \"host\", \"$1\", \"id\", \"node/(.*)\"), \"groups\", \"-\", \"\", \"\"))) and on(host) max by (host) (label_replace(pve_up{id=~\"node/.*\", job=~\"$job\"} == 0, \"host\", \"$1\", \"id\", \"node/(.*)\")), \"groups\", \"OFFLINE: $1\", \"groups\", \"(.*)\")\nor on(host) label_replace((max by (host, groups) (pve_ha_groups_custom_info{job=~\"$job\"})\nor on(host) max by (host, groups) (label_replace(label_replace(pve_up{id=~\"node/.*\", job=~\"$job\"}, \"host\", \"$1\", \"id\", \"node/(.*)\"), \"groups\", \"-\", \"\", \"\"))) and on(host) max by (host) (label_replace(pve_ha_state{state=~\"fence|lost|gone\", id=~\"node/.*\", job=~\"$job\"} == 1, \"host\", \"$1\", \"id\", \"node/(.*)\")), \"groups\", \"FENCE: $1\", \"groups\", \"(.*)\")\nor on(host) label_replace((max by (host, groups) (pve_ha_groups_custom_info{job=~\"$job\"})\nor on(host) max by (host, groups) (label_replace(label_replace(pve_up{id=~\"node/.*\", job=~\"$job\"}, \"host\", \"$1\", \"id\", \"node/(.*)\"), \"groups\", \"-\", \"\", \"\"))) and on(host) max by (host) (label_replace(pve_ha_state{state=\"maintenance\", id=~\"node/.*\", job=~\"$job\"} == 1, \"host\", \"$1\", \"id\", \"node/(.*)\")), \"groups\", \"MAINTENANCE: $1\", \"groups\", \"(.*)\")\nor on(host) label_replace((max by (host, groups) (pve_ha_groups_custom_info{job=~\"$job\"})\nor on(host) max by (host, groups) (label_replace(label_replace(pve_up{id=~\"node/.*\", job=~\"$job\"}, \"host\", \"$1\", \"id\", \"node/(.*)\"), \"groups\", \"-\", \"\", \"\"))) and on(host) max by (host) (label_replace(pve_ha_state{state=\"unknown\", id=~\"node/.*\", job=~\"$job\"} == 1, \"host\", \"$1\", \"id\", \"node/(.*)\")), \"groups\", \"HA UNKNOWN: $1\", \"groups\", \"(.*)\")\nor on(host) (max by (host, groups) (pve_ha_groups_custom_info{job=~\"$job\"})\nor on(host) max by (host, groups) (label_replace(label_replace(pve_up{id=~\"node/.*\", job=~\"$job\"}, \"host\", \"$1\", \"id\", \"node/(.*)\"), \"groups\", \"-\", \"\", \"\")))",
           "refId": "Group",
           "range": false,
           "instant": true,
@@ -1438,6 +1438,13 @@
                 "value": "center"
               },
               {
+                "id": "color",
+                "value": {
+                  "mode": "fixed",
+                  "fixedColor": "green"
+                }
+              },
+              {
                 "id": "custom.cellOptions",
                 "value": {
                   "type": "color-text",
@@ -1451,6 +1458,46 @@
               {
                 "id": "mappings",
                 "value": [
+                  {
+                    "type": "regex",
+                    "options": {
+                      "pattern": "^OFFLINE: .*",
+                      "result": {
+                        "color": "red",
+                        "index": 0
+                      }
+                    }
+                  },
+                  {
+                    "type": "regex",
+                    "options": {
+                      "pattern": "^FENCE: .*",
+                      "result": {
+                        "color": "red",
+                        "index": 1
+                      }
+                    }
+                  },
+                  {
+                    "type": "regex",
+                    "options": {
+                      "pattern": "^MAINTENANCE: .*",
+                      "result": {
+                        "color": "orange",
+                        "index": 2
+                      }
+                    }
+                  },
+                  {
+                    "type": "regex",
+                    "options": {
+                      "pattern": "^HA UNKNOWN: .*",
+                      "result": {
+                        "color": "orange",
+                        "index": 3
+                      }
+                    }
+                  },
                   {
                     "type": "value",
                     "options": {
@@ -1601,7 +1648,7 @@
           "countRows": false
         }
       },
-      "description": "HA Groups: HA group (PVE 8) / node-affinity rule (PVE 9) of the node; nodes in no group show \"-\". Rules covering every node or disabled rules do not count as groups.",
+      "description": "HA Groups: HA group (PVE 8) / node-affinity rule (PVE 9) of the node; nodes in no group show \"-\". Rules covering every node or disabled rules do not count as groups. Color = node state: green OK, orange MAINTENANCE / HA UNKNOWN, red OFFLINE / FENCE (prefix in the cell).",
       "id": 18,
       "gridPos": {
         "h": 20,

@@ -4,6 +4,7 @@ Newest first. The running commit is shown in the menu header (`version 2026.10.3
 
 ## Unreleased
 
+- **Dashboard**: HA Groups color = node state: green OK, orange `MAINTENANCE` / `HA UNKNOWN`, red `OFFLINE` / `FENCE` (prefix in the cell). `--ha-alias` keeps the short names; its `:color` is ignored.
 - **Repo layout**: `exporter/`, `grafana/` (`make_dashboard.py`, default dashboard), `prometheus/` (alert rules), `zabbix/`, `docs/`, `tests/`; `menu.sh` stays at the root. Old local leftovers removed.
 - **Zabbix merged in** (from `huong-dan-monitor-ceph-proxmox-zabbix`): `zabbix/setup_ceph_zabbix.sh` (menu 27 / `zabbix-ceph`) configures zabbix-agent2 for Ceph on every node over SSH (key first, password once via `sshpass -e`), cron fallback file, restful API key + macros; new template `zabbix/templates/ceph-health-fallback.yaml` reads the fallback file with `vfs.file.contents` — `AllowKey=system.run[*]` and `docfile.sh` are no longer used.
 - **Architecture diagram** redrawn: cluster, monitor host, Prometheus, Grafana and Zabbix with every data flow.

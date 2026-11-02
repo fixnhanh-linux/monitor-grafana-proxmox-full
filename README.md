@@ -56,7 +56,7 @@ bash /root/monitor-grafana-proxmox-full/menu.sh setup
 | 3 | Node / pool / device class counts | from `ceph osd tree`, `ceph osd pool ls`, `ceph osd crush class ls` | Table heights |
 | 3 | Latency thresholds per class | `nvme=15:25,ssd=50:100,default=100:200` | Colors of the OSD latency tables |
 | 3 | Default time range | `now-15m` | Time picker |
-| 3 | Short names + colors for HA Groups? | group strings found in `/etc/pve/ha/` | HA Groups column, e.g. `Gold+HIGH:orange` |
+| 3 | Short names for HA Groups? | group strings found in `/etc/pve/ha/` | HA Groups column, e.g. `Gold+HIGH` |
 | 4 | Grafana URL, token, folder UID | empty URL = JSON file only | Import over the API |
 | 5 | Prometheus URL | empty = skip | Checks the target is `up` and the job matches ceph mgr |
 
@@ -333,7 +333,7 @@ python3 grafana/make_dashboard.py --title "Proxmox - Ceph DECO" --uid pve-ceph-d
 - `--job-regex`: job filter on `pve_cluster_info` (default `/.*Proxmox-/`)
 - `--nodes / --pools / --classes`: table heights
 - `--lat-th`: latency thresholds (ms) warning:critical per class, default `nvme=15:25,ssd=50:100,default=100:200`
-- `--ha-alias "GROUPS=TEXT[:color]"` (repeatable): short name and color for an HA Groups string, e.g. `--ha-alias "Gold-6146,HIGH-FREQUENCY,P1-XD=Gold+HIGH+P1-XD:orange"`
+- `--ha-alias "GROUPS=TEXT"` (repeatable): short name for an HA Groups string, e.g. `--ha-alias "Gold-6146,HIGH-FREQUENCY,P1-XD=Gold+HIGH+P1-XD"` (an old `:color` suffix is ignored: the color follows the node state)
 - `--time-from`: default time range, e.g. `now-5m`
 - `--customer-job JOB`: customer dashboard (see below)
 - `--regen FILE`: regenerate FILE with the arguments saved inside it
@@ -422,7 +422,14 @@ The fallback uses `vfs.file.contents`, so `AllowKey=system.run[*]` and `docfile.
 | `ceph_custom_progress_percent{event}` | Progress of `ceph progress` events |
 | `pve_ha_groups_custom_info{host,groups}` | HA groups / node-affinity rules of the node (rules covering every node or disabled rules are ignored; a rule `comment` is shown instead of its `ha-rule-…` id) |
 
-The **HA Groups** column of *Resource Cluster* is always shown; nodes in no group show `-`.
+The **HA Groups** column of *Resource Cluster* is always shown; nodes in no group show `-`. Its color is the node state:
+
+| Color | Cell | When |
+|---|---|---|
+| Green | group name (or short name) | node up, HA online |
+| Orange | `MAINTENANCE: ...`, `HA UNKNOWN: ...` | HA maintenance mode / HA state unknown |
+| Red | `OFFLINE: ...`, `FENCE: ...` | node down (`pve_up = 0`) / HA fence, lost, gone |
+| Grey | `-` | node in no group |
 
 Exporter self-monitoring metrics (the **Exporter** row at the bottom of the dashboard):
 

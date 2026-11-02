@@ -30,3 +30,8 @@ jobs:
 
       - name: promtool check rules
         run: docker run --rm -v "$PWD/prometheus:/a:ro" --entrypoint promtool prom/prometheus:v2.53.0 check rules /a/pve-ceph-alerts.yml
+
+      - name: promtool check dashboard queries
+        run: |
+          mkdir -p /tmp/dq && python3 tests/dashboard_rules.py grafana/proxmox_ceph_dashboard.json > /tmp/dq/dash-rules.yml
+          docker run --rm -v /tmp/dq:/a:ro --entrypoint promtool prom/prometheus:v2.53.0 check rules /a/dash-rules.yml
