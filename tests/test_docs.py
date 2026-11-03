@@ -40,5 +40,23 @@ class Docs(unittest.TestCase):
         self.assertFalse(os.path.exists(os.path.join(ROOT, "README.vi.md")))
 
 
+    def test_menu_translation_file(self):
+        # lang/vi.txt: moi dong "<Anh> => <Viet>", khong trung khoa, tieng Viet khong dau (terminal server)
+        seen = {}
+        for n, line in enumerate(read("lang", "vi.txt").splitlines(), 1):
+            if not line.strip() or line.startswith("#"):
+                continue
+            self.assertEqual(line.count(" => "), 1, "line %d: %s" % (n, line))
+            self.assertNotIn("\t", line, "line %d" % n)
+            en, vi = line.split(" => ")
+            self.assertTrue(en.strip() and vi.strip(), "line %d" % n)
+            self.assertFalse(en in seen, "line %d duplicates line %d" % (n, seen.get(en, 0)))
+            seen[en] = n
+            self.assertRegex(vi, r"^[\x20-\x7e·→←↔✔©]*$", "line %d: Vietnamese must be unaccented" % n)
+        # menu chinh phai dich du
+        for k in ("= Host", "Full setup", "Environment check", "Select:", "Press Enter to return to the menu..."):
+            self.assertIn(k, seen)
+
+
 if __name__ == "__main__":
     unittest.main()

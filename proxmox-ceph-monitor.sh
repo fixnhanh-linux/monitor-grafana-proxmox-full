@@ -12,7 +12,7 @@
 #      uninstall | dashboard | import | prom | prom-check | doctor | update | refresh | about | help |
 #      remote-add [name] | remote-list | remote-test | remote-remove | services | watchdog |
 #      prom-all | prom-push | prom-rules | urls | deps | firewall | docker-run | docker-manage | docker-net |
-#      zabbix-ceph | ha-sync
+#      zabbix-ceph | ha-sync | lang [en|vi]
 #
 #  Copyright © 2026 FIX NHANH. All rights reserved.
 # =============================================================================
@@ -74,51 +74,75 @@ box_top()    { echo "${IND}${BC}╭$(hline ─ $((BOXW - 2)))╮${N}"; }
 box_sep()    { echo "${IND}${BC}├$(hline ─ $((BOXW - 2)))┤${N}"; }
 box_bottom() { echo "${IND}${BC}╰$(hline ─ $((BOXW - 2)))╯${N}"; }
 box_row() {  # dong can trai trong khung
-    local t="$1" pad; pad=$((BOXW - 4 - $(vis_len "$t"))); [ $pad -lt 0 ] && pad=0
+    local t pad; t=$(L "$1"); pad=$((BOXW - 4 - $(vis_len "$t"))); [ $pad -lt 0 ] && pad=0
     printf '%s%s│%s %s%*s %s│%s\n' "$IND" "$BC" "$N" "$t" "$pad" '' "$BC" "$N"
 }
 box_center() {  # dong can giua trong khung
-    local t="$1" len l r; len=$(vis_len "$t")
+    local t len l r; t=$(L "$1"); len=$(vis_len "$t")
     l=$(((BOXW - 2 - len) / 2)); [ $l -lt 0 ] && l=0; r=$((BOXW - 2 - len - l)); [ $r -lt 0 ] && r=0
     printf '%s%s│%s%*s%s%*s%s│%s\n' "$IND" "$BC" "$N" "$l" '' "$t" "$r" '' "$BC" "$N"
 }
 box_title() {  # ├─ TIEU DE ──────┤
-    local t=" $1 " len; len=$(vis_len "$t")
+    local t=" $(L "$1") " len; len=$(vis_len "$t")
     echo "${IND}${BC}├─${N}${W}${2:-$Y}${t}${N}${BC}$(hline ─ $((BOXW - 3 - len)))┤${N}"
 }
-box_row2() {  # 2 cot
-    local a="$1" b="$2" cw pad; cw=$(((BOXW - 4) / 2))
+box_row2() {  # 2 cot (dich truoc de can cot theo chu da dich)
+    local a b cw pad; a=$(L "$1"); b=$(L "$2"); cw=$(((BOXW - 4) / 2))
     pad=$((cw - $(vis_len "$a"))); [ $pad -lt 2 ] && pad=2
     box_row "$a$(printf '%*s' $pad '')$b"
 }
-mi() { printf '%s%s%3s%s  %s' "${3:-$C}" "$W" "$1" "$N" "$2"; }   # muc menu: phim, chu, mau
-kv() {  # nhan: gia tri (tu dem theo so ky tu, printf %-Ns dem byte voi chu co dau)
-    local p=$((12 - ${#1})); [ $p -lt 1 ] && p=1
-    printf '%s%s%s%*s%s' "$D" "$1" "$N" "$p" '' "$2"
+# ---------------------------------------------------------------- ngon ngu
+# Chu hien thi viet bang tieng Anh; MENU_LANG=vi -> dich bang lang/vi.txt (theo doan chu, dai truoc).
+# Chi dich chu in ra man hinh, khong dich gia tri nguoi dung nhap / gia tri mac dinh.
+declare -a TR_EN=() TR_TO=()
+declare -A TR_EXACT=()
+lang_load() {  # nap bang dich theo MENU_LANG (en / rong = khong dich)
+    TR_EN=(); TR_TO=(); TR_EXACT=()
+    local f="$DIR/lang/${MENU_LANG:-en}.txt" en to
+    [ "${MENU_LANG:-en}" != en ] && [ -f "$f" ] || return 0
+    while IFS=$'\t' read -r en to; do
+        if [[ "$en" == "= "* ]]; then TR_EXACT["${en#= }"]=$to; else TR_EN+=("$en"); TR_TO+=("$to"); fi
+    done < <(awk -F' => ' '!/^#/ && NF == 2 { print length($1) "\t" $1 "\t" $2 }' "$f" | sort -t$'\t' -k1,1nr | cut -f2-)
+}
+L() {  # L "chu" -> chu da dich (khong co bang dich thi giu nguyen)
+    local s="$*" i
+    if [ "${#TR_EN[@]}" = 0 ] && [ "${#TR_EXACT[@]}" = 0 ]; then printf '%s' "$s"; return; fi
+    [ -n "${TR_EXACT[$s]+x}" ] && { printf '%s' "${TR_EXACT[$s]}"; return; }
+    for i in "${!TR_EN[@]}"; do
+        [[ "$s" == *"${TR_EN[i]}"* ]] && s=${s//"${TR_EN[i]}"/"${TR_TO[i]}"}
+    done
+    printf '%s' "$s"
 }
 
-ok()   { echo "${IND}  ${G}✔${N}  $*"; }
-warn() { echo "${IND}  ${Y}▲${N}  $*"; }
-err()  { echo "${IND}  ${R}✘${N}  $*"; }
-info() { echo "${IND}  ${C}●${N}  $*"; }
+mi() { printf '%s%s%3s%s  %s' "${3:-$C}" "$W" "$1" "$N" "$(L "$2")"; }   # muc menu: phim, chu, mau
+kv() {  # nhan: gia tri (tu dem theo so ky tu, printf %-Ns dem byte voi chu co dau)
+    local k; k=$(L "$1")
+    local p=$((12 - ${#k})); [ $p -lt 1 ] && p=1
+    printf '%s%s%s%*s%s' "$D" "$k" "$N" "$p" '' "$2"
+}
+
+ok()   { echo "${IND}  ${G}✔${N}  $(L "$*")"; }
+warn() { echo "${IND}  ${Y}▲${N}  $(L "$*")"; }
+err()  { echo "${IND}  ${R}✘${N}  $(L "$*")"; }
+info() { echo "${IND}  ${C}●${N}  $(L "$*")"; }
 sub()  { sed "s/^/${IND}      /"; }   # thut le output lenh
 title() {
-    local t=" $* " len l; len=$(vis_len "$t"); l=$(((BOXW - len) / 2)); [ $l -lt 2 ] && l=2
+    local t=" $(L "$*") " len l; len=$(vis_len "$t"); l=$(((BOXW - len) / 2)); [ $l -lt 2 ] && l=2
     echo; echo "${IND}${BC}$(hline ━ $l)${N}${W}${C}${t}${N}${BC}$(hline ━ $((BOXW - len - l)))${N}"
 }
 pause() {
     [ -t 0 ] && [ "${NONINTERACTIVE:-0}" = 0 ] || return 0
-    echo; read -rp "${IND}  ${D}Press Enter to return to the menu...${N}" _
+    echo; read -rp "${IND}  ${D}$(L "Press Enter to return to the menu...")${N}" _
 }
 
 ask() {  # ask "Cau hoi" "mac dinh" -> in gia tri
-    local q="$1" def="${2:-}" ans
+    local q def="${2:-}" ans; q=$(L "$1")
     if [ -n "$def" ]; then read -rp "${IND}  ${C}❯${N} $q ${D}[$def]${N}: " ans
     else read -rp "${IND}  ${C}❯${N} $q: " ans; fi
     echo "${ans:-$def}"
 }
 confirm() {  # confirm "Cau hoi" -> 0 neu dong y
-    local ans; read -rp "${IND}  ${Y}?${N} $1 ${D}(y/N)${N}: " ans
+    local ans; read -rp "${IND}  ${Y}?${N} $(L "$1") ${D}(y/N)${N}: " ans
     [[ "$ans" =~ ^[YyCc]$ ]]
 }
 
@@ -131,7 +155,7 @@ has() { command -v "$1" >/dev/null 2>&1; }
 # =============================================================================
 # Cau hinh luu
 # =============================================================================
-load_conf() { [ -f "$CONF" ] && . "$CONF"; }
+load_conf() { [ -f "$CONF" ] && . "$CONF"; lang_load; }
 save_conf() {  # save_conf KEY VALUE
     touch "$CONF"; chmod 600 "$CONF"
     grep -v "^$1=" "$CONF" > "$CONF.tmp" 2>/dev/null || true
@@ -2171,6 +2195,27 @@ do_config() {
     fi
 }
 
+# =============================================================================
+# L. Ngon ngu menu: en (mac dinh) / vi (tieng Viet khong dau, bang dich lang/vi.txt)
+# =============================================================================
+do_lang() {  # do_lang [en|vi] -> rong thi hoi
+    local c="${1:-}"
+    if [ -z "$c" ]; then
+        title "LANGUAGE / NGON NGU"
+        echo "${IND}    ${W}1${N}  English"
+        echo "${IND}    ${W}2${N}  Tieng Viet"
+        read -rp "${IND}  ${C}❯${N} 1 / 2 [$([ "${MENU_LANG:-en}" = vi ] && echo 2 || echo 1)]: " c
+        [ -n "$c" ] || return 0
+    fi
+    case "$c" in
+        1|en|EN) c=en ;;
+        2|vi|VI) c=vi ;;
+        *) err "Invalid choice: $c"; return 1 ;;
+    esac
+    MENU_LANG=$c; save_conf MENU_LANG "$c"; lang_load
+    ok "$([ "$c" = vi ] && echo "Da chuyen sang tieng Viet" || echo "Language set to English")"
+}
+
 do_about() {
     echo
     box_top
@@ -2427,7 +2472,8 @@ menu_body() {
     box_row  "$(mi 27 "Ceph via Zabbix agent 2 (agent config, API key, fallback template)" "$R")"
     box_title "TOOLS" "$B"
     box_row2 "$(mi 14 "Update tool (git pull)" "$B")" "$(mi 16 "About & license" "$B")"
-    box_row2 "$(mi 15 "Saved config / URLs" "$B")"         "$(mi 0 "Exit" "$R")"
+    box_row2 "$(mi 15 "Saved config / URLs" "$B")"         "$(mi L "Language / Ngon ngu" "$B")"
+    box_row  "$(mi 0 "Exit" "$R")"
     box_sep
     box_center "${D}$COPYRIGHT${N}"
     box_bottom
@@ -2438,7 +2484,7 @@ menu() {
     while true; do
         header
         menu_body
-        local c; echo; read -rp "${IND}  ${C}❯${N} ${W}Select:${N} " c
+        local c; echo; read -rp "${IND}  ${C}❯${N} ${W}$(L "Select:")${N} " c
         case "$c" in
             1) do_check ;;      2) do_install ;;   3) do_status ;;
             4) do_metrics ;;    5) do_logs ;;      6) do_restart ;;
@@ -2449,7 +2495,8 @@ menu() {
             17) do_remote_add ;; 18) do_remote_list ;; 19) do_remote_test ;; 20) do_remote_remove ;;
             21) do_deps ;; 22) do_firewall ;; 23) do_docker_run ;; 24) do_docker_manage ;; 25) do_docker_net ;; 26) do_services ;; 27) do_zabbix_ceph ;;
             s|S) do_setup ;;
-            0|q|Q) echo; echo "${IND}  ${D}Bye! $COPYRIGHT${N}"; echo; exit 0 ;;
+            l|L) do_lang; continue ;;
+            0|q|Q) echo; echo "${IND}  ${D}$(L "Bye! $COPYRIGHT")${N}"; echo; exit 0 ;;
             "") continue ;;
             *) warn "Invalid choice: $c" ;;
         esac
@@ -2500,6 +2547,7 @@ if [ $# -gt 0 ]; then
         docker-net) NONINTERACTIVE=0; do_docker_net ;;
         services) NONINTERACTIVE=0; do_services ;;
         zabbix-ceph) NONINTERACTIVE=0; do_zabbix_ceph ;;
+        lang) do_lang "${1:-}" ;;
         refresh)  # tu git pull truoc, roi chay refresh bang code MOI vua keo ve
             if [ -z "${REFRESH_PULLED:-}" ] && [ -d "$DIR/.git" ]; then
                 NONINTERACTIVE=1; do_update </dev/null || exit 1

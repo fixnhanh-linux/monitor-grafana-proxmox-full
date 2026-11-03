@@ -17,6 +17,7 @@ A toolkit that builds the **Proxmox - Ceph Prometheus** Grafana dashboard and fi
 | `prometheus/` | `pve-ceph-alerts.yml` — Prometheus alert rules: exporter, Ceph, Proxmox |
 | `template-zabbix/` | Zabbix templates (6.0+): `pve-ceph-exporter-by-http.yaml` (reads the exporter over HTTP, no agent), `ceph-health-fallback.yaml`; `setup_ceph_zabbix.sh` (Zabbix Agent 2 for Ceph on every node over SSH) |
 | `docs/` | Architecture diagram in English and Vietnamese (`make_vi_svg.py` makes the Vietnamese one from the English one) |
+| `lang/` | Menu translations: `vi.txt` (Vietnamese, unaccented), one line per text: `English => Vietnamese` |
 | `tests/` | Unit tests (`python3 -m unittest discover -s tests`), run on GitHub Actions; CI also imports the Zabbix templates into real Zabbix 6.0, 6.2 and 7.0 |
 | `CHANGELOG.md` | Change log |
 
@@ -165,8 +166,9 @@ If you move the tool folder, run `bash <new-folder>/proxmox-ceph-monitor.sh` onc
 | 25 | Change the Docker IP range (`docker0` + range for new networks): checks private range / route overlap, backs up `daemon.json`, restarts Docker, checks containers come back; restores the old file if Docker fails |
 | 26 | **Services & health**: table of every exporter (local, `@cluster`, container) + Docker + watchdog with state, `/health`, port, start on boot; `r`/`s`/`t` restart / stop / start (one or `a` = all) then **verifies** active + `/health` within 40 s and prints logs on failure; `l` logs; `b`/`B` enable / disable start on boot; `w` watchdog |
 | 27 | **Zabbix: Ceph via Zabbix Agent 2** — runs `template-zabbix/setup_ceph_zabbix.sh` (see *Zabbix* below) |
+| L | Menu language: English or Vietnamese (unaccented, for server terminals); also `proxmox-menu lang vi` / `proxmox-menu lang en`. Saved in `.menu.conf` |
 
-Run a single command without the menu: `proxmox-menu setup | check | install [port] | status | metrics | logs | restart | port <number> | uninstall | dashboard | import | prom | prom-check | doctor | update | refresh | about | remote-add [name] | remote-list | remote-test | remote-remove | prom-all | prom-push | prom-rules | urls | deps | firewall | docker-run | docker-manage | docker-net | services | watchdog | zabbix-ceph | ha-sync`.
+Run a single command without the menu: `proxmox-menu setup | check | install [port] | status | metrics | logs | restart | port <number> | uninstall | dashboard | import | prom | prom-check | doctor | update | refresh | about | remote-add [name] | remote-list | remote-test | remote-remove | prom-all | prom-push | prom-rules | urls | deps | firewall | docker-run | docker-manage | docker-net | services | watchdog | zabbix-ceph | ha-sync | lang [en|vi]`.
 
 The menu remembers the Grafana URL, Prometheus URL, dashboard title / UID in `.menu.conf`; the Grafana token (if saved) lives separately in `.grafana-token`.
 
@@ -516,6 +518,7 @@ Bộ công cụ dựng dashboard Grafana **Proxmox - Ceph Prometheus** và lấp
 | `prometheus/` | `pve-ceph-alerts.yml` — luật cảnh báo Prometheus: exporter, Ceph, Proxmox |
 | `template-zabbix/` | Template Zabbix (6.0+): `pve-ceph-exporter-by-http.yaml` (đọc exporter qua HTTP, không cần agent), `ceph-health-fallback.yaml`; `setup_ceph_zabbix.sh` (cài Zabbix Agent 2 cho Ceph trên mọi node qua SSH) |
 | `docs/` | Sơ đồ kiến trúc tiếng Anh và tiếng Việt (`make_vi_svg.py` tạo bản tiếng Việt từ bản tiếng Anh) |
+| `lang/` | Bản dịch menu: `vi.txt` (tiếng Việt không dấu), mỗi dòng: `English => Tiếng Việt` |
 | `tests/` | Unit test (`python3 -m unittest discover -s tests`), chạy trên GitHub Actions; CI còn import template Zabbix vào Zabbix 6.0, 6.2 và 7.0 thật |
 | `CHANGELOG.md` | Nhật ký thay đổi |
 
@@ -664,8 +667,9 @@ Nếu chuyển thư mục công cụ đi chỗ khác, chạy `bash <thư-mục-m
 | 25 | Đổi dải IP Docker (`docker0` + dải cho mạng mới): kiểm tra dải private / trùng route, sao lưu `daemon.json`, khởi động lại Docker, kiểm tra container chạy lại; Docker lỗi thì trả lại file cũ |
 | 26 | **Dịch vụ & sức khỏe**: bảng mọi exporter (local, `@cluster`, container) + Docker + watchdog với trạng thái, `/health`, port, tự chạy khi khởi động; `r`/`s`/`t` khởi động lại / dừng / chạy (một cái hoặc `a` = tất cả) rồi **kiểm tra** active + `/health` trong 40 giây, lỗi thì in log; `l` log; `b`/`B` bật / tắt tự chạy khi khởi động; `w` watchdog |
 | 27 | **Zabbix: Ceph qua Zabbix Agent 2** — chạy `template-zabbix/setup_ceph_zabbix.sh` (xem *Zabbix* bên dưới) |
+| L | Ngôn ngữ menu: English hoặc tiếng Việt (không dấu, cho terminal server); hoặc `proxmox-menu lang vi` / `proxmox-menu lang en`. Lưu trong `.menu.conf` |
 
-Chạy một lệnh không cần mở menu: `proxmox-menu setup | check | install [port] | status | metrics | logs | restart | port <số> | uninstall | dashboard | import | prom | prom-check | doctor | update | refresh | about | remote-add [tên] | remote-list | remote-test | remote-remove | prom-all | prom-push | prom-rules | urls | deps | firewall | docker-run | docker-manage | docker-net | services | watchdog | zabbix-ceph | ha-sync`.
+Chạy một lệnh không cần mở menu: `proxmox-menu setup | check | install [port] | status | metrics | logs | restart | port <số> | uninstall | dashboard | import | prom | prom-check | doctor | update | refresh | about | remote-add [tên] | remote-list | remote-test | remote-remove | prom-all | prom-push | prom-rules | urls | deps | firewall | docker-run | docker-manage | docker-net | services | watchdog | zabbix-ceph | ha-sync | lang [en|vi]`.
 
 Menu nhớ URL Grafana, URL Prometheus, tiêu đề / UID dashboard trong `.menu.conf`; token Grafana (nếu lưu) nằm riêng trong `.grafana-token`.
 

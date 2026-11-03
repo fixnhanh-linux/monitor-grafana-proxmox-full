@@ -4,6 +4,7 @@ Newest first. The running commit is shown in the menu header (`version 2026.10.3
 
 ## Unreleased
 
+- **Menu in Vietnamese**: menu item **L** (or `proxmox-menu lang vi` / `lang en`) switches the menu, questions and messages between English and Vietnamese (unaccented, for server terminals); choice saved in `.menu.conf`. Translations live in `lang/vi.txt` (`English => Vietnamese`, longest text first); typed values and defaults are never translated. A test checks the file format.
 - **One README, two languages**: `README.vi.md` merged into `README.md` as two click-to-open sections (🇬🇧 English, 🇻🇳 Tiếng Việt), each with its own diagram — no more switching files.
 - **Menu file renamed** `menu.sh` → `proxmox-ceph-monitor.sh` (`proxmox-<what it does>.sh`, so other Proxmox tools can sit next to it). The `proxmox-menu` command is unchanged; `menu.sh` stays as a small forwarder so old shortcuts, timers and notes keep working, and the shortcut / HA colors timer point to the new file after the next `refresh`.
 - **Vietnamese docs**: `README.vi.md` (full Vietnamese README, with diacritics) and `docs/so-do-kien-truc.vi.svg` (Vietnamese diagram, generated from the English one by `docs/make_vi_svg.py`); both READMEs link to each other. A test checks the Vietnamese diagram is regenerated and both READMEs have the same sections.

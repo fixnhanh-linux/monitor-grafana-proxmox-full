@@ -1,0 +1,536 @@
+# FIX NHANH - ban dich tieng Viet (khong dau) cho menu proxmox-ceph-monitor.sh
+# Moi dong: <chu tieng Anh> => <tieng Viet>. Thay theo doan chu (dai truoc, ngan sau).
+# Dong bat dau bang "= ": chi thay khi ca chuoi dung y het (nhan ngan: Host, Port, Mode ...).
+# Chon ngon ngu: proxmox-menu lang vi | proxmox-menu lang en | menu muc L
+
+# ---------------------------------------------------------------- menu chinh
+MONITOR PROXMOX + CEPH => GIAM SAT PROXMOX + CEPH
+HOST INFO => THONG TIN MAY
+QUICK SETUP => CAI NHANH
+Full setup => Cai day du
+- asks once, then runs every step below => - hoi 1 lan, roi chay het cac buoc ben duoi
+(runs on a Ceph node) => (chay tren node Ceph)
+Environment check => Kiem tra moi truong
+View logs => Xem log
+Install / update => Cai / cap nhat
+Exporter status => Trang thai exporter
+Change port => Doi port
+Current metrics => Metric hien tai
+Uninstall => Go cai dat
+DASHBOARD & PROMETHEUS => DASHBOARD & PROMETHEUS
+Generate dashboard => Tao dashboard
+Import to Grafana => Import vao Grafana
+Prometheus config / push => Cau hinh / day Prometheus
+Check Prometheus => Kiem tra Prometheus
+Full check (environment + exporter + Prometheus) => Kiem tra day du (moi truong + exporter + Prometheus)
+REMOTE MONITORING => GIAM SAT TU XA
+(over the API, nothing on the nodes) => (qua API, khong cai gi len node)
+Add / edit cluster => Them / sua cluster
+Test connection => Thu ket noi
+List clusters => Danh sach cluster
+Remove cluster => Xoa cluster
+SYSTEM & DOCKER => HE THONG & DOCKER
+Install packages => Cai goi can thiet
+Run clusters in Docker => Chay cluster bang Docker
+Open firewall for Prometheus => Mo firewall cho Prometheus
+Manage containers => Quan ly container
+Change Docker IP range => Doi dai IP Docker
+Services & health, watchdog => Dich vu & suc khoe, watchdog
+Ceph via Zabbix agent 2 (agent config, API key, fallback template) => Ceph qua Zabbix agent 2 (agent, API key, template du phong)
+TOOLS => CONG CU
+Update tool (git pull) => Cap nhat cong cu (git pull)
+About & license => Gioi thieu & ban quyen
+Saved config / URLs => Cau hinh da luu / URL
+Language / Ngon ngu => Ngon ngu / Language
+Copyright © 2026 FIX NHANH. All rights reserved => Ban quyen © 2026 FIX NHANH. Bao luu moi quyen
+© 2026 FIX NHANH · All rights reserved => © 2026 FIX NHANH · Bao luu moi quyen
+Select: => Chon:
+Press Enter to return to the menu... => Bam Enter de quay lai menu...
+Invalid choice => Lua chon khong hop le
+not a PVE node => khong phai node PVE
+not set (menu 15) => chua dat (menu 15)
+not installed => chua cai
+remote running => tu xa dang chay
+running => dang chay
+clusters: => cluster:
+not on this host => khong co tren may nay
+New version => Ban moi
+on GitHub → pick 14 to update => tren GitHub → chon 14 de cap nhat
+= Host => May
+= Restart => Khoi dong lai
+= Exit => Thoat
+= Exporter => Exporter
+= Remote => Tu xa
+= Mode => Che do
+= Port => Port
+= Service => Dich vu
+= Title => Tieu de
+= Version => Phien ban
+= Clusters => Cluster
+= Cluster => Cluster
+= Image => Image
+= Running containers => Container dang chay
+= Clusters in Docker => Cluster chay Docker
+
+# ---------------------------------------------------------------- tieu de man hinh
+ENVIRONMENT CHECK => KIEM TRA MOI TRUONG
+INSTALL / UPDATE EXPORTER => CAI / CAP NHAT EXPORTER
+EXPORTER STATUS => TRANG THAI EXPORTER
+CURRENT METRICS => METRIC HIEN TAI
+LAST 50 LOG LINES => 50 DONG LOG CUOI
+RESTART EXPORTER => KHOI DONG LAI EXPORTER
+CHANGE EXPORTER PORT => DOI PORT EXPORTER
+UNINSTALL EXPORTER => GO CAI DAT EXPORTER
+GENERATE GRAFANA DASHBOARD => TAO DASHBOARD GRAFANA
+IMPORT DASHBOARD TO GRAFANA => IMPORT DASHBOARD VAO GRAFANA
+PROMETHEUS CONFIG => CAU HINH PROMETHEUS
+CHECK DATA ON PROMETHEUS => KIEM TRA DU LIEU TREN PROMETHEUS
+PROMETHEUS: ALL CLUSTERS => PROMETHEUS: MOI CLUSTER
+PROMETHEUS / GRAFANA URL => URL PROMETHEUS / GRAFANA
+PUSH ALERT RULES TO PROMETHEUS => DAY LUAT CANH BAO LEN PROMETHEUS
+PUSH SCRAPE FILE TO PROMETHEUS => DAY FILE SCRAPE LEN PROMETHEUS
+UPDATE TOOL => CAP NHAT CONG CU
+SAVED CONFIG => CAU HINH DA LUU
+ADD / EDIT CLUSTER (REMOTE MONITORING => THEM / SUA CLUSTER (GIAM SAT TU XA
+REMOTE CLUSTERS => CAC CLUSTER TU XA
+TEST CLUSTER CONNECTION => THU KET NOI CLUSTER
+REMOVE REMOTE CLUSTER => XOA CLUSTER TU XA
+INSTALL REQUIRED PACKAGES => CAI CAC GOI CAN THIET
+OPEN FIREWALL FOR PROMETHEUS => MO FIREWALL CHO PROMETHEUS
+RUN CLUSTERS IN DOCKER => CHAY CLUSTER BANG DOCKER
+MANAGE CONTAINERS => QUAN LY CONTAINER
+CHANGE DOCKER IP RANGE => DOI DAI IP DOCKER
+SERVICES & HEALTH => DICH VU & SUC KHOE
+WATCHDOG EXPORTER => WATCHDOG EXPORTER
+ZABBIX: CEPH VIA ZABBIX AGENT 2 => ZABBIX: CEPH QUA ZABBIX AGENT 2
+UPDATE EVERYTHING => CAP NHAT MOI THU
+FULL SETUP => CAI DAT DAY DU
+SUMMARY => TOM TAT
+STEPS => CAC BUOC
+CREATE A READ-ONLY API TOKEN (run once on any node of the cluster => TAO TOKEN API CHI DOC (chay 1 lan tren node bat ky cua cluster
+LANGUAGE / NGON NGU => NGON NGU / LANGUAGE
+
+# ---------------------------------------------------------------- hoi / xac nhan
+Start? => Bat dau?
+Continue anyway? => Van tiep tuc?
+Import anyway? => Van import?
+Use this range anyway? => Van dung dai nay?
+Start them? => Khoi dong chung?
+Start these containers? => Khoi dong cac container nay?
+Turn the watchdog on? => Bat watchdog?
+Turn the watchdog off? => Tat watchdog?
+Add another cluster? => Them cluster khac?
+Delete all saved config? => Xoa het cau hinh da luu?
+Import to Grafana now? => Import vao Grafana ngay?
+Also check Prometheus => Kiem tra luon Prometheus
+Set the Prometheus / Grafana URLs now? => Dat URL Prometheus / Grafana ngay?
+Set / change the Prometheus, Grafana URLs? => Dat / doi URL Prometheus, Grafana?
+Set short names + colors for HA Groups? => Dat ten ngan + mau cho HA Groups?
+Replace the old jobs with the exporter? => Thay cac job cu bang exporter?
+Also push the alert rules (prometheus/pve-ceph-alerts.yml)? => Day luon luat canh bao (prometheus/pve-ceph-alerts.yml)?
+Push the file to the Prometheus host over SSH now (duplicate check, promtool, reload)? => Day file len may Prometheus qua SSH ngay (kiem tra trung, promtool, reload)?
+Save the token so it is not asked again (root-only file)? => Luu token de lan sau khong hoi lai (file chi root doc)?
+Delete the saved Grafana token (enter it again on next import)? => Xoa token Grafana da luu (lan import sau nhap lai)?
+Fingerprint matches, trust this cert (only for this tool's Grafana calls)? => Fingerprint khop, tin cert nay (chi dung cho cong cu nay goi Grafana)?
+Disable TLS verification (PVE_VERIFY_TLS=0) and test again? => Tat kiem tra TLS (PVE_VERIFY_TLS=0) va thu lai?
+Connection not OK. Save and start the service anyway? => Ket noi chua OK. Van luu va chay dich vu?
+Reinstall the new exporter (keep port => Cai lai exporter moi (giu port
+Copy alert rules => Chep luat canh bao
+Copy file => Chep file
+and reload Prometheus? => va reload Prometheus?
+and restart Docker? => va khoi dong lai Docker?
+and run it with systemd again? => va chay lai bang systemd?
+Remove container => Xoa container
+Remove service => Xoa dich vu
+Stop the service and delete the config of cluster ' => Dung dich vu va xoa cau hinh cua cluster '
+' (the token is deleted too)? => ' (xoa luon token)?
+from this host? => khoi may nay?
+now (password once, never again)? => ngay (hoi mat khau 1 lan, sau do khong hoi nua)?
+Create an SSH key and install it on => Tao SSH key va cai len
+anyway (e.g. NAT IP / VIP)? => van dung (vd IP NAT / VIP)?
+Serve all metrics on 1 port? (Y/n => Gop moi metric vao 1 port? (Y/n
+Does Proxmox have a valid cert (Let's Encrypt / internal CA)? (y/N - default Proxmox cert: Enter => Proxmox co cert hop le (Let's Encrypt / CA noi bo)? (y/N - cert Proxmox mac dinh: Enter
+Action: l=logs  r=restart  x=remove (back to systemd)  Enter=exit => Thao tac: l=log  r=khoi dong lai  x=xoa (quay lai systemd)  Enter=thoat
+Pick a number from the table or 'a' => Chon so trong bang hoac 'a'
+enable/disable start on boot => bat/tat tu chay khi khoi dong
+Which file to import => Import file nao
+Which clusters to run in Docker (names separated by spaces, or all => Cluster nao chay bang Docker (ten cach nhau dau cach, hoac all
+Choice => Lua chon
+
+# ---------------------------------------------------------------- cau hoi nhap lieu
+Dashboard title => Tieu de dashboard
+UID (no spaces; same UID overwrites => UID (khong dau cach; cung UID thi ghi de
+UID (unique for this customer => UID (rieng cho khach nay
+Site datasource regex (empty = all Prometheus => Regex datasource Site (rong = moi Prometheus
+Cluster job regex => Regex job cluster
+Node count (HA table height => So node (chieu cao bang HA
+Pool count (pool table height => So pool (chieu cao bang pool
+Device class count => So device class
+Latency thresholds ms per class (warning:critical => Nguong latency ms theo class (canh bao:nghiem trong
+Default time range => Khoang thoi gian mac dinh
+Dashboard type => Loai dashboard
+Customer job (cluster => Job cua khach (cluster
+Customer name (shown in the title => Ten khach (hien trong tieu de
+Grafana Prometheus DATASOURCE name holding this job (exact, e.g. Prometheus FPT HCM => Ten DATASOURCE Prometheus tren Grafana chua job nay (dung y het, vd Prometheus FPT HCM
+Customer folder UID (empty = General => UID folder cua khach (rong = General
+Folder UID (empty = keep current / General => UID folder (rong = giu hien tai / General
+Folder UID (empty = General => UID folder (rong = General
+Grafana URL (empty = no import, JSON file only => URL Grafana (rong = khong import, chi tao file JSON
+Grafana URL (e.g. http://10.16.16.x:3000; Enter = keep => URL Grafana (vd http://10.16.16.x:3000; Enter = giu
+Prometheus URL (e.g. http://10.16.16.x:9090; Enter = keep => URL Prometheus (vd http://10.16.16.x:9090; Enter = giu
+Prometheus URL to check after install (empty = skip => URL Prometheus de kiem tra sau khi cai (rong = bo qua
+Exporter port on this host => Port exporter tren may nay
+Exporter port => Port exporter
+New port => Port moi
+Prometheus job name for this cluster (same as the ceph mgr job => Ten job Prometheus cho cluster nay (giong job ceph mgr
+Prometheus job name for the cluster (must match the ceph mgr job => Ten job Prometheus cua cluster (phai khop job ceph mgr
+Prometheus job name (must contain 'Proxmox-' for the dashboard => Ten job Prometheus (phai chua 'Proxmox-' cho dashboard
+Cluster name (no spaces, e.g. FPT-HCM => Ten cluster (khong dau cach, vd FPT-HCM
+Proxmox node IPs / names, comma separated (several nodes = failover when one dies => IP / ten node Proxmox, cach nhau dau phay (nhieu node = node nay chet thi chuyen node khac
+Proxmox node IPs (space separated => IP cac node Proxmox (cach nhau dau cach
+Ceph mgr host:9283, comma separated (Enter = auto-find the active mgr on every node => Ceph mgr host:9283, cach nhau dau phay (Enter = tu tim mgr active tren moi node
+Ceph mgr host:9283 (Enter = auto-find => Ceph mgr host:9283 (Enter = tu tim
+Token ID => Token ID
+IP of THIS host (monitor) that Prometheus scrapes - usually just press Enter => IP cua MAY NAY (monitor) ma Prometheus thu thap - thuong chi can bam Enter
+SSH to the Prometheus host (user@ip => SSH toi may Prometheus (user@ip
+MAIN Prometheus config file (usually just press Enter => File cau hinh Prometheus CHINH (thuong chi can bam Enter
+scrape_config_files directory => Thu muc scrape_config_files
+Rules directory on the Prometheus host => Thu muc rules tren may Prometheus
+Prometheus host IP allowed to connect (e.g. 10.16.16.24 => IP may Prometheus duoc phep ket noi (vd 10.16.16.24
+IP for docker0 (IP/prefix => IP cho docker0 (IP/prefix
+Range for future Docker networks (e.g. 192.168.21.0/24; Enter = skip => Dai IP cho cac mang Docker sau nay (vd 192.168.21.0/24; Enter = bo qua
+Zabbix server / proxy IP => IP Zabbix server / proxy
+Output file => File xuat ra
+Answer the questions below (Enter = use the value in => Tra loi cac cau duoi day (Enter = dung gia tri trong
+Enter a short name, add :color if you like (e.g => Nhap ten ngan, them :mau neu muon (vd
+Empty = keep the original name. Nodes with a problem turn red / orange => Rong = giu ten goc. Node co su co chuyen do / cam
+Enter = back => Enter = quay lai
+
+# ---------------------------------------------------------------- ket qua / thong bao
+Done, no errors => Xong, khong loi
+Needs attention => Can xem lai
+Environment ready => Moi truong san sang
+Already up to date => Da la ban moi nhat
+Cancelled - nothing changed => Da huy - khong doi gi
+Cancelled - nothing saved => Da huy - khong luu gi
+Cancelled - run again and pick 3, or run on a Ceph node => Da huy - chay lai va chon 3, hoac chay tren node Ceph
+Cancelled => Da huy
+Restored => Da tra lai
+Installed service => Dich vu da cai
+Installed => Da cai
+Restarted => Da khoi dong lai
+Removed => Da xoa
+Created => Da tao
+Updated => Da cap nhat
+Imported => Da import
+Copied => Da chep
+Wrote => Da ghi
+Token saved => Da luu token
+Token deleted => Da xoa token
+Cert pinned => Da ghim cert
+Sample saved => Da luu file mau
+Firewall updated => Da cap nhat firewall
+All containers are back up => Moi container da chay lai
+Containers not back up => Container chua chay lai
+running with systemd again => da chay lai bang systemd
+container already on => container da o ban
+systemd service restarted on the new version => dich vu systemd da khoi dong lai bang ban moi
+Remote exporters restarted (systemd => Exporter tu xa da khoi dong lai (systemd
+Regenerated => Da tao lai
+Downloaded the latest version => Da tai ban moi nhat
+Converted to git, version => Da chuyen sang git, ban
+Key installed, no more password prompts => Da cai key, khong hoi mat khau nua
+Watchdog on. View: journalctl -t pve-ceph-watchdog => Da bat watchdog. Xem: journalctl -t pve-ceph-watchdog
+Watchdog is on (every 2 minutes). Recent restarts => Watchdog dang bat (2 phut / lan). Cac lan khoi dong lai gan day
+Watchdog turned off and removed => Da tat va go watchdog
+Auto colors on: new HA groups get a color within 5 minutes (journalctl -t pve-ceph-ha-colors => Da bat tu len mau: nhom HA moi co mau trong 5 phut (journalctl -t pve-ceph-ha-colors
+No new HA groups => Khong co nhom HA moi
+No HA groups found → nothing to do => Khong thay nhom HA → khong can lam gi
+New HA groups => Nhom HA moi
+HA Groups colors => Mau HA Groups
+group strings found => chuoi nhom tim thay
+and reloaded Prometheus => va da reload Prometheus
+promtool: syntax OK => promtool: cu phap OK
+ceph status OK => ceph status OK
+ceph mgr prometheus module is enabled => module prometheus cua ceph mgr da bat
+pvesh available (Proxmox metrics => co pvesh (metric Proxmox
+HA config found => Co cau hinh HA
+Prometheus answers => Prometheus tra loi
+Grafana answers => Grafana tra loi
+Prometheus found on this host => Thay Prometheus tren may nay
+Grafana found on this host => Thay Grafana tren may nay
+This host runs Ceph → suggested => May nay chay Ceph → goi y
+No Ceph on this host → suggested => May nay khong co Ceph → goi y
+All packages present, nothing to install => Da du goi, khong can cai them
+No job has duplicate ceph metrics => Khong job nao trung metric ceph
+No job has duplicate Proxmox metrics => Khong job nao trung metric Proxmox
+Using the saved Grafana token => Dung token Grafana da luu
+Saved Grafana token => Token Grafana da luu
+Keeping the generated dashboard => Giu dashboard da tao
+Keeping the dashboard's current folder (folder uid => Giu folder hien tai cua dashboard (folder uid
+Prometheus target unchanged => Target Prometheus khong doi
+Exporter ports on this host => Port exporter tren may nay
+From now on type => Tu gio go
+anywhere to open the menu => o bat ky dau de mo menu
+Reopening the menu with the new version => Mo lai menu bang ban moi
+starts on boot => tu chay khi khoi dong
+does not start on boot => khong tu chay khi khoi dong
+are not affected => khong bi anh huong
+stop for a few seconds => dung vai giay
+while Docker restarts, then come back => trong luc Docker khoi dong lai, roi chay lai
+systemd services (exporter @cluster => dich vu systemd (exporter @cluster
+Recovery state per cluster => Trang thai recovery tung cluster
+Jobs on Prometheus => Cac job tren Prometheus
+Job comparison: ceph mgr ↔ exporter => So sanh job: ceph mgr ↔ exporter
+Cluster jobs (pve_cluster_info => Job cluster (pve_cluster_info
+Duplicate target check (1 cluster scraped twice -> doubled values => Kiem tra target trung (1 cluster bi thu 2 lan -> gia tri gap doi
+Prometheus datasources on Grafana (✔ = shown in the Site variable => Datasource Prometheus tren Grafana (✔ = hien trong bien Site
+Cluster read => Cluster doc duoc
+Read from Ceph => Doc tu Ceph
+OSD device class => Device class OSD
+Collect time per cycle (s => Thoi gian thu thap moi vong (giay
+Resources => Tai nguyen
+Start on boot => Tu chay khi khoi dong
+Log: journalctl -u => Log: journalctl -u
+Merged: the exporter re-serves ceph mgr + Proxmox (pvesh) metrics → Prometheus needs only 1 target => Gop: exporter phat lai metric ceph mgr + Proxmox (pvesh) → Prometheus chi can 1 target
+Answers are kept in .menu.conf for the next run (tokens are stored separately => Cau tra loi luu trong .menu.conf cho lan sau (token luu rieng
+To change answers: run menu S again (current values prefilled), or menu 15 => Muon doi cau tra loi: chay lai menu S (dien san gia tri hien tai), hoac menu 15
+exists → current values shown, Enter keeps them => da co → hien gia tri hien tai, Enter de giu
+again (current values prefilled) or edit the file above => lai (dien san gia tri hien tai) hoac sua file o tren
+Next: add target => Tiep theo: them target
+Remember to add the target to Prometheus, then run: proxmox-menu prom-check => Nho them target vao Prometheus, roi chay: proxmox-menu prom-check
+Remember to change the target in prometheus.yml to port => Nho doi target trong prometheus.yml sang port
+Check the targets: menu 12 (after ~1 minute => Kiem tra target: menu 12 (sau khoang 1 phut
+Import later: menu 11 → pick => Import sau: menu 11 → chon
+Import: Grafana → Dashboards → New → Import → Upload JSON, or use menu 11 => Import: Grafana → Dashboards → New → Import → Upload JSON, hoac dung menu 11
+Manual import: Grafana → Dashboards → New → Import => Import tay: Grafana → Dashboards → New → Import
+Permissions: create a folder for the customer in Grafana, import into it, grant the customer Viewer on that folder => Phan quyen: tao folder cho khach tren Grafana, import vao do, cap quyen Viewer tren folder do cho khach
+locked to 1 cluster, hides Site / Job and internal panels, read-only => khoa vao 1 cluster, an Site / Job va panel noi bo, chi xem
+all clusters, Site / Job pickers, detailed alarms, HA Groups, Exporter row => moi cluster, chon Site / Job, canh bao chi tiet, HA Groups, hang Exporter
+locked to job => khoa vao job
+Internal => Noi bo
+Customer => Khach hang
+dashboard only => chi dashboard
+runs on a Ceph node => chay tren node Ceph
+remote) or => tu xa) hoac
+Without agent => Khong can agent
+reads this exporter over HTTP (README: Zabbix => doc exporter nay qua HTTP (README: Zabbix
+Zabbix templates => Template Zabbix
+built in) + => co san) +
+Configures zabbix-agent2 on every node over SSH, a ceph health fallback file, and the Ceph RESTful API key => Cau hinh zabbix-agent2 tren moi node qua SSH, file du phong ceph health, va API key Ceph RESTful
+Watchdog: every 2 minutes checks /health of running exporters; hung / no answer twice in a row → restart it => Watchdog: 2 phut / lan kiem tra /health cua exporter dang chay; treo / khong tra loi 2 lan lien tiep → khoi dong lai
+Watchdog only checks running services → it will not restart what you just stopped => Watchdog chi kiem tra dich vu dang chay → khong bat lai cai ban vua dung
+Restarting Docker → all containers stop for a few seconds => Khoi dong lai Docker → moi container dung vai giay
+Red rows: 2 configs read the same cluster (REAL CLUSTER) or share a JOB → doubled values on the dashboard => Dong do: 2 cau hinh doc cung 1 cluster (REAL CLUSTER) hoac trung JOB → dashboard bi gap doi gia tri
+Keep the one that is ✔, remove the other: menu 20 => Giu cai ✔, xoa cai con lai: menu 20
+Edit that cluster: menu 17 with name => Sua cluster do: menu 17 voi ten
+Kept as is. Change JOB in menu 17 to run both side by side => Giu nguyen. Doi JOB o menu 17 de chay song song
+Replace = back up all of => Thay = sao luu toan bo
+remove the jobs above from the old files, add the exporter jobs; restore everything if promtool fails => xoa cac job tren khoi file cu, them job exporter; promtool loi thi tra lai het
+Existing Prometheus jobs with the same name / target as the exporter => Cac job Prometheus dang co trung ten / target voi exporter
+Existing ceph mgr / pve exporter targets (REMOVE them if they are the same cluster, otherwise values double => Cac target ceph mgr / pve exporter dang co (XOA neu cung cluster, neu khong gia tri bi gap doi
+Remove these clusters' old targets (:9283 ceph mgr, :9221 pve exporter) from Prometheus, otherwise values are doubled => Xoa target cu cua cac cluster nay (:9283 ceph mgr, :9221 pve exporter) khoi Prometheus, neu khong gia tri bi gap doi
+REMOVE this cluster's old ceph mgr (:9283) and pve exporter (:9221) targets from the job => XOA target cu ceph mgr (:9283) va pve exporter (:9221) cua cluster nay khoi job
+targets → remove the old ceph mgr target (:9283 => target → xoa target ceph mgr cu (:9283
+targets → remove the old pve exporter target (:9221 => target → xoa target pve exporter cu (:9221
+Local exporter runs in non-merged mode (--no-*) → use the separate sample above, not added to this file => Exporter local chay che do khong gop (--no-*) → dung file mau rieng o tren, khong them vao file nay
+Prometheus with split files (scrape_config_files, e.g. /etc/prometheus/scrape_configs/*.yml => Prometheus tach file (scrape_config_files, vd /etc/prometheus/scrape_configs/*.yml
+Prometheus single file (default => Prometheus 1 file (mac dinh
+If the job already exists, just add ' => Neu job da co, chi can them '
+' to its targets => ' vao targets cua no
+Then on the Prometheus host => Sau do tren may Prometheus
+On the Prometheus host check: curl -s http:// => Tren may Prometheus kiem tra: curl -s http://
+On the Prometheus host => Tren may Prometheus
+the exporters run here, the target must be this host's IP => exporter chay o day, target phai la IP cua may nay
+run menu 10 again, just press Enter at the IP question => chay lai menu 10, chi can bam Enter o cau hoi IP
+is not an IP of this host => khong phai IP cua may nay
+Firewall on this host for the Prometheus IP: menu 22 => Firewall tren may nay cho IP Prometheus: menu 22
+If a network firewall sits between the hosts (pfSense, FortiGate...), open tcp => Neu co firewall mang giua cac may (pfSense, FortiGate...), mo tcp
+Copy failed => Chep loi
+Removing old jobs failed => Xoa job cu bi loi
+promtool error → old files restored, Prometheus unaffected => promtool loi → da tra lai file cu, Prometheus khong anh huong
+File copied but reload failed → on the Prometheus host: systemctl reload prometheus => Da chep file nhung reload loi → tren may Prometheus: systemctl reload prometheus
+No promtool on the Prometheus host → skipping the syntax check => May Prometheus khong co promtool → bo qua kiem tra cu phap
+No promtool on the Prometheus host → rules cannot be checked before reload => May Prometheus khong co promtool → khong kiem tra duoc rules truoc khi reload
+has no 'scrape_config_files:' pointing to => khong co 'scrape_config_files:' tro toi
+Prometheus will not read this file => Prometheus se khong doc file nay
+does not load => chua nap
+has a one-line rule_files ([...]) → add ' => co rule_files viet 1 dong ([...]) → them '
+/*.yml' there by hand and run again => /*.yml' vao do bang tay roi chay lai
+/*.yml' to rule_files (backup => /*.yml' vao rule_files (sao luu
+will add ' => se them '
+does not exist on => khong ton tai tren
+Directory => Thu muc
+Key-based SSH login is required: ssh-copy-id => Can dang nhap SSH bang key: ssh-copy-id
+No SSH key access to => Chua vao duoc bang SSH key toi
+yet → every command would ask for a password => → moi lenh se hoi mat khau
+The password will be asked once for this run => Mat khau se hoi 1 lan cho lan chay nay
+ssh-copy-id failed → you will be asked for the password (once => ssh-copy-id loi → se hoi mat khau (1 lan
+No Prometheus host entered => Chua nhap may Prometheus
+ssh and scp are required => Can ssh va scp
+ssh is required => Can ssh
+scp failed => scp loi
+No exporter on this host yet → menu 2 (install on a Ceph node) or 17 (remote monitoring => May nay chua co exporter → menu 2 (cai tren node Ceph) hoac 17 (giam sat tu xa
+No exporter on this host => May nay khong co exporter
+Exporter not installed on this host (menu 2 or S => May nay chua cai exporter (menu 2 hoac S
+Exporter not installed on this host => May nay chua cai exporter
+No services on this host yet (menu 2 / 17 => May nay chua co dich vu (menu 2 / 17
+Service not running → one-shot run from source => Dich vu khong chay → chay thu 1 lan tu ma nguon
+Service returns no metrics yet → journalctl -u => Dich vu chua tra metric → journalctl -u
+container returns no metrics yet → docker logs => container chua tra metric → docker logs
+Cannot get metrics => Khong lay duoc metric
+Cannot fetch /metrics => Khong lay duoc /metrics
+Error details: curl -s http://127.0.0.1:<port>/metrics | grep last_error => Chi tiet loi: curl -s http://127.0.0.1:<port>/metrics | grep last_error
+Restart failed => Khoi dong lai loi
+Exporter install failed => Cai exporter loi
+Installing files failed => Cai file loi
+Exporter install chosen but 'ceph status' fails here → the check step will stop => Da chon cai exporter nhung 'ceph status' loi o day → buoc kiem tra se dung
+Fix the errors above before installing => Sua cac loi tren truoc khi cai
+Stopped: fix the errors above and run again (menu S => Da dung: sua cac loi tren roi chay lai (menu S
+Root is required to reinstall the exporter → skipped => Can root de cai lai exporter → bo qua
+Root is required to update => Can root de cap nhat
+run menu 14 again as root => chay lai menu 14 bang root
+Must run as root (sudo proxmox-menu => Phai chay bang root (sudo proxmox-menu
+Usage: proxmox-menu port <number> => Cach dung: proxmox-menu port <so>
+Unknown command => Lenh khong ro
+Invalid port => Port khong hop le
+Invalid IP => IP khong hop le
+Invalid URL: ' => URL khong hop le: '
+Invalid name: ' => Ten khong hop le: '
+Invalid action => Thao tac khong hop le
+is free => dang trong
+is used by the exporter => dang duoc exporter dung
+is taken by another program => dang bi chuong trinh khac dung
+already exists => da ton tai
+Python3 missing => Thieu python3
+python3 missing (apt install python3 => Thieu python3 (apt install python3
+python3 missing => Thieu python3
+too old (need >= 3.5 => qua cu (can >= 3.5
+curl missing (apt install curl) - needed for metrics / Grafana import => Thieu curl (apt install curl) - can cho metric / import Grafana
+curl and python3 are required => Can curl va python3
+docker and python3 are required => Can docker va python3
+git or curl is required to update => Can git hoac curl de cap nhat
+openssl is required to fetch the cert (apt install openssl => Can openssl de lay cert (apt install openssl
+Still missing => Van con thieu
+Missing => Thieu
+No ceph command on this host → install the exporter on a Ceph node of the cluster => May nay khong co lenh ceph → cai exporter tren 1 node Ceph cua cluster
+Cannot run 'ceph status' (missing /etc/ceph/ceph.client.admin.keyring or cannot reach the mons => Khong chay duoc 'ceph status' (thieu /etc/ceph/ceph.client.admin.keyring hoac khong toi duoc mon
+ceph mgr prometheus module is not enabled (required for merged 1-port mode => Chua bat module prometheus cua ceph mgr (can cho che do gop 1 port
+Ceph mgr: ceph mgr module enable prometheus (opens :9283 on the mgrs => Ceph mgr: ceph mgr module enable prometheus (mo :9283 tren cac mgr
+Proxmox VE not found (still works on a plain Ceph node => Khong thay Proxmox VE (van chay duoc tren node Ceph thuong
+pvesh missing - this host is not a Proxmox node => Thieu pvesh - may nay khong phai node Proxmox
+No HA group/rule → HA Groups column shows => Khong co nhom / luat HA → cot HA Groups hien
+Cannot read HA groups on this host → keeping saved short names (if any => Khong doc duoc nhom HA tren may nay → giu ten ngan da luu (neu co
+Dashboard generation failed => Tao dashboard loi
+Import failed => Import loi
+not found → generating it first => khong co → tao truoc
+not found → run menu 10 first => khong co → chay menu 10 truoc
+UID allows only letters, digits, - and _ (max 40) → using ' => UID chi gom chu, so, - va _ (toi da 40) → dung '
+Datasource name required (the customer only sees this datasource => Can ten datasource (khach chi thay datasource nay
+No datasource matches the Site regex ' => Khong datasource nao khop regex Site '
+' → change it in menu 9 (empty = all) and regenerate => ' → doi o menu 9 (rong = tat ca) roi tao lai
+Grafana has no Prometheus datasource → the dashboard will be empty => Grafana chua co datasource Prometheus → dashboard se trong
+Grafana → Connections → Data sources → Add → Prometheus, URL => Grafana → Connections → Data sources → Add → Prometheus, URL
+No datasource points to => Khong datasource nao tro toi
+the Prometheus scraping the exporter) → check when choosing Site => Prometheus dang thu thap exporter) → kiem tra khi chon Site
+Cannot list datasources (HTTP => Khong liet ke duoc datasource (HTTP
+Cannot list datasources → skipping the check => Khong liet ke duoc datasource → bo qua kiem tra
+token lacks permission) → skipping the check => token thieu quyen) → bo qua kiem tra
+No token → JSON file only => Khong co token → chi tao file JSON
+No token entered => Chua nhap token
+No token secret entered => Chua nhap token secret
+Token invalid / expired (401 => Token sai / het han (401
+Saved token removed (invalid / expired) → enter it again next time => Da xoa token da luu (sai / het han) → lan sau nhap lai
+Token lacks permission → the service account needs the Editor role (Viewer is read-only => Token thieu quyen → service account can quyen Editor (Viewer chi doc
+Create a token: Grafana → Administration → Service accounts → Add token (role Editor => Tao token: Grafana → Administration → Service accounts → Add token (quyen Editor
+Grafana token: entered in menu 11, can be saved once (.grafana-token, root-only => Token Grafana: nhap o menu 11, luu duoc 1 lan (.grafana-token, chi root
+No saved Grafana URL / token → import manually: menu 11 (save the token once => Chua luu URL / token Grafana → import tay: menu 11 (luu token 1 lan
+Deleted (Grafana token too) - the next run asks everything again => Da xoa (ca token Grafana) - lan chay sau hoi lai tu dau
+No saved config => Chua co cau hinh luu
+Grafana returned an HTTP error (wrong path / reverse proxy? => Grafana tra loi loi HTTP (sai duong dan / reverse proxy?
+Connection refused → wrong port, or Grafana is not listening on this IP => Bi tu choi ket noi → sai port, hoac Grafana khong nghe tren IP nay
+Timed out → blocked by a firewall, or the public IP is not reachable from inside (try Grafana's internal IP => Het thoi gian → bi firewall chan, hoac IP public khong toi duoc tu ben trong (thu IP noi bo cua Grafana
+TLS handshake failed → this port may serve http, not https => Bat tay TLS loi → port nay co the chay http, khong phai https
+Grafana uses a self-signed / internal CA cert → not trusted by this host => Grafana dung cert tu ky / CA noi bo → may nay khong tin
+is not trusted by this host (self-signed / internal CA => khong duoc may nay tin (tu ky / CA noi bo
+is not trusted (self-signed?) → use http://, or install the CA on this host (update-ca-certificates => khong duoc tin (tu ky?) → dung http://, hoac cai CA len may nay (update-ca-certificates
+Option 1: use http:// if Grafana does not use TLS => Cach 1: dung http:// neu Grafana khong dung TLS
+Option 2: install the CA on this host: openssl s_client -connect => Cach 2: cai CA len may nay: openssl s_client -connect
+Compare in the browser: click 'Not secure' → Certificate → the SHA-256 fingerprint must MATCH => So sanh tren trinh duyet: bam 'Not secure' → Certificate → fingerprint SHA-256 phai KHOP
+if the Grafana cert changes, run menu 11 again and the tool will ask => neu cert Grafana doi, chay lai menu 11 va cong cu se hoi
+Cannot fetch the cert from => Khong lay duoc cert tu
+Cert does not list => Cert khong ghi
+calling by name => goi bang ten
+Cannot resolve => Khong phan giai duoc
+works → use this URL (menu 15 to save it => chay duoc → dung URL nay (menu 15 de luu
+/-/ready → check IP/port, firewall of the Prometheus host (port 9090 => /-/ready → kiem tra IP/port, firewall cua may Prometheus (port 9090
+/api/health → check IP/port, firewall of the Grafana host (port 3000 => /api/health → kiem tra IP/port, firewall cua may Grafana (port 3000
+Cannot connect to => Khong ket noi duoc toi
+Cannot reach => Khong toi duoc
+Prometheus URL not set (menu 15 => Chua dat URL Prometheus (menu 15
+Prometheus does not scrape the exporter → add the target (menu 10) and reload Prometheus => Prometheus chua thu thap exporter → them target (menu 10) roi reload Prometheus
+target down => target chet
+Duplicate ceph => Trung ceph
+Duplicate Proxmox => Trung Proxmox
+is already in another job → duplicate data, remove one (menu 20 => da nam trong job khac → trung du lieu, xoa 1 cai (menu 20
+is already in cluster => da co trong cluster
+check the name (case-sensitive => kiem tra ten (phan biet hoa thuong
+Connection refused = host reachable but port closed. :9283 → on the cluster run 'ceph mgr module enable prometheus', see the address with 'ceph mgr services'; :8006 → pveproxy => Bi tu choi ket noi = toi duoc may nhung port dong. :9283 → tren cluster chay 'ceph mgr module enable prometheus', xem dia chi bang 'ceph mgr services'; :8006 → pveproxy
+All mgrs tried are standby (only the active mgr returns metrics) → enter ALL nodes at the IP question so each is tried; active mgr: 'ceph mgr stat' => Moi mgr da thu deu la standby (chi mgr active tra metric) → nhap TAT CA node o cau hoi IP de thu tung cai; mgr active: 'ceph mgr stat'
+root@pam token: created in the web UI with Privilege Separation by default → no permissions (403). Prefer monitor@pve!exporter + PVEAuditor (box above => Token root@pam: tao tren web mac dinh bat Privilege Separation → khong co quyen (403). Nen dung monitor@pve!exporter + PVEAuditor (khung o tren
+401 = wrong token / secret. Check the Token ID and secret (menu 17 → re-enter the secret => 401 = sai token / secret. Kiem tra Token ID va secret (menu 17 → nhap lai secret
+403 = token lacks read access (Sys.Audit on /). Run on one node of the cluster => 403 = token thieu quyen doc (Sys.Audit tren /). Chay tren 1 node cua cluster
+Check privsep: pveum user token list ' => Kiem tra privsep: pveum user token list '
+'  (privsep = 1 needs the second command => '  (privsep = 1 can lenh thu hai
+PVEAuditor can only READ, it cannot change VMs / config / Ceph => PVEAuditor chi duoc DOC, khong sua duoc VM / cau hinh / Ceph
+The last command prints 'value' = secret (shown once) → used below => Lenh cuoi in 'value' = secret (chi hien 1 lan) → dung o duoi
+Cannot connect → check this host to node:8006 and mgr:9283 (firewall => Khong ket noi duoc → kiem tra tu may nay toi node:8006 va mgr:9283 (firewall
+Proxmox cert is self-signed / untrusted CA (PVE_VERIFY_TLS= => Cert Proxmox tu ky / CA khong tin (PVE_VERIFY_TLS=
+Testing again with PVE_VERIFY_TLS=0 => Thu lai voi PVE_VERIFY_TLS=0
+Testing the connection to cluster => Dang thu ket noi toi cluster
+That cluster was not added => Cluster do chua duoc them
+At least 1 node is required => Can it nhat 1 node
+No node entered => Chua nhap node
+No job entered => Chua nhap job
+No cluster yet → add one in menu 17 first (Docker reuses that config file => Chua co cluster → them o menu 17 truoc (Docker dung lai file cau hinh do
+No cluster yet (menu 17 to add => Chua co cluster (menu 17 de them
+No cluster yet => Chua co cluster
+No container yet (menu 23 to create => Chua co container (menu 23 de tao
+Docker not installed → curl -fsSL https://get.docker.com | sh => Chua cai Docker → curl -fsSL https://get.docker.com | sh
+Docker is not running → systemctl enable --now docker => Docker khong chay → systemctl enable --now docker
+Docker does not start with the new config → old file restored => Docker khong chay voi cau hinh moi → da tra lai file cu
+Networks made earlier with 'docker network create' keep their old range (delete / recreate to change them => Mang tao truoc bang 'docker network create' giu dai cu (xoa / tao lai de doi
+docker0 now => docker0 hien tai
+Image build failed => Build image loi
+docker run failed => docker run loi
+stopping the systemd service to move to Docker (same port => dang dung dich vu systemd de chuyen sang Docker (cung port
+refresh / menu 23 rebuilds the new image => refresh / menu 23 build lai image moi
+Build image => Build image
+No active ufw / firewalld / pve-firewall → nothing to open => Khong co ufw / firewalld / pve-firewall dang chay → khong can mo
+PVE firewall is enabled → open port => Firewall PVE dang bat → mo port
+pve-firewall: cannot add a rule for port => pve-firewall: khong them duoc luat cho port
+pve-firewall: opened => pve-firewall: da mo
+firewalld: opened => firewalld: da mo
+for the Prometheus IP => cho IP Prometheus
+No known package manager found (apt/dnf/yum/zypper/pacman/apk => Khong thay trinh quan ly goi quen thuoc (apt/dnf/yum/zypper/pacman/apk
+apt update failed (enterprise repo?), trying to install anyway => apt update loi (repo enterprise?), van thu cai
+package manager => trinh quan ly goi
+Install with => Cai bang
+No git → downloading the new version with curl => Khong co git → tai ban moi bang curl
+Folder was downloaded with curl → converting to a git clone (keeps .menu.conf => Thu muc tai bang curl → chuyen sang git clone (giu .menu.conf
+Converting to git failed => Chuyen sang git loi
+Download failed => Tai loi
+Update failed (still on => Cap nhat loi (van o ban
+The exporter changed => Exporter da thay doi
+Files above were edited by hand → save them elsewhere, then: git -C => Cac file tren da bi sua tay → luu cho khac, roi: git -C
+checkout -- <file> ; run menu 14 again => checkout -- <file> ; chay lai menu 14
+is tracked by git → overwriting it blocks updates (menu 14); using => duoc git theo doi → ghi de se chan cap nhat (menu 14); dung
+Old dashboard copy => Ban dashboard cu
+Unknown command ' => Lenh khong ro '
+Edit: run => Sua: chay
+; delete: menu 15 => ; xoa: menu 15
+; or remove it: menu 20 => ; hoac xoa: menu 20
+remember to drop its target from Prometheus => nho bo target cua no khoi Prometheus
+View alerts => Xem canh bao
+/alerts  (Telegram / email delivery: configure Alertmanager => /alerts  (gui Telegram / email: cau hinh Alertmanager
+Bye! => Tam biet!
