@@ -215,10 +215,14 @@ ceph_health_short() {
 # =============================================================================
 do_check() {
     title "ENVIRONMENT CHECK"
-    local bad=0
+    local bad=0 remote=0
+    # May monitor tu xa (co cluster qua API, khong co ceph): khong can ceph / pvesh / Proxmox tai cho
+    [ -n "$(remote_names)" ] && ! has ceph && remote=1
 
     if [ -f /etc/pve/.version ] || has pveversion; then
         ok "Proxmox VE: $(pveversion 2>/dev/null | head -1)"
+    elif [ "$remote" = 1 ]; then
+        info "Remote monitor host: Proxmox and Ceph are read over the API, nothing else needed here"
     else
         warn "Proxmox VE not found (still works on a plain Ceph node)"
     fi
@@ -234,7 +238,9 @@ do_check() {
         err "python3 missing (apt install python3)"; bad=1
     fi
 
-    if has ceph; then
+    if [ "$remote" = 1 ]; then
+        :
+    elif has ceph; then
         ok "ceph command: $(ceph --version 2>/dev/null | awk '{print $3, $5}')"
         if timeout 15 ceph status --format json >/dev/null 2>&1; then
             ok "ceph status OK: $(timeout 15 ceph health 2>/dev/null)"
@@ -245,29 +251,39 @@ do_check() {
         err "No ceph command on this host → install the exporter on a Ceph node of the cluster"; bad=1
     fi
 
-    if [ -f /etc/pve/ha/groups.cfg ] || [ -f /etc/pve/ha/rules.cfg ]; then
+    if [ "$remote" = 1 ]; then
+        :
+    elif [ -f /etc/pve/ha/groups.cfg ] || [ -f /etc/pve/ha/rules.cfg ]; then
         ok "HA config found: $(ls /etc/pve/ha/groups.cfg /etc/pve/ha/rules.cfg 2>/dev/null | xargs)"
     else
-        info "No HA group/rule → HA Groups column shows "-" (normal)"
+        info "No HA group/rule → HA Groups column shows \"-\" (normal)"
     fi
 
-    local port; port=$(current_port)
-    if has ss && ss -ltnp 2>/dev/null | grep -q ":$port "; then
-        if ss -ltnp 2>/dev/null | grep ":$port " | grep -q python3; then
-            ok "Port $port is used by the exporter"
+    # Port: cua exporter local va cua tung cluster tu xa; dang bi chinh exporter (python3 / container) dung = OK
+    local port n p who
+    if [ "$remote" = 0 ]; then
+        port=$(current_port)
+        if has ss && ss -ltnp 2>/dev/null | grep -q ":$port "; then
+            who=$(ss -ltnp 2>/dev/null | grep ":$port " | grep -oE '"[^"]+"' | sort -u | paste -sd' ')
+            if [[ "$who" == *python3* || "$who" == *docker-proxy* ]]; then ok "Port $port is used by the exporter"
+            else err "Port $port is taken by another program: $who"; bad=1; fi
         else
-            err "Port $port is taken by another program: $(ss -ltnp | grep ":$port " | awk '{print $NF}')"; bad=1
+            ok "Port $port is free"
         fi
-    else
-        ok "Port $port is free"
     fi
+    for n in $(remote_names); do
+        p=$(env_get "$REMOTE_DIR/$n.env" PORT)
+        if has docker && [ "$(container_state "$n")" = running ]; then who="Docker"; else who="systemd"; fi
+        if [ "$(svc_health_of "$p")" = ok ]; then ok "$n: exporter :$p ($who) /health ok"
+        else err "$n: exporter :$p ($who) does not answer /health → menu 26"; bad=1; fi
+    done
 
     if has pve-firewall && pve-firewall status 2>/dev/null | grep -q "enabled/running"; then
         warn "PVE firewall is enabled → open port $port for the Prometheus IP:"
         echo "Datacenter/Node → Firewall → Add: IN ACCEPT tcp dport $port source <Prometheus IP>" | sub
     fi
 
-    if [ -z "$(current_flags)" ]; then
+    if [ "$remote" = 0 ] && [ -z "$(current_flags)" ]; then
         if has ceph && timeout 10 ceph mgr services -f json 2>/dev/null | grep -q '"prometheus"'; then
             ok "ceph mgr prometheus module is enabled"
         elif has ceph; then
@@ -279,7 +295,9 @@ do_check() {
 
     has curl || warn "curl missing (apt install curl) - needed for metrics / Grafana import"
 
-    if [ "$bad" = 0 ]; then ok "${G}${W}Environment ready${N}"; else err "${R}${W}Fix the errors above before installing${N}"; fi
+    if [ "$bad" = 0 ]; then ok "${G}${W}Environment ready${N}"
+    elif [ "$remote" = 1 ]; then err "${R}${W}Fix the errors above${N}"
+    else err "${R}${W}Fix the errors above before installing${N}"; fi
     return $bad
 }
 

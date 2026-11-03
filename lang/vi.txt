@@ -546,3 +546,7 @@ Go back to the systemd service for => Quay lai dich vu systemd cho
 some collectors fail inside the container => mot so collector loi trong container
 Works with systemd but not in Docker → the Docker IP range may overlap the LAN of the nodes: menu 25 => Chay systemd duoc ma Docker khong duoc → dai IP Docker co the trung LAN cua cac node: menu 25
 running at => dang chay tai
+Remote monitor host: Proxmox and Ceph are read over the API, nothing else needed here => May monitor tu xa: Proxmox va Ceph doc qua API, khong can gi them o may nay
+does not answer /health → menu 26 => khong tra loi /health → menu 26
+Fix the errors above => Sua cac loi tren
+(normal) => (binh thuong)
