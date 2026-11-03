@@ -8,7 +8,7 @@ Bộ công cụ dựng dashboard Grafana **Proxmox - Ceph Prometheus** và lấp
 
 | Đường dẫn | Công dụng |
 |---|---|
-| `menu.sh` | **Menu quản lý mọi thứ** (`proxmox-menu`): kiểm tra, cài đặt, trạng thái, log, dashboard, Prometheus, Zabbix, Docker, dịch vụ |
+| `proxmox-ceph-monitor.sh` | **Menu quản lý mọi thứ** (`proxmox-menu`): kiểm tra, cài đặt, trạng thái, log, dashboard, Prometheus, Zabbix, Docker, dịch vụ. Đặt tên `proxmox-<việc-làm>.sh` để sau này thêm công cụ Proxmox khác cạnh nó; `menu.sh` là tên cũ, vẫn giữ và tự chuyển sang file này |
 | `exporter/` | `pve_ceph_extra_exporter.py` (recovery / rebalance, Total Health %, Recovery Speed, HA Groups; phát lại metric ceph mgr + Proxmox trên cùng 1 port), `install_exporter.sh`, unit systemd `pve-ceph-extra-exporter@.service`, `Dockerfile` |
 | `dashboard-grafana/` | `make_dashboard.py` (tạo dashboard) và `proxmox_ceph_dashboard.json` (dashboard mặc định, import được ngay) |
 | `prometheus/` | `pve-ceph-alerts.yml` — luật cảnh báo Prometheus: exporter, Ceph, Proxmox |
@@ -70,7 +70,7 @@ git clone https://github.com/fixnhanh-linux/monitor-grafana-proxmox-full.git /ro
 ```
 
 ```bash
-bash /root/monitor-grafana-proxmox-full/menu.sh setup
+bash /root/monitor-grafana-proxmox-full/proxmox-ceph-monitor.sh setup
 ```
 
 (hoặc mở menu và chọn **S**). Công cụ hỏi hết các câu dưới đây, in **SUMMARY**, hỏi `Start? (y/N)`, rồi chạy từng bước và báo kết quả.
@@ -122,7 +122,7 @@ Chạy `git pull`, tự khởi động lại bằng code mới, rồi dùng cấ
 
 ## Lệnh tắt `proxmox-menu`
 
-Lần đầu chạy `bash /root/monitor-grafana-proxmox-full/menu.sh` bằng root, công cụ tạo `/usr/local/bin/proxmox-menu`. Từ đó gõ ở thư mục nào cũng được:
+Lần đầu chạy `bash /root/monitor-grafana-proxmox-full/proxmox-ceph-monitor.sh` bằng root, công cụ tạo `/usr/local/bin/proxmox-menu`. Từ đó gõ ở thư mục nào cũng được:
 
 | Lệnh | Công dụng |
 |---|---|
@@ -131,7 +131,7 @@ Lần đầu chạy `bash /root/monitor-grafana-proxmox-full/menu.sh` bằng roo
 | `proxmox-menu services` | Bảng dịch vụ: khởi động lại / dừng / log |
 | `proxmox-menu <lệnh>` | Bất kỳ lệnh nào bên dưới (`remote-list`, `prom-push`, `docker-net` ...) |
 
-Nếu chuyển thư mục công cụ đi chỗ khác, chạy `bash <thư-mục-mới>/menu.sh` một lần là lệnh tắt tự trỏ theo.
+Nếu chuyển thư mục công cụ đi chỗ khác, chạy `bash <thư-mục-mới>/proxmox-ceph-monitor.sh` một lần là lệnh tắt tự trỏ theo.
 
 ## Các mục menu
 

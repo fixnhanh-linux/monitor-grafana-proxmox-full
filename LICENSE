@@ -1,6 +1,6 @@
 Copyright (c) 2026 FIX NHANH. All rights reserved.
 
-The "Monitor Proxmox + Ceph" toolkit (menu.sh, make_dashboard.py,
+The "Monitor Proxmox + Ceph" toolkit (proxmox-ceph-monitor.sh, make_dashboard.py,
 exporter/pve_ceph_extra_exporter.py, exporter/install_exporter.sh and the
 accompanying documentation) is the property of FIX NHANH.
 

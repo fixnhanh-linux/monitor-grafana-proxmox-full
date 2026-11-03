@@ -125,8 +125,8 @@ T = {
         '>Recovery: Recovery Speed trên Grafana = Zabbix "Ceph: recovery speed" = "recovery: … MiB/s" trong ceph -s<',
     ">Reads data<": ">Đọc dữ liệu<",
     ">Pushes config / dashboards<": ">Đẩy cấu hình / dashboard<",
-    ">Repo: menu.sh · exporter/ · dashboard-grafana/ · prometheus/ · template-zabbix/ · docs/ · tests/   ·   Update everything: proxmox-menu refresh<":
-        ">Repo: menu.sh · exporter/ · dashboard-grafana/ · prometheus/ · template-zabbix/ · docs/ · tests/   ·   Cập nhật mọi thứ: proxmox-menu refresh<",
+    ">Repo: proxmox-ceph-monitor.sh · exporter/ · dashboard-grafana/ · prometheus/ · template-zabbix/ · docs/ · tests/   ·   Update everything: proxmox-menu refresh<":
+        ">Repo: proxmox-ceph-monitor.sh · exporter/ · dashboard-grafana/ · prometheus/ · template-zabbix/ · docs/ · tests/   ·   Cập nhật mọi thứ: proxmox-menu refresh<",
 }
 
 

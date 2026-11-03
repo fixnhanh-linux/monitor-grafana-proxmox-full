@@ -75,7 +75,7 @@
   <text x="640" y="134" text-anchor="middle" class="s">Ví dụ 10.16.16.38 (Ubuntu) · repo git monitor-grafana-proxmox-full</text>
 
   <rect x="458" y="150" width="364" height="52" rx="9" fill="#16223b" stroke="#475569"/>
-  <text x="640" y="171" text-anchor="middle" class="t">Menu: proxmox-menu  (menu.sh)</text>
+  <text x="640" y="171" text-anchor="middle" class="t">Menu: proxmox-menu → proxmox-ceph-monitor.sh</text>
   <text x="640" y="190" text-anchor="middle" class="m">setup · refresh · services · ha-sync · zabbix-ceph</text>
 
   <rect x="458" y="214" width="364" height="122" rx="9" fill="#16223b" stroke="#22c55e"/>
@@ -335,5 +335,5 @@
   <line x1="580" y1="1688" x2="610" y2="1688" class="flow"/><text x="616" y="1692" class="s">Đọc dữ liệu</text>
   <line x1="690" y1="1688" x2="720" y2="1688" class="gflow"/><text x="726" y="1692" class="s">Đẩy cấu hình / dashboard</text>
   <line x1="880" y1="1688" x2="910" y2="1688" class="zflow"/><text x="916" y="1692" class="s">Zabbix</text>
-  <text x="40" y="1716" class="s">Repo: menu.sh · exporter/ · dashboard-grafana/ · prometheus/ · template-zabbix/ · docs/ · tests/   ·   Cập nhật mọi thứ: proxmox-menu refresh</text>
+  <text x="40" y="1716" class="s">Repo: proxmox-ceph-monitor.sh · exporter/ · dashboard-grafana/ · prometheus/ · template-zabbix/ · docs/ · tests/   ·   Cập nhật mọi thứ: proxmox-menu refresh</text>
 </svg>

@@ -5,7 +5,7 @@
 #
 #  Chay tren 1 may bat ky SSH duoc vao cac node Proxmox (vd may monitor):
 #    bash template-zabbix/setup_ceph_zabbix.sh [ZABBIX_IP] [NODE1 NODE2 ...]
-#  hoac menu.sh muc 27 (zabbix-ceph).
+#  hoac proxmox-ceph-monitor.sh muc 27 (zabbix-ceph).
 #
 #  Tren tung node:
 #    - cai / cau hinh zabbix-agent2 (Server, ServerActive, plugin Ceph bo qua cert tu ky)

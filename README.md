@@ -8,7 +8,7 @@ A toolkit that builds the **Proxmox - Ceph Prometheus** Grafana dashboard and fi
 
 | Path | Purpose |
 |---|---|
-| `menu.sh` | **Management menu for everything** (`proxmox-menu`): checks, install, status, logs, dashboards, Prometheus, Zabbix, Docker, services |
+| `proxmox-ceph-monitor.sh` | **Management menu for everything** (`proxmox-menu`): checks, install, status, logs, dashboards, Prometheus, Zabbix, Docker, services. Named `proxmox-<what it does>.sh` so other Proxmox tools can sit next to it; `menu.sh` is the old name, kept and forwarding to it |
 | `exporter/` | `pve_ceph_extra_exporter.py` (recovery / rebalance, Total Health %, Recovery Speed, HA Groups; re-serves ceph mgr + Proxmox metrics on one port), `install_exporter.sh`, systemd unit `pve-ceph-extra-exporter@.service`, `Dockerfile` |
 | `dashboard-grafana/` | `make_dashboard.py` (dashboard generator) and `proxmox_ceph_dashboard.json` (default dashboard, ready to import) |
 | `prometheus/` | `pve-ceph-alerts.yml` — Prometheus alert rules: exporter, Ceph, Proxmox |
@@ -70,7 +70,7 @@ git clone https://github.com/fixnhanh-linux/monitor-grafana-proxmox-full.git /ro
 ```
 
 ```bash
-bash /root/monitor-grafana-proxmox-full/menu.sh setup
+bash /root/monitor-grafana-proxmox-full/proxmox-ceph-monitor.sh setup
 ```
 
 (or open the menu and pick **S**). The tool asks all questions below, prints a **SUMMARY**, asks `Start? (y/N)`, then runs every step and reports the result.
@@ -122,7 +122,7 @@ Runs `git pull`, restarts itself on the new code, then with the saved config: re
 
 ## The `proxmox-menu` shortcut
 
-The first time `bash /root/monitor-grafana-proxmox-full/menu.sh` runs as root, the tool creates `/usr/local/bin/proxmox-menu`. From then on, from any directory:
+The first time `bash /root/monitor-grafana-proxmox-full/proxmox-ceph-monitor.sh` runs as root, the tool creates `/usr/local/bin/proxmox-menu`. From then on, from any directory:
 
 | Command | Purpose |
 |---|---|
@@ -131,7 +131,7 @@ The first time `bash /root/monitor-grafana-proxmox-full/menu.sh` runs as root, t
 | `proxmox-menu services` | Service table: restart / stop / logs |
 | `proxmox-menu <command>` | Any command below (`remote-list`, `prom-push`, `docker-net` ...) |
 
-If you move the tool folder, run `bash <new-folder>/menu.sh` once and the shortcut follows.
+If you move the tool folder, run `bash <new-folder>/proxmox-ceph-monitor.sh` once and the shortcut follows.
 
 ## Menu items
 
