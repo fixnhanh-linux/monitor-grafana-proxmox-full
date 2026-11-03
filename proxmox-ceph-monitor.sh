@@ -1691,12 +1691,36 @@ docker_run_cluster() {  # docker_run_cluster TEN VERSION -> (tao lai) container 
             --security-opt no-new-privileges "$DOCKER_IMAGE:$ver" >/dev/null; then
         err "$n: docker run failed"; return 1
     fi
-    sleep 5
-    if curl -sf --max-time 60 "http://127.0.0.1:$p/metrics" | grep -q '^pve_ceph_extra_exporter_up'; then
+    # Lan thu thap dau (API + tim mgr active) co the lau, nhat la khi container khong toi duoc node
+    # -> hoi lai toi da ~150s, dung som neu container da chet
+    local out="" st i
+    info "$n: waiting for the first collection (up to 150 s)..."
+    for i in $(seq 1 15); do
+        sleep 5
+        st=$(container_state "$n")
+        [ "$st" = running ] || break
+        out=$(curl -s --max-time 5 "http://127.0.0.1:$p/metrics" 2>/dev/null)
+        [[ "$out" == *pve_ceph_extra_exporter_up* ]] && break
+        out=""
+    done
+    if [ -n "$out" ]; then
         ok "$n: container ${W}$c${N} ($ver) running at ${W}http://$(local_ip):$p/metrics${N}"
-    else
-        err "$n: container returns no metrics yet → docker logs $c"; return 1
+        # Chay nhung collector loi (vd container khong toi duoc node / mgr) -> bao ngay
+        local bad; bad=$(echo "$out" | sed -n 's/^pve_ceph_extra_exporter_last_error{collector="\([^"]*\)",error="\([^"]*\)".*/\1: \2/p')
+        if [ -n "$bad" ]; then
+            warn "$n: some collectors fail inside the container:"; echo "$bad" | sub
+            info "Works with systemd but not in Docker → the Docker IP range may overlap the LAN of the nodes: menu 25"
+        fi
+        return 0
     fi
+    err "$n: container returns no metrics (state: ${st:-unknown}). Last log lines:"
+    docker logs --tail 20 "$c" 2>&1 | sub
+    if [ "${NONINTERACTIVE:-0}" = 0 ] && confirm "Go back to the systemd service for $n (monitoring keeps working)?"; then
+        docker rm -f "$c" >/dev/null 2>&1
+        systemctl enable --now "$SERVICE@$n" >/dev/null 2>&1 && ok "$n: running with systemd again" \
+            || err "$n: systemctl enable --now $SERVICE@$n failed"
+    fi
+    return 1
 }
 
 # =============================================================================

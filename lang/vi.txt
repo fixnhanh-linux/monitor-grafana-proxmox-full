@@ -534,3 +534,15 @@ remember to drop its target from Prometheus => nho bo target cua no khoi Prometh
 View alerts => Xem canh bao
 /alerts  (Telegram / email delivery: configure Alertmanager => /alerts  (gui Telegram / email: cau hinh Alertmanager
 Bye! => Tam biet!
+
+# ---------------------------------------------------------------- docker (bo sung)
+Clusters: => Cac cluster:
+as with systemd => giong khi chay systemd
+waiting for the first collection (up to 150 s)... => dang doi lan thu thap dau (toi da 150 giay)...
+container returns no metrics (state: => container khong tra metric (trang thai:
+Last log lines => Cac dong log cuoi
+Go back to the systemd service for => Quay lai dich vu systemd cho
+(monitoring keeps working)? => (van giam sat binh thuong)?
+some collectors fail inside the container => mot so collector loi trong container
+Works with systemd but not in Docker → the Docker IP range may overlap the LAN of the nodes: menu 25 => Chay systemd duoc ma Docker khong duoc → dai IP Docker co the trung LAN cua cac node: menu 25
+running at => dang chay tai

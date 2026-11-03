@@ -4,6 +4,7 @@ Newest first. The running commit is shown in the menu header (`version 2026.10.3
 
 ## Unreleased
 
+- **Docker (menu 23 / refresh)**: waits up to 150 s for the first collection instead of one 60 s try; on failure prints the container state and its last 20 log lines and offers to go back to the systemd service, so the cluster stays monitored; when it runs but some collectors fail inside the container, shows their errors (often a Docker IP range overlapping the nodes' LAN → menu 25).
 - **Menu in Vietnamese**: menu item **L** (or `proxmox-menu lang vi` / `lang en`) switches the menu, questions and messages between English and Vietnamese (unaccented, for server terminals); choice saved in `.menu.conf`. Translations live in `lang/vi.txt` (`English => Vietnamese`, longest text first); typed values and defaults are never translated. A test checks the file format.
 - **One README, two languages**: `README.vi.md` merged into `README.md` as two click-to-open sections (🇬🇧 English, 🇻🇳 Tiếng Việt), each with its own diagram — no more switching files.
 - **Menu file renamed** `menu.sh` → `proxmox-ceph-monitor.sh` (`proxmox-<what it does>.sh`, so other Proxmox tools can sit next to it). The `proxmox-menu` command is unchanged; `menu.sh` stays as a small forwarder so old shortcuts, timers and notes keep working, and the shortcut / HA colors timer point to the new file after the next `refresh`.
