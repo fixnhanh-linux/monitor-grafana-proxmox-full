@@ -4,6 +4,7 @@ Newest first. The running commit is shown in the menu header (`version 2026.10.3
 
 ## Unreleased
 
+- **PIN harder to bypass**: stored in `/etc/proxmox-menu/pin` and `.menu-pin` (both `chattr +i`) plus `.menu.conf`; the menu stays locked while any copy exists and a correct PIN restores the missing ones. The wrong-PIN message no longer tells how to remove the PIN; forgotten PIN → `proxmox-menu pin reset` (root, type `RESET`, logged).
 - **Operator users**: menu **O** / `proxmox-menu operator add|remove|list [user]` creates a non-root login that may only run `sudo proxmox-menu` (one sudoers line, validated by `visudo`; a PIN is required first). Operators are asked the PIN on every run, even without a terminal, cannot change the PIN or the operators, and the tool folder becomes writable by root only.
 - **Menu PIN**: menu item **P** / `proxmox-menu pin` sets, changes or removes a 4-12 digit PIN (stored as salted SHA-256 in `.menu-pin`, mode 600). Opening the menu and typed commands then ask for it (3 tries); `refresh`, `ha-sync` (timer) and non-terminal runs do not.
 - **Environment check (menu 1) on a remote monitor host**: no more false errors for the missing `ceph` / `pvesh` / Proxmox, or for the port held by the exporter's own container (`docker-proxy`); instead it checks `/health` of every remote cluster's exporter (systemd or Docker).

@@ -2238,47 +2238,79 @@ do_config() {
 }
 
 # =============================================================================
-# PIN mo menu: luu "salt:sha256(salt+pin)" trong .menu-pin (chmod 600). Chi khoa menu tuong tac;
-# lenh chay ngam (refresh, ha-sync, watchdog ...) khong hoi. Quen PIN: root xoa file .menu-pin.
+# PIN mo menu: "salt:sha256(salt+pin)" luu 3 noi - /etc/proxmox-menu/pin va .menu-pin (ca hai chattr +i)
+# + PIN_HASH trong .menu.conf. Con 1 noi la van hoi PIN (xoa 1 file khong mo duoc khoa).
+# Chi khoa menu tuong tac; lenh chay ngam (refresh, ha-sync, watchdog ...) khong hoi.
+# Quen PIN: proxmox-menu pin reset (root, go RESET) - khong in goi y nay ra man hinh.
 # =============================================================================
+PIN_STORE=${PIN_STORE:-/etc/proxmox-menu/pin}
 PIN_FILE="$DIR/.menu-pin"
 pin_hash() { printf '%s' "$1$2" | sha256sum | cut -d' ' -f1; }   # pin_hash SALT PIN
+pin_get() {  # "salt:hash" tu noi dau tien con du lieu; rong = chua dat PIN
+    local f v
+    for f in "$PIN_STORE" "$PIN_FILE"; do
+        v=$(head -1 "$f" 2>/dev/null); [ -n "$v" ] && { echo "$v"; return; }
+    done
+    echo "${PIN_HASH:-}"
+}
+pin_write() {  # pin_write "salt:hash" (rong = xoa PIN o ca 3 noi)
+    local f
+    for f in "$PIN_STORE" "$PIN_FILE"; do
+        chattr -i "$f" 2>/dev/null; rm -f "$f"
+        [ -n "$1" ] || continue
+        mkdir -p "$(dirname "$f")" && ( umask 077; echo "$1" > "$f" ) && chattr +i "$f" 2>/dev/null
+    done
+    chmod 700 "$(dirname "$PIN_STORE")" 2>/dev/null
+    PIN_HASH=$1; save_conf PIN_HASH "$1"
+}
 pin_ok() {  # pin_ok PIN -> 0 neu dung
-    local salt hash; IFS=: read -r salt hash < "$PIN_FILE" 2>/dev/null || return 1
-    [ -n "$hash" ] && [ "$(pin_hash "$salt" "$1")" = "$hash" ]
+    local v salt hash; v=$(pin_get); salt=${v%%:*}; hash=${v#*:}
+    [ -n "$v" ] && [ -n "$hash" ] && [ "$(pin_hash "$salt" "$1")" = "$hash" ]
 }
 pin_read() {  # pin_read "Cau hoi" -> in PIN (khong hien khi go)
     local p; read -rsp "${IND}  ${C}❯${N} $(L "$1"): " p; echo >&2; echo "$p"
 }
 pin_gate() {  # da dat PIN -> hoi toi da 3 lan, sai thi thoat
-    [ -s "$PIN_FILE" ] && [ "${PIN_UNLOCKED:-0}" != 1 ] || return 0
+    [ -n "$(pin_get)" ] && [ "${PIN_UNLOCKED:-0}" != 1 ] || return 0
     local i p
     for i in 1 2 3; do
         p=$(pin_read "PIN")
-        if pin_ok "$p"; then export PIN_UNLOCKED=1; return 0; fi   # menu mo lai sau cap nhat khong hoi nua
+        if pin_ok "$p"; then
+            export PIN_UNLOCKED=1   # menu mo lai sau cap nhat khong hoi nua
+            # Thieu ban sao nao (cai cu chi co .menu-pin, hoac bi xoa) -> ghi lai du 3 noi
+            { [ -s "$PIN_STORE" ] && [ -s "$PIN_FILE" ] && [ -n "${PIN_HASH:-}" ]; } || pin_write "$(pin_get)" 2>/dev/null
+            return 0
+        fi
         err "Wrong PIN ($i/3)"; sleep 2
     done
-    err "Too many wrong PINs → exiting. Forgot it? As root: rm $PIN_FILE"
+    err "Too many wrong PINs → exiting"
     exit 1
 }
 is_operator() { [ -n "${SUDO_USER:-}" ] && [ "$SUDO_USER" != root ]; }   # user van hanh chay qua sudo
-do_pin() {  # dat / doi / xoa PIN
+do_pin() {  # do_pin [reset] -> dat / doi / xoa PIN; reset = quen PIN (root, go RESET)
     title "MENU PIN"
     need_root || return 1
     is_operator && { err "Only root can change the PIN"; return 1; }
-    if [ -s "$PIN_FILE" ]; then
+    if [ "${1:-}" = reset ]; then
+        local c; read -rp "${IND}  ${Y}?${N} $(L "Remove the PIN without the current one? Type RESET"): " c
+        [ "$c" = RESET ] || { info "Cancelled"; return 1; }
+        pin_write ""; logger -t proxmox-menu "menu PIN reset by root" 2>/dev/null
+        ok "PIN removed: the menu opens without a PIN"; return 0
+    fi
+    if [ -n "$(pin_get)" ]; then
         pin_ok "$(pin_read "Current PIN")" || { err "Wrong PIN"; return 1; }
     fi
     info "The PIN locks the interactive menu only; refresh / timers / watchdog keep running without it"
     local a b; a=$(pin_read "New PIN (4-12 digits, empty = remove the PIN)")
     if [ -z "$a" ]; then
-        rm -f "$PIN_FILE"; ok "PIN removed: the menu opens without a PIN"; return 0
+        pin_write ""; ok "PIN removed: the menu opens without a PIN"; return 0
     fi
     [[ "$a" =~ ^[0-9]{4,12}$ ]] || { err "PIN must be 4-12 digits"; return 1; }
     b=$(pin_read "New PIN again")
     [ "$a" = "$b" ] || { err "The two PINs differ → nothing changed"; return 1; }
-    local salt; salt=$(head -c 16 /dev/urandom | od -An -tx1 | tr -d ' \n')
-    ( umask 077; printf '%s:%s\n' "$salt" "$(pin_hash "$salt" "$a")" > "$PIN_FILE" )
+    local salt; salt=$(head -c 16 /dev/urandom | od -An -tx1 | tr -d ' 
+')
+    pin_write "$salt:$(pin_hash "$salt" "$a")"
     ok "PIN set: proxmox-menu now asks for it before opening the menu"
 }
 
@@ -2289,7 +2321,8 @@ do_pin() {  # dat / doi / xoa PIN
 OP_SUDOERS=/etc/sudoers.d/fixnhanh-proxmox-menu-
 operator_list() { ls "$OP_SUDOERS"* 2>/dev/null | sed "s|^$OP_SUDOERS||"; }
 lock_tool_dir() {  # user van hanh khong duoc sua script (chay bang root) -> chi root ghi duoc thu muc
-    chown -R root:root "$DIR" && chmod -R go-w "$DIR" && ok "Tool folder writable by root only: $DIR"
+    chown -R root:root "$DIR" 2>/dev/null; chmod -R go-w "$DIR" 2>/dev/null   # file PIN chattr +i -> bo qua loi
+    ok "Tool folder writable by root only: $DIR"
     local up; up=$(dirname "$DIR")
     [ "$(stat -c %U "$up" 2>/dev/null)" = root ] && [ -z "$(find "$up" -maxdepth 0 -perm -o+w 2>/dev/null)" ] \
         || warn "$up is not root-only → move the tool to a root-owned folder (e.g. /opt)"
@@ -2309,7 +2342,7 @@ do_operator() {  # do_operator [add|remove|list] [USER]
     case "$act" in
         list) operator_list ;;
         a|add)
-            [ -s "$PIN_FILE" ] || { warn "Set a menu PIN first: operators must enter it"; do_pin; [ -s "$PIN_FILE" ] || return 1; }
+            [ -n "$(pin_get)" ] || { warn "Set a menu PIN first: operators must enter it"; do_pin; [ -n "$(pin_get)" ] || return 1; }
             [ -n "$u" ] || u=$(ask "Operator user name (e.g. vanhanh)" "")
             [[ "$u" =~ ^[a-z_][a-z0-9_-]{0,31}$ ]] && [ "$u" != root ] || { err "Invalid name: '$u'"; return 1; }
             has sudo && has visudo || { err "sudo is required (apt install sudo)"; return 1; }
@@ -2710,7 +2743,7 @@ if [ $# -gt 0 ]; then
         services) NONINTERACTIVE=0; do_services ;;
         zabbix-ceph) NONINTERACTIVE=0; do_zabbix_ceph ;;
         lang) do_lang "${1:-}" ;;
-        pin) NONINTERACTIVE=0; do_pin ;;
+        pin) NONINTERACTIVE=0; do_pin "${1:-}" ;;
         operator) NONINTERACTIVE=0; do_operator "$@" ;;
         refresh)  # tu git pull truoc, roi chay refresh bang code MOI vua keo ve
             if [ -z "${REFRESH_PULLED:-}" ] && [ -d "$DIR/.git" ]; then

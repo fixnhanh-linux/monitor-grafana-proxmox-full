@@ -556,7 +556,7 @@ MENU PIN => MA PIN MENU
 = Menu PIN => Ma PIN menu
 = PIN => Ma PIN
 Wrong PIN => Sai ma PIN
-Too many wrong PINs → exiting. Forgot it? As root: rm => Sai PIN qua nhieu lan → thoat. Quen PIN? Bang root: rm
+Too many wrong PINs → exiting => Sai PIN qua nhieu lan → thoat
 = Current PIN => Ma PIN hien tai
 The PIN locks the interactive menu only; refresh / timers / watchdog keep running without it => Ma PIN chi khoa menu; refresh / timer / watchdog van tu chay khong can PIN
 New PIN (4-12 digits, empty = remove the PIN) => Ma PIN moi (4-12 chu so, rong = bo ma PIN)
@@ -594,3 +594,4 @@ Never give => Khong bao gio dua
 the root password => mat khau root
 is not an operator => khong phai user van hanh
 can no longer run proxmox-menu (account kept; delete it with: userdel -r => khong con chay duoc proxmox-menu (giu tai khoan; xoa bang: userdel -r
+Remove the PIN without the current one? Type RESET => Bo ma PIN ma khong can PIN hien tai? Go RESET
