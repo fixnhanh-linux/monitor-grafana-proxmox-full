@@ -565,3 +565,32 @@ PIN must be 4-12 digits => Ma PIN phai la 4-12 chu so
 = New PIN again => Nhap lai ma PIN moi
 The two PINs differ → nothing changed => Hai ma PIN khong giong nhau → khong doi gi
 PIN set: proxmox-menu now asks for it before opening the menu => Da dat ma PIN: proxmox-menu se hoi PIN truoc khi mo menu
+
+# ---------------------------------------------------------------- user van hanh
+OPERATOR USERS => USER VAN HANH
+Operator users (no root) => User van hanh (khong root)
+Only root can change the PIN => Chi root moi doi duoc PIN
+Only root can manage operator users => Chi root moi quan ly duoc user van hanh
+Only root can run ' => Chi root moi chay duoc '
+Operators: => User van hanh:
+No operator user yet => Chua co user van hanh
+An operator logs in with its own account and may only run: sudo proxmox-menu (PIN asked every time) => User van hanh dang nhap bang tai khoan rieng va chi duoc chay: sudo proxmox-menu (lan nao cung hoi PIN)
+Action: a=add  r=remove  Enter=back => Thao tac: a=them  r=xoa  Enter=quay lai
+Set a menu PIN first: operators must enter it => Dat ma PIN menu truoc: user van hanh phai nhap PIN
+Operator user name (e.g. vanhanh) => Ten user van hanh (vd vanhanh)
+Operator user name to remove => Ten user van hanh can xoa
+sudo is required (apt install sudo) => Can sudo (apt install sudo)
+useradd failed => useradd loi
+created. Set its login password => da tao. Dat mat khau dang nhap cho no
+Password not set → run: passwd => Chua dat mat khau → chay: passwd
+sudoers check failed → nothing changed => Kiem tra sudoers loi → khong doi gi
+Tool folder writable by root only => Thu muc cong cu chi root ghi duoc
+is not root-only → move the tool to a root-owned folder (e.g. /opt) => khong chi rieng root → chuyen cong cu sang thu muc cua root (vd /opt)
+: log in as => : dang nhap bang
+, then run => , roi chay
+(asks the PIN); no other root command => (hoi PIN); khong duoc lenh root nao khac
+is in an admin group → it is root anyway, the PIN does not stop it: gpasswd -d => dang o nhom admin → van la root, PIN khong chan duoc: gpasswd -d
+Never give => Khong bao gio dua
+the root password => mat khau root
+is not an operator => khong phai user van hanh
+can no longer run proxmox-menu (account kept; delete it with: userdel -r => khong con chay duoc proxmox-menu (giu tai khoan; xoa bang: userdel -r

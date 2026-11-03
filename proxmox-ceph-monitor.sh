@@ -12,7 +12,7 @@
 #      uninstall | dashboard | import | prom | prom-check | doctor | update | refresh | about | help |
 #      remote-add [name] | remote-list | remote-test | remote-remove | services | watchdog |
 #      prom-all | prom-push | prom-rules | urls | deps | firewall | docker-run | docker-manage | docker-net |
-#      zabbix-ceph | ha-sync | lang [en|vi] | pin
+#      zabbix-ceph | ha-sync | lang [en|vi] | pin | operator [add|remove|list] [user]
 #
 #  Copyright © 2026 FIX NHANH. All rights reserved.
 # =============================================================================
@@ -2261,9 +2261,11 @@ pin_gate() {  # da dat PIN -> hoi toi da 3 lan, sai thi thoat
     err "Too many wrong PINs → exiting. Forgot it? As root: rm $PIN_FILE"
     exit 1
 }
+is_operator() { [ -n "${SUDO_USER:-}" ] && [ "$SUDO_USER" != root ]; }   # user van hanh chay qua sudo
 do_pin() {  # dat / doi / xoa PIN
     title "MENU PIN"
     need_root || return 1
+    is_operator && { err "Only root can change the PIN"; return 1; }
     if [ -s "$PIN_FILE" ]; then
         pin_ok "$(pin_read "Current PIN")" || { err "Wrong PIN"; return 1; }
     fi
@@ -2278,6 +2280,66 @@ do_pin() {  # dat / doi / xoa PIN
     local salt; salt=$(head -c 16 /dev/urandom | od -An -tx1 | tr -d ' \n')
     ( umask 077; printf '%s:%s\n' "$salt" "$(pin_hash "$salt" "$a")" > "$PIN_FILE" )
     ok "PIN set: proxmox-menu now asks for it before opening the menu"
+}
+
+# =============================================================================
+# O. User van hanh: khong co quyen root, chi duoc "sudo proxmox-menu" (luon hoi PIN).
+#    Root van lam duoc moi thu - PIN chi co tac dung voi user nay.
+# =============================================================================
+OP_SUDOERS=/etc/sudoers.d/fixnhanh-proxmox-menu-
+operator_list() { ls "$OP_SUDOERS"* 2>/dev/null | sed "s|^$OP_SUDOERS||"; }
+lock_tool_dir() {  # user van hanh khong duoc sua script (chay bang root) -> chi root ghi duoc thu muc
+    chown -R root:root "$DIR" && chmod -R go-w "$DIR" && ok "Tool folder writable by root only: $DIR"
+    local up; up=$(dirname "$DIR")
+    [ "$(stat -c %U "$up" 2>/dev/null)" = root ] && [ -z "$(find "$up" -maxdepth 0 -perm -o+w 2>/dev/null)" ] \
+        || warn "$up is not root-only → move the tool to a root-owned folder (e.g. /opt)"
+}
+do_operator() {  # do_operator [add|remove|list] [USER]
+    title "OPERATOR USERS"
+    need_root || return 1
+    is_operator && { err "Only root can manage operator users"; return 1; }
+    local act="${1:-}" u="${2:-}" f l
+    if [ -z "$act" ]; then
+        l=$(operator_list)
+        if [ -n "$l" ]; then info "Operators: ${W}$(echo $l)${N}"; else info "No operator user yet"; fi
+        info "An operator logs in with its own account and may only run: sudo proxmox-menu (PIN asked every time)"
+        act=$(ask "Action: a=add  r=remove  Enter=back" "")
+        [ -n "$act" ] || return 0
+    fi
+    case "$act" in
+        list) operator_list ;;
+        a|add)
+            [ -s "$PIN_FILE" ] || { warn "Set a menu PIN first: operators must enter it"; do_pin; [ -s "$PIN_FILE" ] || return 1; }
+            [ -n "$u" ] || u=$(ask "Operator user name (e.g. vanhanh)" "")
+            [[ "$u" =~ ^[a-z_][a-z0-9_-]{0,31}$ ]] && [ "$u" != root ] || { err "Invalid name: '$u'"; return 1; }
+            has sudo && has visudo || { err "sudo is required (apt install sudo)"; return 1; }
+            [ -x "$CMD_BIN" ] || install_cmd
+            if ! id "$u" >/dev/null 2>&1; then
+                useradd -m -s /bin/bash "$u" || { err "useradd failed"; return 1; }
+                ok "User $u created. Set its login password:"
+                passwd "$u" || warn "Password not set → run: passwd $u"
+            fi
+            f="$OP_SUDOERS$u"
+            printf '# FIX NHANH - %s may only run the Proxmox + Ceph menu as root (PIN asked)\n%s ALL=(root) NOPASSWD: %s\n' \
+                "$u" "$u" "$CMD_BIN" > "$f.tmp" && chmod 440 "$f.tmp"
+            if visudo -cf "$f.tmp" >/dev/null 2>&1; then mv -f "$f.tmp" "$f"
+            else rm -f "$f.tmp"; err "sudoers check failed → nothing changed"; return 1; fi
+            lock_tool_dir
+            ok "$u: log in as $u, then run ${W}sudo proxmox-menu${N} (asks the PIN); no other root command"
+            if id -nG "$u" | grep -qwE 'sudo|wheel|admin'; then
+                warn "$u is in an admin group → it is root anyway, the PIN does not stop it: gpasswd -d $u sudo"
+            fi
+            info "Never give $u the root password"
+            ;;
+        r|remove)
+            [ -n "$u" ] || u=$(ask "Operator user name to remove" "")
+            f="$OP_SUDOERS$u"
+            [ -n "$u" ] && [ -f "$f" ] || { err "'$u' is not an operator"; return 1; }
+            rm -f "$f"
+            ok "$u can no longer run proxmox-menu (account kept; delete it with: userdel -r $u)"
+            ;;
+        *) err "Invalid action: $act"; return 1 ;;
+    esac
 }
 
 # =============================================================================
@@ -2558,7 +2620,8 @@ menu_body() {
     box_title "TOOLS" "$B"
     box_row2 "$(mi 14 "Update tool (git pull)" "$B")" "$(mi 16 "About & license" "$B")"
     box_row2 "$(mi 15 "Saved config / URLs" "$B")"         "$(mi L "Language / Ngon ngu" "$B")"
-    box_row2 "$(mi P "Menu PIN" "$B")"                    "$(mi 0 "Exit" "$R")"
+    box_row2 "$(mi P "Menu PIN" "$B")"                    "$(mi O "Operator users (no root)" "$B")"
+    box_row  "$(mi 0 "Exit" "$R")"
     box_sep
     box_center "${D}$COPYRIGHT${N}"
     box_bottom
@@ -2583,6 +2646,7 @@ menu() {
             s|S) do_setup ;;
             l|L) do_lang; continue ;;
             p|P) do_pin ;;
+            o|O) do_operator ;;
             0|q|Q) echo; echo "${IND}  ${D}$(L "Bye! $COPYRIGHT")${N}"; echo; exit 0 ;;
             "") continue ;;
             *) warn "Invalid choice: $c" ;;
@@ -2607,8 +2671,17 @@ install_cmd
 if [ $# -gt 0 ]; then
     NONINTERACTIVE=1
     cmd="$1"; shift
-    # Lenh go tay cung hoi PIN (neu da dat); lenh tu chay (refresh, timer ha-sync) va pin / help thi khong
-    case "$cmd" in refresh|ha-sync|pin|help|-h|--help) ;; *) [ -t 0 ] && pin_gate ;; esac
+    # Lenh go tay cung hoi PIN (neu da dat); lenh tu chay (refresh, timer ha-sync) va pin / help thi khong.
+    # User van hanh (qua sudo): moi lenh deu hoi PIN, ke ca khong co terminal; khong duoc doi PIN / user.
+    if is_operator; then
+        case "$cmd" in
+            help|-h|--help) ;;
+            pin|operator) err "Only root can run '$cmd'"; exit 1 ;;
+            *) pin_gate ;;
+        esac
+    else
+        case "$cmd" in refresh|ha-sync|pin|operator|help|-h|--help) ;; *) [ -t 0 ] && pin_gate ;; esac
+    fi
     case "$cmd" in
         setup) NONINTERACTIVE=0; detect_env; do_setup ;;
         check) do_check ;;           install) do_install "${1:-$(current_port)}" ;;
@@ -2638,6 +2711,7 @@ if [ $# -gt 0 ]; then
         zabbix-ceph) NONINTERACTIVE=0; do_zabbix_ceph ;;
         lang) do_lang "${1:-}" ;;
         pin) NONINTERACTIVE=0; do_pin ;;
+        operator) NONINTERACTIVE=0; do_operator "$@" ;;
         refresh)  # tu git pull truoc, roi chay refresh bang code MOI vua keo ve
             if [ -z "${REFRESH_PULLED:-}" ] && [ -d "$DIR/.git" ]; then
                 NONINTERACTIVE=1; do_update </dev/null || exit 1
