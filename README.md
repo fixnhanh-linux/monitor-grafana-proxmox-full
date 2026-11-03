@@ -21,7 +21,7 @@ A toolkit that builds the **Proxmox - Ceph Prometheus** Grafana dashboard and fi
 | `tests/` | Unit tests (`python3 -m unittest discover -s tests`), run on GitHub Actions; CI also imports the Zabbix templates into real Zabbix 6.0, 6.2 and 7.0 |
 | `CHANGELOG.md` | Change log |
 
-Generated on the host (not in git): `dashboard-local.json`, `dashboard-<name>.json`, `prometheus-scrape-all.yml`, `.menu.conf`, `.grafana-token`, `.grafana-cert.pem`, `.ha-colors.json`, `.ha-groups.seen`.
+Generated on the host (not in git): `dashboard-local.json`, `dashboard-<name>.json`, `prometheus-scrape-all.yml`, `.menu.conf`, `.grafana-token`, `.grafana-cert.pem`, `.ha-colors.json`, `.ha-groups.seen`, `.menu-pin`.
 
 ## Why the old dashboard showed "No data"
 
@@ -167,8 +167,9 @@ If you move the tool folder, run `bash <new-folder>/proxmox-ceph-monitor.sh` onc
 | 26 | **Services & health**: table of every exporter (local, `@cluster`, container) + Docker + watchdog with state, `/health`, port, start on boot; `r`/`s`/`t` restart / stop / start (one or `a` = all) then **verifies** active + `/health` within 40 s and prints logs on failure; `l` logs; `b`/`B` enable / disable start on boot; `w` watchdog |
 | 27 | **Zabbix: Ceph via Zabbix Agent 2** — runs `template-zabbix/setup_ceph_zabbix.sh` (see *Zabbix* below) |
 | L | Menu language: English or Vietnamese (unaccented, for server terminals); also `proxmox-menu lang vi` / `proxmox-menu lang en`. Saved in `.menu.conf` |
+| P | Menu PIN (or `proxmox-menu pin`): once set, opening the menu and typed commands ask for it (3 tries); `refresh`, the HA colors timer and the watchdog never ask. Stored hashed in `.menu-pin`; forgot it → as root `rm .menu-pin` in the tool folder. A convenience lock, not real security (root can always remove it) |
 
-Run a single command without the menu: `proxmox-menu setup | check | install [port] | status | metrics | logs | restart | port <number> | uninstall | dashboard | import | prom | prom-check | doctor | update | refresh | about | remote-add [name] | remote-list | remote-test | remote-remove | prom-all | prom-push | prom-rules | urls | deps | firewall | docker-run | docker-manage | docker-net | services | watchdog | zabbix-ceph | ha-sync | lang [en|vi]`.
+Run a single command without the menu: `proxmox-menu setup | check | install [port] | status | metrics | logs | restart | port <number> | uninstall | dashboard | import | prom | prom-check | doctor | update | refresh | about | remote-add [name] | remote-list | remote-test | remote-remove | prom-all | prom-push | prom-rules | urls | deps | firewall | docker-run | docker-manage | docker-net | services | watchdog | zabbix-ceph | ha-sync | lang [en|vi] | pin`.
 
 The menu remembers the Grafana URL, Prometheus URL, dashboard title / UID in `.menu.conf`; the Grafana token (if saved) lives separately in `.grafana-token`.
 
@@ -522,7 +523,7 @@ Bộ công cụ dựng dashboard Grafana **Proxmox - Ceph Prometheus** và lấp
 | `tests/` | Unit test (`python3 -m unittest discover -s tests`), chạy trên GitHub Actions; CI còn import template Zabbix vào Zabbix 6.0, 6.2 và 7.0 thật |
 | `CHANGELOG.md` | Nhật ký thay đổi |
 
-Sinh ra trên máy (không nằm trong git): `dashboard-local.json`, `dashboard-<tên>.json`, `prometheus-scrape-all.yml`, `.menu.conf`, `.grafana-token`, `.grafana-cert.pem`, `.ha-colors.json`, `.ha-groups.seen`.
+Sinh ra trên máy (không nằm trong git): `dashboard-local.json`, `dashboard-<tên>.json`, `prometheus-scrape-all.yml`, `.menu.conf`, `.grafana-token`, `.grafana-cert.pem`, `.ha-colors.json`, `.ha-groups.seen`, `.menu-pin`.
 
 ## Vì sao dashboard cũ hiện "No data"
 
@@ -668,8 +669,9 @@ Nếu chuyển thư mục công cụ đi chỗ khác, chạy `bash <thư-mục-m
 | 26 | **Dịch vụ & sức khỏe**: bảng mọi exporter (local, `@cluster`, container) + Docker + watchdog với trạng thái, `/health`, port, tự chạy khi khởi động; `r`/`s`/`t` khởi động lại / dừng / chạy (một cái hoặc `a` = tất cả) rồi **kiểm tra** active + `/health` trong 40 giây, lỗi thì in log; `l` log; `b`/`B` bật / tắt tự chạy khi khởi động; `w` watchdog |
 | 27 | **Zabbix: Ceph qua Zabbix Agent 2** — chạy `template-zabbix/setup_ceph_zabbix.sh` (xem *Zabbix* bên dưới) |
 | L | Ngôn ngữ menu: English hoặc tiếng Việt (không dấu, cho terminal server); hoặc `proxmox-menu lang vi` / `proxmox-menu lang en`. Lưu trong `.menu.conf` |
+| P | Mã PIN menu (hoặc `proxmox-menu pin`): đã đặt thì mở menu và các lệnh gõ tay đều hỏi PIN (sai 3 lần thì thoát); `refresh`, timer màu HA và watchdog không bao giờ hỏi. Lưu dạng băm trong `.menu-pin`; quên PIN → bằng root `rm .menu-pin` trong thư mục công cụ. Chỉ là khóa cho tiện, không phải bảo mật thật (root luôn xóa được) |
 
-Chạy một lệnh không cần mở menu: `proxmox-menu setup | check | install [port] | status | metrics | logs | restart | port <số> | uninstall | dashboard | import | prom | prom-check | doctor | update | refresh | about | remote-add [tên] | remote-list | remote-test | remote-remove | prom-all | prom-push | prom-rules | urls | deps | firewall | docker-run | docker-manage | docker-net | services | watchdog | zabbix-ceph | ha-sync | lang [en|vi]`.
+Chạy một lệnh không cần mở menu: `proxmox-menu setup | check | install [port] | status | metrics | logs | restart | port <số> | uninstall | dashboard | import | prom | prom-check | doctor | update | refresh | about | remote-add [tên] | remote-list | remote-test | remote-remove | prom-all | prom-push | prom-rules | urls | deps | firewall | docker-run | docker-manage | docker-net | services | watchdog | zabbix-ceph | ha-sync | lang [en|vi] | pin`.
 
 Menu nhớ URL Grafana, URL Prometheus, tiêu đề / UID dashboard trong `.menu.conf`; token Grafana (nếu lưu) nằm riêng trong `.grafana-token`.
 

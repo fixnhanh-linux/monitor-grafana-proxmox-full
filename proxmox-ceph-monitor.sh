@@ -12,7 +12,7 @@
 #      uninstall | dashboard | import | prom | prom-check | doctor | update | refresh | about | help |
 #      remote-add [name] | remote-list | remote-test | remote-remove | services | watchdog |
 #      prom-all | prom-push | prom-rules | urls | deps | firewall | docker-run | docker-manage | docker-net |
-#      zabbix-ceph | ha-sync | lang [en|vi]
+#      zabbix-ceph | ha-sync | lang [en|vi] | pin
 #
 #  Copyright © 2026 FIX NHANH. All rights reserved.
 # =============================================================================
@@ -2238,6 +2238,49 @@ do_config() {
 }
 
 # =============================================================================
+# PIN mo menu: luu "salt:sha256(salt+pin)" trong .menu-pin (chmod 600). Chi khoa menu tuong tac;
+# lenh chay ngam (refresh, ha-sync, watchdog ...) khong hoi. Quen PIN: root xoa file .menu-pin.
+# =============================================================================
+PIN_FILE="$DIR/.menu-pin"
+pin_hash() { printf '%s' "$1$2" | sha256sum | cut -d' ' -f1; }   # pin_hash SALT PIN
+pin_ok() {  # pin_ok PIN -> 0 neu dung
+    local salt hash; IFS=: read -r salt hash < "$PIN_FILE" 2>/dev/null || return 1
+    [ -n "$hash" ] && [ "$(pin_hash "$salt" "$1")" = "$hash" ]
+}
+pin_read() {  # pin_read "Cau hoi" -> in PIN (khong hien khi go)
+    local p; read -rsp "${IND}  ${C}❯${N} $(L "$1"): " p; echo >&2; echo "$p"
+}
+pin_gate() {  # da dat PIN -> hoi toi da 3 lan, sai thi thoat
+    [ -s "$PIN_FILE" ] && [ "${PIN_UNLOCKED:-0}" != 1 ] || return 0
+    local i p
+    for i in 1 2 3; do
+        p=$(pin_read "PIN")
+        if pin_ok "$p"; then export PIN_UNLOCKED=1; return 0; fi   # menu mo lai sau cap nhat khong hoi nua
+        err "Wrong PIN ($i/3)"; sleep 2
+    done
+    err "Too many wrong PINs → exiting. Forgot it? As root: rm $PIN_FILE"
+    exit 1
+}
+do_pin() {  # dat / doi / xoa PIN
+    title "MENU PIN"
+    need_root || return 1
+    if [ -s "$PIN_FILE" ]; then
+        pin_ok "$(pin_read "Current PIN")" || { err "Wrong PIN"; return 1; }
+    fi
+    info "The PIN locks the interactive menu only; refresh / timers / watchdog keep running without it"
+    local a b; a=$(pin_read "New PIN (4-12 digits, empty = remove the PIN)")
+    if [ -z "$a" ]; then
+        rm -f "$PIN_FILE"; ok "PIN removed: the menu opens without a PIN"; return 0
+    fi
+    [[ "$a" =~ ^[0-9]{4,12}$ ]] || { err "PIN must be 4-12 digits"; return 1; }
+    b=$(pin_read "New PIN again")
+    [ "$a" = "$b" ] || { err "The two PINs differ → nothing changed"; return 1; }
+    local salt; salt=$(head -c 16 /dev/urandom | od -An -tx1 | tr -d ' \n')
+    ( umask 077; printf '%s:%s\n' "$salt" "$(pin_hash "$salt" "$a")" > "$PIN_FILE" )
+    ok "PIN set: proxmox-menu now asks for it before opening the menu"
+}
+
+# =============================================================================
 # L. Ngon ngu menu: en (mac dinh) / vi (tieng Viet khong dau, bang dich lang/vi.txt)
 # =============================================================================
 do_lang() {  # do_lang [en|vi] -> rong thi hoi
@@ -2515,13 +2558,14 @@ menu_body() {
     box_title "TOOLS" "$B"
     box_row2 "$(mi 14 "Update tool (git pull)" "$B")" "$(mi 16 "About & license" "$B")"
     box_row2 "$(mi 15 "Saved config / URLs" "$B")"         "$(mi L "Language / Ngon ngu" "$B")"
-    box_row  "$(mi 0 "Exit" "$R")"
+    box_row2 "$(mi P "Menu PIN" "$B")"                    "$(mi 0 "Exit" "$R")"
     box_sep
     box_center "${D}$COPYRIGHT${N}"
     box_bottom
 }
 
 menu() {
+    pin_gate
     detect_env
     while true; do
         header
@@ -2538,6 +2582,7 @@ menu() {
             21) do_deps ;; 22) do_firewall ;; 23) do_docker_run ;; 24) do_docker_manage ;; 25) do_docker_net ;; 26) do_services ;; 27) do_zabbix_ceph ;;
             s|S) do_setup ;;
             l|L) do_lang; continue ;;
+            p|P) do_pin ;;
             0|q|Q) echo; echo "${IND}  ${D}$(L "Bye! $COPYRIGHT")${N}"; echo; exit 0 ;;
             "") continue ;;
             *) warn "Invalid choice: $c" ;;
@@ -2562,6 +2607,8 @@ install_cmd
 if [ $# -gt 0 ]; then
     NONINTERACTIVE=1
     cmd="$1"; shift
+    # Lenh go tay cung hoi PIN (neu da dat); lenh tu chay (refresh, timer ha-sync) va pin / help thi khong
+    case "$cmd" in refresh|ha-sync|pin|help|-h|--help) ;; *) [ -t 0 ] && pin_gate ;; esac
     case "$cmd" in
         setup) NONINTERACTIVE=0; detect_env; do_setup ;;
         check) do_check ;;           install) do_install "${1:-$(current_port)}" ;;
@@ -2590,6 +2637,7 @@ if [ $# -gt 0 ]; then
         services) NONINTERACTIVE=0; do_services ;;
         zabbix-ceph) NONINTERACTIVE=0; do_zabbix_ceph ;;
         lang) do_lang "${1:-}" ;;
+        pin) NONINTERACTIVE=0; do_pin ;;
         refresh)  # tu git pull truoc, roi chay refresh bang code MOI vua keo ve
             if [ -z "${REFRESH_PULLED:-}" ] && [ -d "$DIR/.git" ]; then
                 NONINTERACTIVE=1; do_update </dev/null || exit 1

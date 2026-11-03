@@ -10,3 +10,4 @@ dashboard-kh-*.json
 dashboard-*.json
 .ha-colors.json
 .ha-groups.seen
+.menu-pin

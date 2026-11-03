@@ -550,3 +550,18 @@ Remote monitor host: Proxmox and Ceph are read over the API, nothing else needed
 does not answer /health → menu 26 => khong tra loi /health → menu 26
 Fix the errors above => Sua cac loi tren
 (normal) => (binh thuong)
+
+# ---------------------------------------------------------------- PIN
+MENU PIN => MA PIN MENU
+= Menu PIN => Ma PIN menu
+= PIN => Ma PIN
+Wrong PIN => Sai ma PIN
+Too many wrong PINs → exiting. Forgot it? As root: rm => Sai PIN qua nhieu lan → thoat. Quen PIN? Bang root: rm
+= Current PIN => Ma PIN hien tai
+The PIN locks the interactive menu only; refresh / timers / watchdog keep running without it => Ma PIN chi khoa menu; refresh / timer / watchdog van tu chay khong can PIN
+New PIN (4-12 digits, empty = remove the PIN) => Ma PIN moi (4-12 chu so, rong = bo ma PIN)
+PIN removed: the menu opens without a PIN => Da bo ma PIN: mo menu khong can PIN
+PIN must be 4-12 digits => Ma PIN phai la 4-12 chu so
+= New PIN again => Nhap lai ma PIN moi
+The two PINs differ → nothing changed => Hai ma PIN khong giong nhau → khong doi gi
+PIN set: proxmox-menu now asks for it before opening the menu => Da dat ma PIN: proxmox-menu se hoi PIN truoc khi mo menu
